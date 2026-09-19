@@ -85,13 +85,14 @@ export const runInit = async (argv: string[]): Promise<number> => {
     `  mcpServers: [${stack.mcpServers.join(", ")}]`,
     `  skills: [${stack.skills.join(", ")}]`,
     `routes:`,
-    ...routes.map((r) => `  - tier: ${r.tier} trigger: "${r.trigger}" action: "${r.action}"`),
-    ...routes
-      .filter((r) => r.tier === 2)
-      .flatMap((r) => [
-        `  mcp: ${r.trigger} postgres-inspector validate_migration`,
-        `  skill: contract-guard`,
-      ]),
+    ...routes.flatMap((r) =>
+      r.tier === 2
+        ? [
+            `  - tier: ${r.tier} trigger: "${r.trigger}" action: "${r.action}"`,
+            `    mcp: postgres-inspector validate_migration node ./scripts/validate-migration.mjs`,
+          ]
+        : [`  - tier: ${r.tier} trigger: "${r.trigger}" action: "${r.action}"`],
+    ),
     ``,
   ].join("\n");
   writeFileSync(path.join(ohMyPlumbDir(root), "rules.yaml"), rulesYaml);

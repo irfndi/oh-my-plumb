@@ -161,3 +161,34 @@ describe("phase 3 guards", () => {
     expect(hit?.reason).toContain("nope");
   });
 });
+
+describe("init rules.yaml round-trip", () => {
+  it("emitted tier-2 lines parse back with mcp guard attached", async () => {
+    const guards = await import("../src/lib/guards.js");
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-roundtrip-"));
+    mkdirSync(path.join(root, ".oh-my-plumb"), { recursive: true });
+    const { routesFor } = await import("../src/lib/detect.js");
+    const { detectStack } = await import("../src/lib/detect.js");
+    void routesFor;
+    void detectStack;
+    writeFileSync(
+      path.join(root, ".oh-my-plumb", "rules.yaml"),
+      [
+        `version: "1.0"`,
+        `routes:`,
+        `  - tier: 2 trigger: "{prisma/migrations,drizzle}/**" action: "x"`,
+        `    mcp: postgres-inspector validate_migration node ./scripts/validate-migration.mjs`,
+        ``,
+      ].join("\n"),
+    );
+    const routes = guards.readTier2Routes(root);
+    expect(routes).toHaveLength(1);
+    expect(routes[0]?.trigger).toBe("{prisma/migrations,drizzle}/**");
+    expect(routes[0]?.mcp?.server).toBe("postgres-inspector");
+    expect(routes[0]?.mcp?.tool).toBe("validate_migration");
+    expect(routes[0]?.mcp?.command).toEqual(["node", "./scripts/validate-migration.mjs"]);
+    expect(guards.routesForFile(routes, "prisma/migrations/001.sql")).toHaveLength(1);
+  });
+});
