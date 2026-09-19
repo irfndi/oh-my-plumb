@@ -86,12 +86,18 @@ export const runInit = async (argv: string[]): Promise<number> => {
     `  skills: [${stack.skills.join(", ")}]`,
     `routes:`,
     ...routes.map((r) => `  - tier: ${r.tier} trigger: "${r.trigger}" action: "${r.action}"`),
+    ...routes
+      .filter((r) => r.tier === 2)
+      .flatMap((r) => [
+        `  mcp: ${r.trigger} postgres-inspector validate_migration`,
+        `  skill: contract-guard`,
+      ]),
     ``,
   ].join("\n");
   writeFileSync(path.join(ohMyPlumbDir(root), "rules.yaml"), rulesYaml);
   steps.push({
     ok: true,
-    text: `detected ${stack.manifests.length} manifests, ${stack.mcpServers.length} MCP servers, ${stack.skills.length} skills → .oh-my-plumb/rules.yaml`,
+    text: `detected ${stack.manifests.length} manifests, ${stack.mcpServers.length} MCP servers, ${stack.skills.length} skills`,
   });
   if (!selfTest(script, root))
     throw new PlumbError(

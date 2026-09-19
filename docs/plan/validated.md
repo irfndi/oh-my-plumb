@@ -74,16 +74,19 @@ validate_migration` via MCP JSON-RPC is Phase 3, not MVP.
    replaces prettier+tsc-scripts+vitest-direct).
    Validate: `vp install && vp check && vp test && vp run -r build`
    (bare `vp build` has no root target; `vp run -r build` is the gate).
-3. Phase 1 (MVP): 4th host `pi` + Tier1 executor + per-host repair return values.
-   Files: `packages/schema/src/host.ts`, `packages/cli/src/lib/{hosts,piPlugin,
-settings}.ts`, `packages/cli/pi/oh-my-plumb.ts`, `packages/cli/src/hooks/postToolUse.ts`.
-4. Phase 2: `oh-my-plumb init` scanners → `.oh-my-plumb/rules.yaml` synthesizer
-   (`lib/detect.ts`: manifests, `.pi/mcp.json`/`.claude/mcp.json` MCP scan,
-   `package.json`/`.pi/skills` skills scan).
-5. Phase 3: MCP JSON-RPC dispatch + skill-as-guardrail execution.
-6. Phase 4: Claude Code `~/.claude/settings.json` + OpenCode plugin already exist;
-   add OMP/Pi packaging; fast decision-model adapter stays Jev (`jev-latest`,
-   `lib/jev.ts`, `lib/band.ts` thresholds).
+3. Phase 1 DONE: 4th host `pi` + Tier1 overlaps fast-path + per-host repair returns.
+   Shipped: `packages/schema/src/host.ts`, `packages/cli/src/lib/{hosts,piPlugin}.ts`,
+   `packages/cli/pi/oh-my-plumb.ts`, per-file fast-verdict partition in `postToolUse.ts`.
+4. Phase 2 DONE: `oh-my-plumb init` scanners → `.oh-my-plumb/rules.yaml` synthesizer
+   (`lib/detect.ts`: manifests incl. `vite.config.ts`, `.pi/.claude` MCP scan,
+   skill dirs + guard-like `package.json` scripts; `routesFor` tier adapter).
+5. Phase 3 DONE (local + spawned guards; MCP JSON-RPC client deferred): `lib/guards.ts`
+   (`routesForFile` trigger routing, `parseGuardOutput`, `resolveSkillGuard`,
+   `runGuard` 2s deadline silent-pass), Tier2 local migration guard in `lib/tier2.ts`,
+   external MCP/skill dispatch in `postToolUse.ts`, Tier-2 route lines in `init` rules.yaml.
+6. Phase 4 DONE (docs + help; OMP layout validation deferred to installed-OMP check):
+   README agents table + Pi section, `init [agent]` help text, Jev adapter unchanged
+   (`jev-latest`, `lib/jev.ts`, `lib/band.ts` thresholds act 0.8 / flag 0.5).
 
 ## 4. Risks
 

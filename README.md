@@ -25,7 +25,7 @@ npx oh-my-plumb login    # paste your TypeSafe key once
 npx oh-my-plumb init     # hooks into every agent on this machine
 ```
 
-Then start `claude`, `codex` or `opencode` as usual. That is the whole setup.
+Then start `claude`, `codex`, `opencode` or `pi` as usual. That is the whole setup.
 
 ## What it does
 
@@ -73,12 +73,15 @@ The agent repairs it before moving on. No human in the loop.
 | Claude Code | `npx oh-my-plumb init claude`   | `~/.claude/settings.json`                   |
 | Codex       | `npx oh-my-plumb init codex`    | `~/.codex/hooks.json`                       |
 | OpenCode    | `npx oh-my-plumb init opencode` | `~/.config/opencode/plugins/oh-my-plumb.js` |
+| Pi          | `npx oh-my-plumb init pi`       | `~/.pi/agent/extensions/oh-my-plumb.ts`     |
 
 `init` with no name installs into every agent it finds. Add `--project` to install into the repo instead, so teammates get it with the checkout.
 
 Codex only: start `codex`, type `/hooks`, and accept the four oh-my-plumb entries. Codex asks this once for any new hook. Codex edits through `apply_patch`; oh-my-plumb reads the patch and judges every file in it.
 
-OpenCode only: there are no hook processes, so oh-my-plumb runs as a plugin. Same checks, same messages: an edit that breaks a rule gets the repair request appended to its tool result, and a turn that ends with one gets a single follow-up message.
+OpenCode only: there are no hook processes, so oh-my-plumb runs as a plugin.
+
+Pi only: oh-my-plumb runs as an in-process extension (`tool_result` returns a patch, `turn_end` sends a follow-up). Same checks, same messages: an edit that breaks a rule gets the repair request appended to its tool result, and a turn that ends with one gets a single follow-up message.
 
 ## See what your codebase already breaks
 
@@ -92,19 +95,19 @@ Every file is judged as if it had just been written. You get a table by rule and
 
 ## Commands
 
-| Command                         | What it does                                                          |
-| ------------------------------- | --------------------------------------------------------------------- |
-| `oh-my-plumb login`             | store your TypeSafe key in `~/.oh-my-plumb/.env`                      |
-| `oh-my-plumb init [agent]`      | install the hooks (`claude`, `codex`, `opencode`, or every one found) |
-| `oh-my-plumb audit [paths]`     | judge existing files, report by rule and by file                      |
-| `oh-my-plumb check [paths]`     | check uncommitted changes the way the hooks would                     |
-| `oh-my-plumb report`            | your rules, what fired, what never fires                              |
-| `oh-my-plumb replay <agent>`    | judge this repo's past sessions in any of the three agents            |
-| `oh-my-plumb compile`           | compile the rubric now instead of at the next session                 |
-| `oh-my-plumb calibrate`         | score every rule against your recent git history                      |
-| `oh-my-plumb tune`              | rewrite the rules that never fire                                     |
-| `oh-my-plumb bench`             | latency and spend, measured on your machine                           |
-| `oh-my-plumb uninstall [agent]` | remove the hooks                                                      |
+| Command                         | What it does                                                                |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `oh-my-plumb login`             | store your TypeSafe key in `~/.oh-my-plumb/.env`                            |
+| `oh-my-plumb init [agent]`      | install the hooks (`claude`, `codex`, `opencode`, `pi`, or every one found) |
+| `oh-my-plumb audit [paths]`     | judge existing files, report by rule and by file                            |
+| `oh-my-plumb check [paths]`     | check uncommitted changes the way the hooks would                           |
+| `oh-my-plumb report`            | your rules, what fired, what never fires                                    |
+| `oh-my-plumb replay <agent>`    | judge this repo's past sessions in any of the three agents                  |
+| `oh-my-plumb compile`           | compile the rubric now instead of at the next session                       |
+| `oh-my-plumb calibrate`         | score every rule against your recent git history                            |
+| `oh-my-plumb tune`              | rewrite the rules that never fire                                           |
+| `oh-my-plumb bench`             | latency and spend, measured on your machine                                 |
+| `oh-my-plumb uninstall [agent]` | remove the hooks                                                            |
 
 `report`, `check`, `audit`, `bench` and `calibrate` take `--json`.
 

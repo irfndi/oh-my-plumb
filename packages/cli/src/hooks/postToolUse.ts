@@ -11,6 +11,7 @@ import {
 import { runCheck, type CheckOutcome } from "../lib/checkRunner.js";
 import { fastCheck } from "../lib/tier1.js";
 import { tier2Check } from "../lib/tier2.js";
+import { readTier2Routes, routesForFile, runGuard, type GuardHit } from "../lib/guards.js";
 import { EDIT_CHECK_TIMEOUT_MS, MAX_BLOCKS_PER_RULE_PER_TURN } from "../lib/constants.js";
 import { hasApiKey } from "../lib/credentials.js";
 import { boundState, editsFromPostToolUse, type EditHunk } from "../lib/diff.js";
@@ -76,6 +77,42 @@ export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
     const hit = tier2Check(input.tool_name, relative, edit.after);
     return hit === undefined ? [] : [{ relative, hit }];
   });
+  const routes = readTier2Routes(root);
+  if (routes.length > 0) {
+    const external = await Promise.all(
+      checkable.flatMap(({ edit, relative }) =>
+        routesForFile(routes, relative).flatMap((r) => {
+          const jobs: Promise<{ relative: string; hit: GuardHit } | undefined>[] = [];
+          if (r.mcp !== undefined) {
+            jobs.push(
+              runGuard(
+                `tier2:${r.mcp.server}:${r.mcp.tool}`,
+                `tier2:${r.mcp.server}`,
+                r.mcp.command,
+                relative,
+                edit.after ?? "",
+              ).then((hit) => (hit === undefined ? undefined : { relative, hit })),
+            );
+          }
+          if (r.skill !== undefined) {
+            jobs.push(
+              runGuard(
+                `tier2:skill:${r.skill.name}`,
+                `tier2:skill:${r.skill.name}`,
+                [r.skill.entry],
+                relative,
+                edit.after ?? "",
+              ).then((hit) => (hit === undefined ? undefined : { relative, hit })),
+            );
+          }
+          return jobs;
+        }),
+      ),
+    );
+    for (const found of external) {
+      if (found !== undefined) tier2Hits.push(found);
+    }
+  }
   if (tier2Hits.length > 0) {
     const actedOn = [...new Set(tier2Hits.map((h) => h.relative))];
     for (const { relative } of tier2Hits) recordBlockedFile(turn, relative);
@@ -111,15 +148,20 @@ export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
   }
 
   const task = lastUserPrompt(input.transcript_path ?? undefined) ?? readPrompt(turn);
-  const diffs = checkable.map((c) => ({ file: c.relative, text: c.diff }));
-  const fast = fastCheck(loaded.rules, "edit", diffs, loaded.thresholds);
-  const fastByRule = new Map(fast.verdicts.map((v) => [v.ruleId, v]));
-  const modelRules = loaded.rules.filter((r) => !fastByRule.has(r.id));
   let checked: Checked[];
   try {
-    checked =
-      modelRules.length === 0
-        ? checkable.map(({ edit, relative }) => ({
+    checked = await Promise.all(
+      checkable.map(async ({ edit, relative, diff }) => {
+        const fast = fastCheck(
+          loaded.rules,
+          "edit",
+          [{ file: relative, text: diff }],
+          loaded.thresholds,
+        );
+        const fastIds = new Set(fast.verdicts.map((v) => v.ruleId));
+        const modelRules = loaded.rules.filter((r) => !fastIds.has(r.id));
+        if (modelRules.length === 0) {
+          return {
             edit,
             relative,
             outcome: {
@@ -129,24 +171,23 @@ export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
               usage: {},
               modelLatencyMs: 0,
             },
-          }))
-        : await Promise.all(
-            checkable.map(async ({ edit, relative, diff }) => {
-              const outcome = await runCheck({
-                phase: "edit",
-                fileDiffs: [{ file: relative, text: diff }],
-                task,
-                rules: modelRules,
-                thresholds: loaded.thresholds,
-                timeoutMs: EDIT_CHECK_TIMEOUT_MS,
-              });
-              return {
-                edit,
-                relative,
-                outcome: { ...outcome, verdicts: [...outcome.verdicts, ...fast.verdicts] },
-              };
-            }),
-          );
+          };
+        }
+        const outcome = await runCheck({
+          phase: "edit",
+          fileDiffs: [{ file: relative, text: diff }],
+          task,
+          rules: modelRules,
+          thresholds: loaded.thresholds,
+          timeoutMs: EDIT_CHECK_TIMEOUT_MS,
+        });
+        return {
+          edit,
+          relative,
+          outcome: { ...outcome, verdicts: [...outcome.verdicts, ...fast.verdicts] },
+        };
+      }),
+    );
   } catch (error) {
     appendEvent(root, {
       kind: "error",

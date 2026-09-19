@@ -4,7 +4,7 @@ import { palette } from "../theme.js";
 
 const COMMANDS: [string, string][] = [
   ["login [--gateway]", "store your TypeSafe key in ~/.oh-my-plumb/.env, owner-only"],
-  ["init [agent] [--project]", "hook into claude, codex, opencode, or every one found here"],
+  ["init [agent] [--project]", "hook into claude, codex, opencode, pi, or every one found here"],
   ["compile", "compile the rubric now, in a headless Claude Code turn"],
   ["tune [--global]", "rewrite rules that never fire, with their statistics attached"],
   ["rubric validate [--global]", "check .oh-my-plumb/rubric.json and fill in source hashes"],
@@ -14,7 +14,7 @@ const COMMANDS: [string, string][] = [
   ["report", "what is compiled, what fired, what never fires"],
   [
     "replay <agent>",
-    "judge past claude, codex or opencode sessions in this repo as if oh-my-plumb had been installed",
+    "judge past claude, codex or opencode sessions in this repo as if oh-my-plumb had been installed (pi replay not yet supported)",
   ],
   ["bench [--runs N]", "latency and spend, measured on this machine"],
   ["uninstall [agent] [--project]", "remove the hooks from one agent, or all"],
