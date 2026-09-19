@@ -1,0 +1,43 @@
+{
+  "name": "oh-my-plumb",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Enforce your own AGENTS.md rules on every edit a coding agent makes, from outside its context window.",
+  "license": "MIT",
+  "author": "Oh My Plumb",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oh-my-plumb/oh-my-plumb.git"
+  },
+  "type": "module",
+  "packageManager": "pnpm@10.5.2",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "verify": "pnpm run format:check && pnpm run build && pnpm run typecheck && pnpm run test",
+    "format": "vp fmt .",
+    "format:check": "vp fmt --check ."
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "pnpm": {
+    "overrides": {
+      "vite@*": "npm:@voidzero-dev/vite-plus-core@0.3.3"
+    },
+    "peerDependencyRules": {
+      "allowAny": [
+        "vite"
+      ],
+      "allowedVersions": {
+        "vite": "*"
+      }
+    }
+  }
+}

@@ -1,0 +1,151 @@
+<p align="center">
+  <img src="docs/images/oh-my-plumb.png" width="220" alt="Oh-my-plumb, the officer who reads every edit">
+</p>
+
+<h1 align="center">Oh-my-plumb</h1>
+
+<p align="center">
+  <em>Coding agents break your rules from the very first edit. Oh-my-plumb catches every one and makes your agent fix it</em>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20Codex%20%C2%B7%20OpenCode-111111?style=flat-square" alt="Works with Claude Code, Codex and OpenCode">
+  <img src="https://img.shields.io/badge/license-MIT-111111?style=flat-square" alt="MIT license">
+</p>
+
+<p align="center">
+  <strong>1 in 13 turns break a rule no linter can catch &middot; oh-my-plumb does  &middot; 300 ms per check &middot; a tenth of a cent per turn</strong><br>
+  <sub>Measured by replaying 93 real Claude Code sessions (1,256 edits, 147 turns) in two repos against their own AGENTS.md, for 22 cents. Jev flagged 39 edits and 15 turns; an independent reviewer confirmed 10 and 11. The turn-level catches (single-use abstractions, oversized files, duplicated logic) held up 11 times in 15. Method, per-rule table and what was wrong: <a href="benchmarks/replay/README.md">benchmarks/replay</a>.</sub>
+</p>
+
+---
+
+```
+npx oh-my-plumb login    # paste your TypeSafe key once
+npx oh-my-plumb init     # hooks into every agent on this machine
+```
+
+Then start `claude`, `codex` or `opencode` as usual. That is the whole setup.
+
+## What it does
+
+Your AGENTS.md, CLAUDE.md and the rest of your project instructions are full of rules no linter can check. "Use Yup, don't validate by hand." "No helper with one caller." "Never let a raw error reach a user." "Don't add what wasn't asked for." Nothing can script those, so nothing enforces them. In 93 real sessions, the agent broke one on 1 turn in 13, from the first edit on.
+
+https://github.com/user-attachments/assets/a39c14ed-336a-4d68-8366-18e960916669
+
+Oh-my-plumb enforces exactly those rules. On every edit (or turn) it asks [Jev](https://typesafe.ai), TypeSafe's decision model, one question per rule and gets a probability back. Jev sees the rule and the diff, never the conversation, so edit 200 is checked like edit 1. Break a rule and the agent is told which one and fixes it in the same turn.
+
+![A rule caught and repaired inside a coding session](docs/images/block.svg)
+
+- One call per edit, about 300 ms, a few thousandths of a cent.
+- Rules a linter could check are handed to your linter instead.
+- No built-in rules. No instruction files, nothing to enforce.
+- Your key, your data. Nothing here talks to a server of ours.
+
+## Not previously possible
+
+Checking every edit against every rule was never worth doing with an ordinary LLM. A check is about 2,500 tokens. At typical model prices that is a cent or more, and a few seconds, per edit, and the answer comes back as prose you then have to parse and cannot fully trust. Two hundred edits a day made it a non-starter.
+
+Jev changes the arithmetic. It is a decision model, so it answers a typed question with a calibrated probability and nothing else. There is no free text, so there is nothing to make up. It is up to 100x cheaper than a typical LLM and answers in about 300 ms. That is what makes it reasonable to check every edit, every time.
+
+## Three minutes to the first catch
+
+1. Get a TypeSafe API key at [typesafe.ai](https://typesafe.ai), or use a Vercel AI Gateway key you already have.
+2. Run `npx oh-my-plumb login` and paste it. It is stored once, in `~/.oh-my-plumb/.env`, owner-only. A `.env` at the repo root works too.
+3. Run `npx oh-my-plumb init` in your repo.
+4. Start your agent. Its first turn compiles your rules into `.oh-my-plumb/rubric.json` and tells you what it found.
+5. Ask for something your rules forbid. An AGENTS.md that says "use Yup, never validate by hand" produces this the moment the agent writes a manual guard:
+
+```
+Oh-my-plumb: This edit appears to break a rule from this repository's instructions.
+- Rule "api-validation-uses-yup" from ~/.codex/AGENTS.md line 65: "When writing API endpoints, do NOT write input validations manually. Use Yup (with clear validation messages) + early return in the API handler". (0.86)
+Repair apps/web/src/pages/api/logout.ts now, then continue with the task.
+```
+
+The agent repairs it before moving on. No human in the loop.
+
+![oh-my-plumb check on a violating diff](docs/images/check.svg)
+
+## Agents
+
+| Agent       | Install                         | Where it lands                              |
+| ----------- | ------------------------------- | ------------------------------------------- |
+| Claude Code | `npx oh-my-plumb init claude`   | `~/.claude/settings.json`                   |
+| Codex       | `npx oh-my-plumb init codex`    | `~/.codex/hooks.json`                       |
+| OpenCode    | `npx oh-my-plumb init opencode` | `~/.config/opencode/plugins/oh-my-plumb.js` |
+
+`init` with no name installs into every agent it finds. Add `--project` to install into the repo instead, so teammates get it with the checkout.
+
+Codex only: start `codex`, type `/hooks`, and accept the four oh-my-plumb entries. Codex asks this once for any new hook. Codex edits through `apply_patch`; oh-my-plumb reads the patch and judges every file in it.
+
+OpenCode only: there are no hook processes, so oh-my-plumb runs as a plugin. Same checks, same messages: an edit that breaks a rule gets the repair request appended to its tool result, and a turn that ends with one gets a single follow-up message.
+
+## See what your codebase already breaks
+
+```
+oh-my-plumb audit src/
+```
+
+Every file is judged as if it had just been written. You get a table by rule and a list by file. On 33 API routes of a real Next.js app: 12 seconds, about a cent.
+
+![oh-my-plumb audit on 33 API routes](docs/images/audit.svg)
+
+## Commands
+
+| Command                         | What it does                                                          |
+| ------------------------------- | --------------------------------------------------------------------- |
+| `oh-my-plumb login`             | store your TypeSafe key in `~/.oh-my-plumb/.env`                      |
+| `oh-my-plumb init [agent]`      | install the hooks (`claude`, `codex`, `opencode`, or every one found) |
+| `oh-my-plumb audit [paths]`     | judge existing files, report by rule and by file                      |
+| `oh-my-plumb check [paths]`     | check uncommitted changes the way the hooks would                     |
+| `oh-my-plumb report`            | your rules, what fired, what never fires                              |
+| `oh-my-plumb replay <agent>`    | judge this repo's past sessions in any of the three agents            |
+| `oh-my-plumb compile`           | compile the rubric now instead of at the next session                 |
+| `oh-my-plumb calibrate`         | score every rule against your recent git history                      |
+| `oh-my-plumb tune`              | rewrite the rules that never fire                                     |
+| `oh-my-plumb bench`             | latency and spend, measured on your machine                           |
+| `oh-my-plumb uninstall [agent]` | remove the hooks                                                      |
+
+`report`, `check`, `audit`, `bench` and `calibrate` take `--json`.
+
+## The rubric is yours
+
+`.oh-my-plumb/rubric.json` is a committed, readable file. Every verdict names a rule in it, and every rule quotes the line of your instruction file it came from. A wrong verdict is a rule you can rewrite.
+
+- Each rule runs at one of two moments: `edit` after each edit, `turn` once at the end against the whole diff. "Did this add more than was asked" has no answer after edit 1 of 12.
+- Each rule can carry a `scope` of globs, so an API route and a stylesheet get different questions.
+- Verdicts are banded. 0.8 and above: the agent is told to repair. 0.5 to 0.8: you see a note, the agent does not. Below 0.5: nothing.
+- A badly worded rule scores 0.4 on everything and never fires. `calibrate` finds those against twenty real hunks from your history and switches them off. `tune` has the agent rewrite them.
+
+![oh-my-plumb report](docs/images/report.svg)
+
+## Cost, privacy, safety
+
+- Changed lines go to TypeSafe under your key, with zero data retention requested on every call, and nowhere else.
+- Key lookup order: the environment, then `.env.local` and `.env` at the repo root, then `~/.oh-my-plumb/.env`. Never a flag, never logged. Set `AI_GATEWAY_API_KEY` instead of a TypeSafe key to go through your Vercel AI Gateway.
+- A check on this repo's 13 rules is 1,000 to 1,600 input tokens: $0.00004 to $0.00007, about 300 ms for Jev and about 1 s for the whole hook including Node startup. A turn of 15 edits costs a tenth of a cent. Measured 2026-09-18, direct to TypeSafe. `oh-my-plumb bench` measures yours.
+- The hooks cannot break your session. Every path exits 0, has a hard deadline, and prints only what the host expects.
+- No key or no network: the edit goes through unchecked and the miss is logged in `.oh-my-plumb/events.jsonl`, where `report` counts it.
+
+## How it hooks in
+
+Four hooks per agent. Session start: hash the instruction files, ask the agent to compile if they changed. Turn start: snapshot the working tree with git. After each edit: run the edit-phase rules on that hunk. End of turn: diff the whole turn against the snapshot and run the turn-phase rules, plus the edit-phase rules for anything a shell command wrote.
+
+## Uninstall
+
+```
+oh-my-plumb uninstall            # every agent it was installed into
+oh-my-plumb uninstall codex      # one agent; add --project for a project-level install
+```
+
+Removes oh-my-plumb's own entries and nothing else. Rubric files and `~/.oh-my-plumb/.env` stay until you delete them.
+
+## Layout
+
+- `packages/schema`: the rubric, hook payloads, verdicts and events as zod schemas.
+- `packages/cli`: the `oh-my-plumb` command, the hook script and the OpenCode plugin.
+- `skills/oh-my-plumb-compile`: the procedure the agent follows to compile a rubric.
+
+## License
+
+[MIT](LICENSE)

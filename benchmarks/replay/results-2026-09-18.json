@@ -1,0 +1,459 @@
+{
+  "pr-lens-app": {
+    "sessions": 38,
+    "editsJudged": 687,
+    "editsFlagged": 17,
+    "turnsJudged": 73,
+    "turnsFlagged": 8,
+    "spendUsd": 0.132,
+    "elapsedMs": 67691,
+    "driftByTurn": [
+      {
+        "turns": "1-5",
+        "edits": 397,
+        "flagged": 9
+      },
+      {
+        "turns": "6-15",
+        "edits": 227,
+        "flagged": 6
+      },
+      {
+        "turns": "16-",
+        "edits": 63,
+        "flagged": 2
+      }
+    ],
+    "byRule": [
+      {
+        "rule": "plain-error-for-expected-failure",
+        "phase": "edit",
+        "broken": 11,
+        "flagged": 9,
+        "of": 596
+      },
+      {
+        "rule": "single-use-abstraction",
+        "phase": "turn",
+        "broken": 6,
+        "flagged": 18,
+        "of": 73
+      },
+      {
+        "rule": "unparsed-inbound-payload",
+        "phase": "edit",
+        "broken": 4,
+        "flagged": 21,
+        "of": 596
+      },
+      {
+        "rule": "react-props-ordered-by-length",
+        "phase": "edit",
+        "broken": 2,
+        "flagged": 25,
+        "of": 132
+      },
+      {
+        "rule": "helpers-small-typed-pure",
+        "phase": "edit",
+        "broken": 2,
+        "flagged": 25,
+        "of": 588
+      },
+      {
+        "rule": "unrelated-refactor",
+        "phase": "turn",
+        "broken": 2,
+        "flagged": 21,
+        "of": 73
+      },
+      {
+        "rule": "imports-external-internal-relative",
+        "phase": "edit",
+        "broken": 1,
+        "flagged": 3,
+        "of": 589
+      },
+      {
+        "rule": "if-chain-over-variants",
+        "phase": "edit",
+        "broken": 1,
+        "flagged": 1,
+        "of": 596
+      },
+      {
+        "rule": "comment-volume",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 28,
+        "of": 687
+      },
+      {
+        "rule": "code-length",
+        "phase": "turn",
+        "broken": 0,
+        "flagged": 25,
+        "of": 73
+      },
+      {
+        "rule": "scope-creep",
+        "phase": "turn",
+        "broken": 0,
+        "flagged": 9,
+        "of": 73
+      },
+      {
+        "rule": "switch-without-assert-never",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 6,
+        "of": 596
+      },
+      {
+        "rule": "derived-status-type",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 6,
+        "of": 596
+      },
+      {
+        "rule": "no-duplicated-logic",
+        "phase": "turn",
+        "broken": 0,
+        "flagged": 4,
+        "of": 73
+      },
+      {
+        "rule": "unrequested-configurability",
+        "phase": "turn",
+        "broken": 0,
+        "flagged": 4,
+        "of": 73
+      },
+      {
+        "rule": "file-length-500",
+        "phase": "turn",
+        "broken": 0,
+        "flagged": 3,
+        "of": 73
+      },
+      {
+        "rule": "secret-value-in-code",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 3,
+        "of": 687
+      },
+      {
+        "rule": "narrating-comment",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 3,
+        "of": 687
+      },
+      {
+        "rule": "react-ui-coherent-practical",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 1,
+        "of": 132
+      },
+      {
+        "rule": "view-side-effects",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 1,
+        "of": 27
+      }
+    ]
+  },
+  "coldtea": {
+    "sessions": 55,
+    "editsJudged": 569,
+    "editsFlagged": 22,
+    "turnsJudged": 74,
+    "turnsFlagged": 7,
+    "spendUsd": 0.088,
+    "elapsedMs": 56987,
+    "driftByTurn": [
+      {
+        "turns": "1-5",
+        "edits": 308,
+        "flagged": 18
+      },
+      {
+        "turns": "6-15",
+        "edits": 105,
+        "flagged": 2
+      },
+      {
+        "turns": "16-",
+        "edits": 156,
+        "flagged": 2
+      }
+    ],
+    "byRule": [
+      {
+        "rule": "comment-volume",
+        "phase": "edit",
+        "broken": 10,
+        "flagged": 54,
+        "of": 569
+      },
+      {
+        "rule": "adjacent-improvements",
+        "phase": "edit",
+        "broken": 3,
+        "flagged": 22,
+        "of": 569
+      },
+      {
+        "rule": "file-length-500",
+        "phase": "turn",
+        "broken": 3,
+        "flagged": 8,
+        "of": 73
+      },
+      {
+        "rule": "rust-bare-string-user-error",
+        "phase": "edit",
+        "broken": 3,
+        "flagged": 2,
+        "of": 17
+      },
+      {
+        "rule": "single-use-abstraction",
+        "phase": "turn",
+        "broken": 2,
+        "flagged": 24,
+        "of": 73
+      },
+      {
+        "rule": "union-if-else-chain",
+        "phase": "edit",
+        "broken": 2,
+        "flagged": 1,
+        "of": 421
+      },
+      {
+        "rule": "helpers-small-typed-pure",
+        "phase": "edit",
+        "broken": 1,
+        "flagged": 17,
+        "of": 421
+      },
+      {
+        "rule": "scope-creep",
+        "phase": "turn",
+        "broken": 1,
+        "flagged": 7,
+        "of": 73
+      },
+      {
+        "rule": "reinvent-mantine",
+        "phase": "edit",
+        "broken": 1,
+        "flagged": 4,
+        "of": 216
+      },
+      {
+        "rule": "static-inline-style",
+        "phase": "edit",
+        "broken": 1,
+        "flagged": 2,
+        "of": 234
+      },
+      {
+        "rule": "switch-missing-assert-never",
+        "phase": "edit",
+        "broken": 1,
+        "flagged": 1,
+        "of": 421
+      },
+      {
+        "rule": "no-duplicated-logic",
+        "phase": "turn",
+        "broken": 1,
+        "flagged": 0,
+        "of": 73
+      },
+      {
+        "rule": "react-props-ordered-by-length",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 36,
+        "of": 234
+      },
+      {
+        "rule": "code-volume",
+        "phase": "turn",
+        "broken": 0,
+        "flagged": 17,
+        "of": 73
+      },
+      {
+        "rule": "imports-external-internal-relative",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 10,
+        "of": 434
+      },
+      {
+        "rule": "internal-tools-in-user-copy",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 7,
+        "of": 438
+      },
+      {
+        "rule": "refactor-unbroken",
+        "phase": "turn",
+        "broken": 0,
+        "flagged": 4,
+        "of": 73
+      },
+      {
+        "rule": "narrating-comment",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 3,
+        "of": 569
+      },
+      {
+        "rule": "hand-rolled-retry-sleep",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 2,
+        "of": 103
+      },
+      {
+        "rule": "unit-does-one-thing",
+        "phase": "turn",
+        "broken": 0,
+        "flagged": 2,
+        "of": 73
+      },
+      {
+        "rule": "abstractions-simple-close-to-usage",
+        "phase": "turn",
+        "broken": 0,
+        "flagged": 1,
+        "of": 73
+      },
+      {
+        "rule": "test-restates-mocks",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 1,
+        "of": 63
+      },
+      {
+        "rule": "inline-id-prefix",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 1,
+        "of": 3
+      },
+      {
+        "rule": "page-composition-only",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 1,
+        "of": 1
+      },
+      {
+        "rule": "leaf-component-logic",
+        "phase": "edit",
+        "broken": 0,
+        "flagged": 1,
+        "of": 234
+      }
+    ]
+  },
+  "judged": {
+    "flagged": 54,
+    "confirmed": 21,
+    "edits": {
+      "flagged": 39,
+      "confirmed": 10
+    },
+    "turns": {
+      "flagged": 15,
+      "confirmed": 11
+    },
+    "byRule": {
+      "react-props-ordered-by-length": {
+        "flagged": 2,
+        "confirmed": 1
+      },
+      "plain-error-for-expected-failure": {
+        "flagged": 11,
+        "confirmed": 1
+      },
+      "helpers-small-typed-pure": {
+        "flagged": 3,
+        "confirmed": 0
+      },
+      "unparsed-inbound-payload": {
+        "flagged": 4,
+        "confirmed": 1
+      },
+      "if-chain-over-variants": {
+        "flagged": 1,
+        "confirmed": 0
+      },
+      "imports-external-internal-relative": {
+        "flagged": 1,
+        "confirmed": 0
+      },
+      "single-use-abstraction": {
+        "flagged": 8,
+        "confirmed": 6
+      },
+      "unrelated-refactor": {
+        "flagged": 2,
+        "confirmed": 1
+      },
+      "adjacent-improvements": {
+        "flagged": 3,
+        "confirmed": 2
+      },
+      "static-inline-style": {
+        "flagged": 1,
+        "confirmed": 0
+      },
+      "rust-bare-string-user-error": {
+        "flagged": 3,
+        "confirmed": 3
+      },
+      "union-if-else-chain": {
+        "flagged": 2,
+        "confirmed": 0
+      },
+      "comment-volume": {
+        "flagged": 10,
+        "confirmed": 2
+      },
+      "switch-missing-assert-never": {
+        "flagged": 1,
+        "confirmed": 0
+      },
+      "reinvent-mantine": {
+        "flagged": 1,
+        "confirmed": 1
+      },
+      "scope-creep": {
+        "flagged": 1,
+        "confirmed": 0
+      },
+      "no-duplicated-logic": {
+        "flagged": 1,
+        "confirmed": 1
+      },
+      "file-length-500": {
+        "flagged": 3,
+        "confirmed": 3
+      }
+    }
+  }
+}

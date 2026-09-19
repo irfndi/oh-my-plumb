@@ -1,0 +1,51 @@
+{
+  "name": "oh-my-plumb",
+  "version": "0.0.1",
+  "description": "Enforce your own AGENTS.md rules on every edit a coding agent makes.",
+  "license": "MIT",
+  "author": "Oh My Plumb",
+  "type": "module",
+  "bin": {
+    "oh-my-plumb": "./dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "skills",
+    "opencode",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "rm -rf dist skills && tsc -p tsconfig.build.json && mkdir -p skills/oh-my-plumb-compile && cp ../../skills/oh-my-plumb-compile/SKILL.md skills/oh-my-plumb-compile/SKILL.md",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vp test run"
+  },
+  "dependencies": {
+    "@ai-sdk/typesafe-ai": "3",
+    "oh-my-plumb-schema": "workspace:*",
+    "ai": "^7.0.105",
+    "diff": "9.0.0",
+    "ink": "6.8.0",
+    "ink-spinner": "5.0.0",
+    "picomatch": "4.0.7",
+    "react": "19.3.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/diff": "8.0.0",
+    "@types/node": "^20.19.0",
+    "@types/picomatch": "4.0.3",
+    "@types/react": "19.3.0",
+    "ink-testing-library": "4.0.0",
+    "typescript": "7.0.2",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}
