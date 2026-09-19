@@ -11,12 +11,12 @@ official docs (`pi.dev/docs/latest/extensions`). No code edited by scouts.
 
 ## 1. Verdict per pillar
 
-| Plan pillar | abide today | Verdict |
-|---|---|---|
-| P1 auto-detect (`init` → rules.yaml) | `init` discovers instruction files only (`sources.ts`: `ROOT_NAMES=[AGENTS.md,CLAUDE.md,.cursorrules]`, nested walk ≤6, `CONTRIBUTING.md`, global `~/.claude/CLAUDE.md ~/.codex/AGENTS.md ~/.config/opencode/AGENTS.md`); counts sources, hook self-test, installs hosts. NO manifest/linter scan, NO MCP config scan, NO skills scan. | PARTIAL — instruction ingestion exists; manifest+MCP+skills scanner is new work in `commands/init.ts` + new `lib/detect.ts`. |
-| P2 unskippable hooks | Claude/Codex: 4 file-based hooks (`settings.ts hookSpecs`: SessionStart, UserPromptSubmit, PostToolUse, Stop → `node dist/oh-my-plumb-hook.js <name>`, stdin/stdout JSON). OpenCode: in-process plugin shim (`opencode/oh-my-plumb.mjs` + `opencodePlugin.ts`, marker-guarded install). Pi: `tool_result` event EXISTS, can return partial patch (`content/details/isError/usage`), middleware-chained. | FEASIBLE with corrections (§2). |
-| P3 tiered pipeline | Tier1 NOT executed today: `lint` rules recorded (`how/pattern/overlaps`) and reported, never run (`SKILL.md` Step 3.1, `checkRunner.ts runsInPhase` filters `check.type==model` only). Tier3 Jev EXISTS: bands act≥0.8/flag≥0.5 (`rubric.ts DEFAULT_THRESHOLDS`), edit vs turn (`rule.when`), timeouts EDIT 8s/TURN 15s, hook budgets 8/18/28s (`oh-my-plumb-hook.ts`, `hookRunner.ts` never-throw deadline, exit 0). Cost $0.042/M input, output free; replay ≈$0.09–0.13/40–55 sessions. Tier2 MCP-guard MISSING: no JSON-RPC dispatch, no `$FILE_PATH` routing. | KEEP Tier3 as-is; BUILD Tier1 executor + Tier2 validator; `rules.yaml` ↔ `rubric.json` via thin ADAPTER, not merge/replace (rubric=code-diff schema with scope/when/calibration; rules.yaml=op-tier routing). |
-| P4 self-repair | Repair loop EXISTS: `reason.ts repairReason` (names rule id + source line + quote + probability + "Repair … now"), `output.ts emit` block→`{decision:block,reason}` on hook stdout (Claude/Codex), `event.result.content` mutation ONLY in opencode plugin. Caps: `MAX_BLOCKS_PER_RULE_PER_TURN=2`, `MAX_STOP_CHECKS_PER_TURN=2`, all paths exit 0. | FEASIBLE — plan's injection model must be rewritten per-host (no `event.result.content` outside opencode plugin). |
+| Plan pillar                          | abide today                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Verdict                                                                                                                                                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1 auto-detect (`init` → rules.yaml) | `init` discovers instruction files only (`sources.ts`: `ROOT_NAMES=[AGENTS.md,CLAUDE.md,.cursorrules]`, nested walk ≤6, `CONTRIBUTING.md`, global `~/.claude/CLAUDE.md ~/.codex/AGENTS.md ~/.config/opencode/AGENTS.md`); counts sources, hook self-test, installs hosts. NO manifest/linter scan, NO MCP config scan, NO skills scan.                                                                                                                                                                                                                             | PARTIAL — instruction ingestion exists; manifest+MCP+skills scanner is new work in `commands/init.ts` + new `lib/detect.ts`.                                                                                  |
+| P2 unskippable hooks                 | Claude/Codex: 4 file-based hooks (`settings.ts hookSpecs`: SessionStart, UserPromptSubmit, PostToolUse, Stop → `node dist/oh-my-plumb-hook.js <name>`, stdin/stdout JSON). OpenCode: in-process plugin shim (`opencode/oh-my-plumb.mjs` + `opencodePlugin.ts`, marker-guarded install). Pi: `tool_result` event EXISTS, can return partial patch (`content/details/isError/usage`), middleware-chained.                                                                                                                                                            | FEASIBLE with corrections (§2).                                                                                                                                                                               |
+| P3 tiered pipeline                   | Tier1 NOT executed today: `lint` rules recorded (`how/pattern/overlaps`) and reported, never run (`SKILL.md` Step 3.1, `checkRunner.ts runsInPhase` filters `check.type==model` only). Tier3 Jev EXISTS: bands act≥0.8/flag≥0.5 (`rubric.ts DEFAULT_THRESHOLDS`), edit vs turn (`rule.when`), timeouts EDIT 8s/TURN 15s, hook budgets 8/18/28s (`oh-my-plumb-hook.ts`, `hookRunner.ts` never-throw deadline, exit 0). Cost $0.042/M input, output free; replay ≈$0.09–0.13/40–55 sessions. Tier2 MCP-guard MISSING: no JSON-RPC dispatch, no `$FILE_PATH` routing. | KEEP Tier3 as-is; BUILD Tier1 executor + Tier2 validator; `rules.yaml` ↔ `rubric.json` via thin ADAPTER, not merge/replace (rubric=code-diff schema with scope/when/calibration; rules.yaml=op-tier routing). |
+| P4 self-repair                       | Repair loop EXISTS: `reason.ts repairReason` (names rule id + source line + quote + probability + "Repair … now"), `output.ts emit` block→`{decision:block,reason}` on hook stdout (Claude/Codex), `event.result.content` mutation ONLY in opencode plugin. Caps: `MAX_BLOCKS_PER_RULE_PER_TURN=2`, `MAX_STOP_CHECKS_PER_TURN=2`, all paths exit 0.                                                                                                                                                                                                                | FEASIBLE — plan's injection model must be rewritten per-host (no `event.result.content` outside opencode plugin).                                                                                             |
 
 ## 2. Plan corrections (must-fix before build)
 
@@ -26,8 +26,8 @@ official docs (`pi.dev/docs/latest/extensions`). No code edited by scouts.
    Tool filter `["edit","write","apply_patch"]` mixes harnesses: Pi built-ins are
    `bash/read/write/edit`; `apply_patch` is Codex-shaped. Gate per host.
 2. **`ctx.callMcpTool` does NOT exist.** ExtensionContext = `ui/mode/hasUI/cwd/
-   sessionManager/modelRegistry/scopedModels/signal/isIdle/abort/getSystemPrompt/
-   compact/…` — no MCP call. Tier2 must dispatch MCP itself (spawn local
+sessionManager/modelRegistry/scopedModels/signal/isIdle/abort/getSystemPrompt/
+compact/…` — no MCP call. Tier2 must dispatch MCP itself (spawn local
    validator / direct MCP client in the extension), not via ctx.
 3. **Import path wrong.** Plan uses `@oh-my-pi/pi-coding-agent`; real packages are
    `@earendil-works/pi-coding-agent` (+ forks e.g. `@mariozechner/pi-coding-agent`).
@@ -48,7 +48,7 @@ official docs (`pi.dev/docs/latest/extensions`). No code edited by scouts.
    route by method/`$FILE_PATH` to a LOCAL synchronous validator (dry-run
    EXPLAIN / no-DDL check for migrations), block/flag synchronously, log only.
    No model call, no `checkRunner` change, fits ~200ms. `postgres-inspector
-   validate_migration` via MCP JSON-RPC is Phase 3, not MVP.
+validate_migration` via MCP JSON-RPC is Phase 3, not MVP.
 7. **Tier1 executor.** Run the repo's own linter (biome/eslint/tsc/cargo/ruff
    detected by P1 scanner) inside PostToolUse with <50ms budget for cached
    single-file checks; Jev path stays seconds-scale and must never gate Tier1.
@@ -71,7 +71,7 @@ official docs (`pi.dev/docs/latest/extensions`). No code edited by scouts.
    Validate: `vp install && vp check && vp test && vp build`.
 3. Phase 1 (MVP): 4th host `pi` + Tier1 executor + per-host repair return values.
    Files: `packages/schema/src/host.ts`, `packages/cli/src/lib/{hosts,piPlugin,
-   settings}.ts`, `packages/cli/pi/oh-my-plumb.ts`, `packages/cli/src/hooks/postToolUse.ts`.
+settings}.ts`, `packages/cli/pi/oh-my-plumb.ts`, `packages/cli/src/hooks/postToolUse.ts`.
 4. Phase 2: `oh-my-plumb init` scanners → `.oh-my-plumb/rules.yaml` synthesizer
    (`lib/detect.ts`: manifests, `.pi/mcp.json`/`.claude/mcp.json` MCP scan,
    `package.json`/`.pi/skills` skills scan).
