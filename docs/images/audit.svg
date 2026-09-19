@@ -3,7 +3,7 @@
 <text x="28" y="38" xml:space="preserve"><tspan fill="rgb(141,150,163)">\$ oh-my-plumb audit apps/web/src/pages/api/v1</tspan></text>
 <text x="28" y="57" xml:space="preserve"></text>
 <text x="28" y="76" xml:space="preserve"><tspan fill="rgb(61,165,168)" font-weight="600">oh-my-plumb</tspan><tspan fill="rgb(141,150,163)"> · </tspan><tspan fill="rgb(205,211,220)" font-weight="600">audit</tspan></text>
-<text x="28" y="95" xml:space="preserve"><tspan fill="rgb(90,99,112)">/private/tmp/coldtea</tspan></text>
+<text x="28" y="95" xml:space="preserve"><tspan fill="rgb(90,99,112)">/private/tmp/oh-my-plumb</tspan></text>
 <text x="28" y="114" xml:space="preserve"><tspan fill="rgb(141,150,163)">33 files judged · 43.3s · about $0.013</tspan></text>
 <text x="28" y="133" xml:space="preserve"></text>
 <text x="28" y="152" xml:space="preserve"><tspan fill="rgb(61,165,168)">▎</tspan><tspan fill="rgb(205,211,220)" font-weight="600"> By rule</tspan><tspan fill="rgb(141,150,163)"> 7 rules with something to look at</tspan><tspan fill="#cdd3dc">   </tspan><tspan fill="rgb(224,172,98)">◀ how many files break each rule</tspan></text>

@@ -3,7 +3,7 @@
 <text x="28" y="38" xml:space="preserve"><tspan fill="rgb(141,150,163)">\$ oh-my-plumb report</tspan></text>
 <text x="28" y="57" xml:space="preserve"></text>
 <text x="28" y="76" xml:space="preserve"><tspan fill="rgb(61,165,168)" font-weight="600">oh-my-plumb</tspan><tspan fill="rgb(141,150,163)"> · </tspan><tspan fill="rgb(205,211,220)" font-weight="600">report</tspan></text>
-<text x="28" y="95" xml:space="preserve"><tspan fill="rgb(90,99,112)">/private/tmp/coldtea</tspan></text>
+<text x="28" y="95" xml:space="preserve"><tspan fill="rgb(90,99,112)">/private/tmp/oh-my-plumb</tspan></text>
 <text x="28" y="114" xml:space="preserve"></text>
 <text x="28" y="133" xml:space="preserve"><tspan fill="rgb(61,165,168)">▎</tspan><tspan fill="rgb(205,211,220)" font-weight="600"> Rules</tspan><tspan fill="#cdd3dc">   </tspan><tspan fill="rgb(224,172,98)">◀ every rule, how it is checked, and how it calibrated</tspan></text>
 <text x="28" y="152" xml:space="preserve"><tspan fill="#cdd3dc">  </tspan><tspan fill="rgb(205,211,220)" font-weight="600">115</tspan><tspan fill="rgb(205,211,220)"> rules</tspan><tspan fill="rgb(141,150,163)"> · </tspan><tspan fill="rgb(104,118,216)" font-weight="600">63</tspan><tspan fill="rgb(205,211,220)"> checked by Jev</tspan><tspan fill="rgb(141,150,163)"> · </tspan><tspan fill="rgb(92,189,104)" font-weight="600">19</tspan><tspan fill="rgb(205,211,220)"> for your linter</tspan><tspan fill="rgb(141,150,163)"> · </tspan><tspan fill="rgb(196,164,110)" font-weight="600">11</tspan><tspan fill="rgb(205,211,220)"> deferred</tspan><tspan fill="rgb(141,150,163)"> · </tspan><tspan fill="rgb(90,99,112)" font-weight="600">22</tspan><tspan fill="rgb(205,211,220)"> unenforceable</tspan></text>
