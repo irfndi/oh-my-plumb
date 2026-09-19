@@ -10,6 +10,7 @@ import {
   uninstallHost,
 } from "../src/lib/hosts.js";
 import { OPENCODE_PLUGIN_MARKER } from "../src/lib/opencodePlugin.js";
+import { PI_PLUGIN_MARKER } from "../src/lib/piPlugin.js";
 
 let home: string;
 let root: string;
@@ -68,6 +69,21 @@ describe("hosts", () => {
     mkdirSync(path.dirname(target), { recursive: true });
     writeFileSync(target, "export default async () => ({});\n");
     expect(uninstallHost("opencode", root, false)).toBe(0);
+    expect(existsSync(target)).toBe(true);
+  });
+
+  it("installs Pi as an extension file it can recognise, and leaves a stranger's file alone", () => {
+    const target = installTarget("pi", root, false);
+    expect(target).toBe(path.join(home, ".pi", "agent", "extensions", "oh-my-plumb.ts"));
+    installHost("pi", root, false);
+    const text = readFileSync(target, "utf8");
+    expect(text).toContain(PI_PLUGIN_MARKER);
+    expect(text).toMatch(/export \{ default \} from "file:\/\/.*pi\/oh-my-plumb\.ts"/);
+    expect(uninstallHost("pi", root, false)).toBe(1);
+    expect(existsSync(target)).toBe(false);
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, "export default () => ({});\n");
+    expect(uninstallHost("pi", root, false)).toBe(0);
     expect(existsSync(target)).toBe(true);
   });
 });

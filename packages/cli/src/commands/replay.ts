@@ -50,6 +50,8 @@ const sessionsFor = (host: Host, root: string, paths: readonly string[]): Replay
       return codexSessionsFor(root, paths[0] ?? codexSessionsDir());
     case "opencode":
       return opencodeSessionsFor(root, paths[0] ?? opencodeDbPath());
+    case "pi":
+      throw new PlumbError("HOST_UNSUPPORTED", "replay for pi sessions is not implemented yet");
     default:
       return assertNever(host);
   }

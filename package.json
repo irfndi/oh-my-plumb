@@ -1,6 +1,6 @@
 {
   "name": "oh-my-plumb",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "description": "Enforce your own AGENTS.md rules on every edit a coding agent makes, from outside its context window.",
   "license": "MIT",

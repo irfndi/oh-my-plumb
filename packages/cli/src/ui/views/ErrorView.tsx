@@ -14,6 +14,7 @@ const TITLES: Record<PlumbErrorCode, string> = {
   CLAUDE_UNAVAILABLE: "Claude Code did not finish the turn",
   HOST_UNKNOWN: "That is not an agent oh-my-plumb knows",
   HOST_NOT_FOUND: "No supported agent was found on this machine",
+  HOST_UNSUPPORTED: "Replay is not available for this agent yet",
   CHECK_TIMEOUT: "Jev did not answer in time",
   CHECK_FAILED: "Jev refused the check",
 };
