@@ -9,6 +9,7 @@ import { hookScriptPath } from "../lib/packageRoot.js";
 import { ohMyPlumbDir, findRepoRoot, rubricPath } from "../lib/paths.js";
 import { readRubric } from "../lib/rubricFile.js";
 import { discoverGlobalSources, discoverProjectSources } from "../lib/sources.js";
+import { detectStack, routesFor } from "../lib/detect.js";
 import type { Step } from "../ui/components/Checklist.js";
 import { showStatic } from "../ui/render.js";
 import { InitView } from "../ui/views/InitView.js";
@@ -63,6 +64,8 @@ export const runInit = async (argv: string[]): Promise<number> => {
 
   const hosts = chooseHosts(positionals);
   const script = hookScriptPath();
+  const stack = detectStack(root);
+  const routes = routesFor(stack);
   const steps: Step[] = [
     {
       ok: true,
@@ -75,6 +78,21 @@ export const runInit = async (argv: string[]): Promise<number> => {
   ];
   mkdirSync(ohMyPlumbDir(root), { recursive: true });
   writeFileSync(path.join(ohMyPlumbDir(root), ".gitignore"), "events.jsonl\ncompile-skill.md\n");
+  const rulesYaml = [
+    `version: "1.0"`,
+    `detected:`,
+    `  manifests: [${stack.manifests.join(", ")}]`,
+    `  mcpServers: [${stack.mcpServers.join(", ")}]`,
+    `  skills: [${stack.skills.join(", ")}]`,
+    `routes:`,
+    ...routes.map((r) => `  - tier: ${r.tier} trigger: "${r.trigger}" action: "${r.action}"`),
+    ``,
+  ].join("\n");
+  writeFileSync(path.join(ohMyPlumbDir(root), "rules.yaml"), rulesYaml);
+  steps.push({
+    ok: true,
+    text: `detected ${stack.manifests.length} manifests, ${stack.mcpServers.length} MCP servers, ${stack.skills.length} skills → .oh-my-plumb/rules.yaml`,
+  });
   if (!selfTest(script, root))
     throw new PlumbError(
       "SETTINGS_INVALID",

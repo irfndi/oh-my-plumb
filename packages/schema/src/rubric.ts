@@ -90,6 +90,8 @@ export const modelCheckSchema = z.object({
   type: z.literal("model"),
   question: questionSchema,
   overlaps: overlapsSchema,
+  /** Grep-shaped hint, executable by Tier 1 against added lines when present. */
+  pattern: z.string().min(1).max(500).optional(),
 });
 
 export const deferredCheckSchema = z.object({

@@ -9,6 +9,8 @@ import {
   type Verdict,
 } from "oh-my-plumb-schema";
 import { runCheck, type CheckOutcome } from "../lib/checkRunner.js";
+import { fastCheck } from "../lib/tier1.js";
+import { tier2Check } from "../lib/tier2.js";
 import { EDIT_CHECK_TIMEOUT_MS, MAX_BLOCKS_PER_RULE_PER_TURN } from "../lib/constants.js";
 import { hasApiKey } from "../lib/credentials.js";
 import { boundState, editsFromPostToolUse, type EditHunk } from "../lib/diff.js";
@@ -70,6 +72,33 @@ export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
   if (checkable.length === 0) return { kind: "silent" };
   const files = checkable.map((c) => c.relative);
 
+  const tier2Hits = checkable.flatMap(({ edit, relative }) => {
+    const hit = tier2Check(input.tool_name, relative, edit.after);
+    return hit === undefined ? [] : [{ relative, hit }];
+  });
+  if (tier2Hits.length > 0) {
+    const actedOn = [...new Set(tier2Hits.map((h) => h.relative))];
+    for (const { relative } of tier2Hits) recordBlockedFile(turn, relative);
+    appendEvent(root, {
+      kind: "check",
+      at,
+      phase: "edit",
+      sessionId: input.session_id,
+      promptId: turnIdOf(input),
+      files: actedOn,
+      rules: tier2Hits.length,
+      latencyMs: Math.round(performance.now() - started),
+      modelLatencyMs: 0,
+      usage: {},
+      verdicts: tier2Hits.map((h) => ({ ruleId: h.hit.ruleId, probability: 1, band: "act" })),
+      blocked: true,
+    });
+    return {
+      kind: "block",
+      reason: tier2Hits.map((h) => h.hit.reason).join("\n"),
+    };
+  }
+
   if (!hasApiKey(root)) {
     appendEvent(root, {
       kind: "skip",
@@ -82,22 +111,42 @@ export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
   }
 
   const task = lastUserPrompt(input.transcript_path ?? undefined) ?? readPrompt(turn);
+  const diffs = checkable.map((c) => ({ file: c.relative, text: c.diff }));
+  const fast = fastCheck(loaded.rules, "edit", diffs, loaded.thresholds);
+  const fastByRule = new Map(fast.verdicts.map((v) => [v.ruleId, v]));
+  const modelRules = loaded.rules.filter((r) => !fastByRule.has(r.id));
   let checked: Checked[];
   try {
-    checked = await Promise.all(
-      checkable.map(async ({ edit, relative, diff }) => ({
-        edit,
-        relative,
-        outcome: await runCheck({
-          phase: "edit",
-          fileDiffs: [{ file: relative, text: diff }],
-          task,
-          rules: loaded.rules,
-          thresholds: loaded.thresholds,
-          timeoutMs: EDIT_CHECK_TIMEOUT_MS,
-        }),
-      })),
-    );
+    checked =
+      modelRules.length === 0
+        ? checkable.map(({ edit, relative }) => ({
+            edit,
+            relative,
+            outcome: {
+              verdicts: fast.verdicts,
+              modelRules: [],
+              calls: 0,
+              usage: {},
+              modelLatencyMs: 0,
+            },
+          }))
+        : await Promise.all(
+            checkable.map(async ({ edit, relative, diff }) => {
+              const outcome = await runCheck({
+                phase: "edit",
+                fileDiffs: [{ file: relative, text: diff }],
+                task,
+                rules: modelRules,
+                thresholds: loaded.thresholds,
+                timeoutMs: EDIT_CHECK_TIMEOUT_MS,
+              });
+              return {
+                edit,
+                relative,
+                outcome: { ...outcome, verdicts: [...outcome.verdicts, ...fast.verdicts] },
+              };
+            }),
+          );
   } catch (error) {
     appendEvent(root, {
       kind: "error",
