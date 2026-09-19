@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="884" height="466" viewBox="0 0 884 466" font-family="SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13">
+<rect width="884" height="466" rx="10" fill="#0f1216"/>
+<text x="28" y="38" xml:space="preserve"><tspan fill="rgb(141,150,163)">$ npx oh-my-plumb init</tspan></text>
+<text x="28" y="57" xml:space="preserve"></text>
+<text x="28" y="76" xml:space="preserve"><tspan fill="rgb(61,165,168)" font-weight="600">oh-my-plumb</tspan><tspan fill="rgb(141,150,163)"> · </tspan><tspan fill="rgb(205,211,220)" font-weight="600">init</tspan></text>
+<text x="28" y="95" xml:space="preserve"><tspan fill="rgb(90,99,112)">/private/tmp/oh-my-plumb-demo</tspan></text>
+<text x="28" y="114" xml:space="preserve"></text>
+<text x="28" y="133" xml:space="preserve"><tspan fill="rgb(92,189,104)">✓</tspan><tspan fill="rgb(205,211,220)"> AI_GATEWAY_API_KEY found in the environment</tspan></text>
+<text x="28" y="152" xml:space="preserve"><tspan fill="rgb(92,189,104)">✓</tspan><tspan fill="rgb(205,211,220)"> 3 instruction files found</tspan></text>
+<text x="28" y="171" xml:space="preserve"><tspan fill="rgb(92,189,104)">✓</tspan><tspan fill="rgb(205,211,220)"> hooks written: SessionStart, UserPromptSubmit, PostToolUse, Stop</tspan></text>
+<text x="28" y="190" xml:space="preserve"><tspan fill="#cdd3dc">  </tspan><tspan fill="rgb(90,99,112)">/tmp/oh-my-plumb-demo/settings.json</tspan></text>
+<text x="28" y="209" xml:space="preserve"><tspan fill="rgb(92,189,104)">✓</tspan><tspan fill="rgb(205,211,220)"> hook self-test passed</tspan></text>
+<text x="28" y="228" xml:space="preserve"></text>
+<text x="28" y="247" xml:space="preserve"><tspan fill="rgb(141,150,163)">Instruction files</tspan></text>
+<text x="28" y="266" xml:space="preserve"><tspan fill="rgb(205,211,220)"> AGENTS.md</tspan><tspan fill="rgb(90,99,112)"> everywhere in this repo</tspan></text>
+<text x="28" y="285" xml:space="preserve"><tspan fill="rgb(205,211,220)"> ~/.claude/CLAUDE.md</tspan><tspan fill="rgb(90,99,112)"> global, every repo</tspan></text>
+<text x="28" y="304" xml:space="preserve"><tspan fill="rgb(205,211,220)"> ~/.codex/AGENTS.md</tspan><tspan fill="rgb(90,99,112)"> global, every repo</tspan></text>
+<text x="28" y="323" xml:space="preserve"></text>
+<text x="28" y="342" xml:space="preserve"><tspan fill="rgb(92,189,104)">╭───────────────────────────────────────────────────────────────────────────────────────────╮</tspan></text>
+<text x="28" y="361" xml:space="preserve"><tspan fill="rgb(92,189,104)">│</tspan><tspan fill="#cdd3dc"> </tspan><tspan fill="rgb(92,189,104)" font-weight="600">✓ Rubric present: 2 rules</tspan><tspan fill="#cdd3dc">                                                                 </tspan><tspan fill="rgb(92,189,104)">│</tspan></text>
+<text x="28" y="380" xml:space="preserve"><tspan fill="rgb(92,189,104)">│</tspan><tspan fill="#cdd3dc"> </tspan><tspan fill="rgb(141,150,163)">/private/tmp/oh-my-plumb-demo/.oh-my-plumb/rubric.json. It is rehashed at the start of every session.</tspan><tspan fill="#cdd3dc"> </tspan><tspan fill="rgb(92,189,104)">│</tspan></text>
+<text x="28" y="399" xml:space="preserve"><tspan fill="rgb(92,189,104)">╰───────────────────────────────────────────────────────────────────────────────────────────╯</tspan></text>
+<text x="28" y="418" xml:space="preserve"></text>
+<text x="28" y="437" xml:space="preserve"><tspan fill="rgb(90,99,112)">Later: oh-my-plumb report shows what fired, oh-my-plumb bench measures latency and spend here.</tspan></text>
+</svg>

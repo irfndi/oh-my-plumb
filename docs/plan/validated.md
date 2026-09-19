@@ -64,11 +64,16 @@ validate_migration` via MCP JSON-RPC is Phase 3, not MVP.
 1. Verify rename: `grep -rni coldtea` → 0; `grep -rni abide` → 0 outside
    `pnpm-lock.yaml`/binary assets; `git init && git add -A && git commit`
    (fresh history; fork link already cut — `.git` removed at copy).
-2. Baseline: `pnpm install && pnpm verify` (format:check+build+typecheck+test)
-   unmodified. THEN vite-plus migration (`vp migrate --no-interactive` from root;
-   vp 0.3.3 already installed: bundles vite 8.3.0, vitest 4.1.11 = repo's vitest
-   4.1.11 ✓, oxlint/oxfmt/tsdown; replaces prettier+tsc-scripts+vitest-direct).
-   Validate: `vp install && vp check && vp test && vp build`.
+2. Baseline: `pnpm install && pnpm -r run build && pnpm -r run typecheck && pnpm -r run test`
+   unmodified (ordered pnpm first: `vp run -r build` runs workspace builds in
+   parallel and fails with `TS2307 oh-my-plumb-schema` when cli compiles before
+   schema `dist` exists; sequential `vp run -F oh-my-plumb-schema build` then
+   `vp run -F oh-my-plumb build` passes). THEN vite-plus migration
+   (`vp migrate --no-interactive` from root; vp 0.3.3 bundles vite 8.3.0,
+   vitest 4.1.11 = repo's vitest 4.1.11 ✓, oxlint/oxfmt/tsdown;
+   replaces prettier+tsc-scripts+vitest-direct).
+   Validate: `vp install && vp check && vp test && vp run -r build`
+   (bare `vp build` has no root target; `vp run -r build` is the gate).
 3. Phase 1 (MVP): 4th host `pi` + Tier1 executor + per-host repair return values.
    Files: `packages/schema/src/host.ts`, `packages/cli/src/lib/{hosts,piPlugin,
 settings}.ts`, `packages/cli/pi/oh-my-plumb.ts`, `packages/cli/src/hooks/postToolUse.ts`.
