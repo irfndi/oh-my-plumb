@@ -72,11 +72,11 @@ export const handleSessionStart = async (raw: unknown): Promise<HookOutput> => {
   const notices: string[] = [];
   if (!hasApiKey(root)) {
     notices.push(
-      "Oh-my-plumb: no API key was found, so edits are not being checked. Run oh-my-plumb login, or put TYPESAFE_AI_API_KEY in the environment or a .env at the repo root, then start a new session.",
+      "oh-my-plumb: no API key was found, so edits are not being checked. Run oh-my-plumb login, or put TYPESAFE_AI_API_KEY in the environment or a .env at the repo root, then start a new session.",
     );
   }
   for (const problem of plan.invalid) {
-    notices.push(`Oh-my-plumb: rubric could not be read and is being ignored: ${problem}`);
+    notices.push(`oh-my-plumb: rubric could not be read and is being ignored: ${problem}`);
   }
   const systemMessage = notices.length > 0 ? notices.join("\n") : undefined;
 

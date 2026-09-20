@@ -6,3 +6,5 @@ dist/
 .env.local
 .oh-my-plumb/events.jsonl
 packages/cli/skills/
+.oh-my-plumb/rules.yaml
+.oh-my-plumb/compile-skill.md

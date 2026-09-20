@@ -67,7 +67,7 @@ export type Question = z.infer<typeof questionSchema>;
 const overlapsSchema = z.string().max(200).optional();
 
 /**
- * A rule a linter can enforce exactly. Oh-my-plumb records it and reports it; it
+ * A rule a linter can enforce exactly. oh-my-plumb records it and reports it; it
  * never runs it and never sends it to the model. The judge is for what a
  * linter cannot express.
  */

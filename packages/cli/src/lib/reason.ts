@@ -31,7 +31,7 @@ export const repairReason = (
     phase === "edit"
       ? `Repair ${target} now, then continue with the task.`
       : `Repair ${target} before you finish. Keep the fix to what the rule asks.`;
-  return `Oh-my-plumb: ${subject} appears to break ${lines.length === 1 ? "a rule" : `${lines.length} rules`} from this repository's instructions.\n${lines.map((l) => `- ${l}`).join("\n")}\n${ask}`;
+  return `oh-my-plumb: ${subject} appears to break ${lines.length === 1 ? "a rule" : `${lines.length} rules`} from this repository's instructions.\n${lines.map((l) => `- ${l}`).join("\n")}\n${ask}`;
 };
 
 export const flagNotice = (
@@ -42,5 +42,5 @@ export const flagNotice = (
   const list = flagged
     .map(({ rule, verdict }) => `${rule.id} ${verdict.probability.toFixed(2)}`)
     .join(", ");
-  return `Oh-my-plumb: uncertain about ${list} on ${files.join(", ")} (${phase}). Not sent to the agent. Details in .oh-my-plumb/events.jsonl.`;
+  return `oh-my-plumb: uncertain about ${list} on ${files.join(", ")} (${phase}). Not sent to the agent. Details in .oh-my-plumb/events.jsonl.`;
 };

@@ -115,7 +115,7 @@ describe("replay from OpenCode rows", () => {
       }),
       row("m3", "user", 3, {
         type: "text",
-        text: "Oh-my-plumb: This edit appears to break a rule",
+        text: "oh-my-plumb: This edit appears to break a rule",
       }),
       row("m4", "user", 1, { type: "text", text: "elsewhere" }, "/other", "ses_2"),
       row(

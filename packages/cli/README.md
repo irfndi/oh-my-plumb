@@ -1,6 +1,6 @@
 # oh-my-plumb
 
-The `oh-my-plumb` command and the hook script. Oh-my-plumb makes your coding agent oh-my-plumb by the rules in your own AGENTS.md, on every edit, from outside the agent's context window.
+The `oh-my-plumb` command and the hook script. oh-my-plumb makes your coding agent abide by the rules in your own AGENTS.md, on every edit, from outside the agent's context window.
 
 ```
 npx oh-my-plumb login    # paste your TypeSafe key once

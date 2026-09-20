@@ -4,7 +4,7 @@
   "private": true,
   "description": "Enforce your own AGENTS.md rules on every edit a coding agent makes, from outside its context window.",
   "license": "MIT",
-  "author": "Oh My Plumb",
+  "author": "irfndi",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/irfndi/oh-my-plumb.git"

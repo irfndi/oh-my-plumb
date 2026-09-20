@@ -1,4 +1,4 @@
-# Oh-my-plumb — Agent Instructions
+# oh-my-plumb — Agent Instructions
 
 Hard rules for anyone (human or agent) working in this repo. Read fully before writing code.
 
@@ -109,7 +109,7 @@ Quality software is built on types the compiler can enforce. These are non-negot
 
 # Repo specifics
 
-- pnpm monorepo: `packages/schema` (the contract — everything else consumes it), `packages/cli`, `packages/hooks` (the scripts each host registers), `skills/oh-my-plumb-compile` (what SessionStart hands to the agent). MIT © Oh My Plumb.
+- pnpm monorepo: `packages/schema` (the contract — everything else consumes it), `packages/cli`, `packages/hooks` (the scripts each host registers), `skills/oh-my-plumb-compile` (what SessionStart hands to the agent). MIT © irfndi.
 - **Zero Coldtea dependency.** This runs in anyone's repo on anyone's machine. Nothing here may require Coldtea to be installed, running, or reachable. The animated character is a separate product in a separate repo and is not this package's concern.
 - **The rubric is the product's trust surface.** It is a committed, human-readable, hand-editable file. Every verdict must trace to a named rule a person can read and rewrite. A verdict that cannot be explained by pointing at a rule is a bug.
 - **No default rules.** Rules come only from the user's own instruction files. Shipping a built-in ruleset turns this into a generic linter and loses the premise, which is enforcing _their_ rules.

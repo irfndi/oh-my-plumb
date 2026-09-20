@@ -1,10 +1,10 @@
 <p align="center">
 </p>
 
-<h1 align="center">Oh-my-plumb</h1>
+<h1 align="center">oh-my-plumb</h1>
 
 <p align="center">
-  <em>Coding agents break your rules from the very first edit. Oh-my-plumb catches every one and makes your agent fix it</em>
+  <em>Coding agents break your rules from the very first edit. oh-my-plumb catches every one and makes your agent fix it</em>
 </p>
 
 <p align="center">
@@ -32,7 +32,7 @@ Your AGENTS.md, CLAUDE.md and the rest of your project instructions are full of 
 
 https://github.com/user-attachments/assets/a39c14ed-336a-4d68-8366-18e960916669
 
-Oh-my-plumb enforces exactly those rules. On every edit (or turn) it asks [Jev](https://typesafe.ai), TypeSafe's decision model, one question per rule and gets a probability back. Jev sees the rule and the diff, never the conversation, so edit 200 is checked like edit 1. Break a rule and the agent is told which one and fixes it in the same turn.
+oh-my-plumb enforces exactly those rules. On every edit (or turn) it asks [Jev](https://typesafe.ai), TypeSafe's decision model, one question per rule and gets a probability back. Jev sees the rule and the diff, never the conversation, so edit 200 is checked like edit 1. Break a rule and the agent is told which one and fixes it in the same turn.
 
 - One call per edit, about 300 ms, a few thousandths of a cent.
 - Rules a linter could check are handed to your linter instead.
@@ -54,7 +54,7 @@ Jev changes the arithmetic. It is a decision model, so it answers a typed questi
 5. Ask for something your rules forbid. An AGENTS.md that says "use Yup, never validate by hand" produces this the moment the agent writes a manual guard:
 
 ```
-Oh-my-plumb: This edit appears to break a rule from this repository's instructions.
+oh-my-plumb: This edit appears to break a rule from this repository's instructions.
 - Rule "api-validation-uses-yup" from ~/.codex/AGENTS.md line 65: "When writing API endpoints, do NOT write input validations manually. Use Yup (with clear validation messages) + early return in the API handler". (0.86)
 Repair apps/web/src/pages/api/logout.ts now, then continue with the task.
 ```

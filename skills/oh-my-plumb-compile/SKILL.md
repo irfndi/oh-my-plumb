@@ -1,9 +1,9 @@
 ---
 name: oh-my-plumb-compile
-description: Compile a repository's instruction files (AGENTS.md, CLAUDE.md and friends) into an Oh-my-plumb rubric, then validate and calibrate it.
+description: Compile a repository's instruction files (AGENTS.md, CLAUDE.md and friends) into an oh-my-plumb rubric, then validate and calibrate it.
 ---
 
-# Compile an Oh-my-plumb rubric
+# Compile an oh-my-plumb rubric
 
 You are turning the rules a person wrote for coding agents into a rubric that a checker outside your context window can enforce on every edit. The checker sees only one rule and one diff at a time. Nothing else. Every decision below follows from that.
 
@@ -37,7 +37,7 @@ Do not merge two rules into one because they sit under one heading. Do not split
 
 Ask the questions in this order and stop at the first yes.
 
-1. Can a linter enforce it exactly? Then `check.type` is `lint`. Examples: `interface Foo` when the rule says use `type`; `as` casts; `fetch(`; `process.env.`; `Date.now()`; `console.log`; `npm install`. Put the linter rule that enforces it in `how` (`@typescript-eslint/consistent-type-definitions`, `no-restricted-syntax`, a stylelint rule) or, failing that, the AST or grep shape, and a `pattern` as a hint when one is obvious. Oh-my-plumb records these and reports them for the user's own linter; it never runs them and never sends them to the model. The judge is for what a linter cannot express.
+1. Can a linter enforce it exactly? Then `check.type` is `lint`. Examples: `interface Foo` when the rule says use `type`; `as` casts; `fetch(`; `process.env.`; `Date.now()`; `console.log`; `npm install`. Put the linter rule that enforces it in `how` (`@typescript-eslint/consistent-type-definitions`, `no-restricted-syntax`, a stylelint rule) or, failing that, the AST or grep shape, and a `pattern` as a hint when one is obvious. oh-my-plumb records these and reports them for the user's own linter; it never runs them and never sends them to the model. The judge is for what a linter cannot express.
 2. Does the rule need counting or measuring: line lengths, line counts, selector counts, nesting depth, alphabetical or length order (imports or props ordered by line length is the common one)? That is mechanical work, and the judge cannot count. If step 1 found no regex for it, `check.type` is `deferred` with reason "needs a script, not a judge". Do not turn it into a model question; it will score about 0.4 on everything.
 3. Can a judge answer it by looking at a change and nothing else? Then `check.type` is `model`. Most style, structure, comment, error handling, naming, and "do not do X" rules land here.
 4. Does answering need the rest of the repository? "Reuse existing error codes", "follow existing patterns", "any visual pattern in two places becomes a shared component", "check whether a helper already exists". Then `check.type` is `deferred` with a one line `reason`. These are real rules that this version cannot check on a diff, and the report says so.

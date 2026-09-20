@@ -42,8 +42,8 @@ export const compilePrompt = (
 ): string => {
   const head =
     tune === undefined
-      ? "Oh-my-plumb is installed here and its rubric is missing or out of date. Compile it before you start on the user's request."
-      : "Oh-my-plumb is installed here. Some rules in its rubric never fire or fire on everything. Rewrite those rules before you start on the user's request.";
+      ? "oh-my-plumb is installed here and its rubric is missing or out of date. Compile it before you start on the user's request."
+      : "oh-my-plumb is installed here. Some rules in its rubric never fire or fire on everything. Rewrite those rules before you start on the user's request.";
   const parts = [
     head,
     `Read ${skillPath} and follow it to the end. Do not skip the validate and calibrate steps.`,

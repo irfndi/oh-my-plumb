@@ -151,7 +151,7 @@ export const opencodeSessionsFromRows = (
       const turn = session.turns.at(-1);
       if (turn !== undefined && part.type === "text" && typeof part.text === "string") {
         const text = part.text.trim();
-        if (text !== "" && !text.startsWith("Oh-my-plumb:"))
+        if (text !== "" && !text.startsWith("oh-my-plumb:"))
           turn.prompt = `${turn.prompt === undefined ? "" : `${turn.prompt}\n`}${text}`.slice(
             0,
             MAX_TASK_CHARS,

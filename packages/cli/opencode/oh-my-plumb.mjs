@@ -1,4 +1,4 @@
-// Oh-my-plumb for OpenCode.
+// oh-my-plumb for OpenCode.
 //
 // OpenCode has no hook processes: it loads this module into its own server and
 // calls the functions below. Each one turns the OpenCode event into the payload
@@ -145,8 +145,8 @@ export default async ({ client, directory }) => {
           }
           if (out?.systemMessage) log(out.systemMessage);
         }
-        // Oh-my-plumb's own repair request continues the turn it was raised in.
-        if (s.repairing && text.startsWith("Oh-my-plumb:")) {
+        // oh-my-plumb's own repair request continues the turn it was raised in.
+        if (s.repairing && text.startsWith("oh-my-plumb:")) {
           s.repairing = false;
           return;
         }

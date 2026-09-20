@@ -9,7 +9,7 @@
     "directory": "packages/cli"
   },
   "homepage": "https://github.com/irfndi/oh-my-plumb/tree/main/packages/cli",
-  "author": "Oh My Plumb",
+  "author": "irfndi",
   "type": "module",
   "bin": {
     "oh-my-plumb": "./dist/bin.js"
