@@ -34,7 +34,6 @@ https://github.com/user-attachments/assets/a39c14ed-336a-4d68-8366-18e960916669
 
 Oh-my-plumb enforces exactly those rules. On every edit (or turn) it asks [Jev](https://typesafe.ai), TypeSafe's decision model, one question per rule and gets a probability back. Jev sees the rule and the diff, never the conversation, so edit 200 is checked like edit 1. Break a rule and the agent is told which one and fixes it in the same turn.
 
-
 - One call per edit, about 300 ms, a few thousandths of a cent.
 - Rules a linter could check are handed to your linter instead.
 - No built-in rules. No instruction files, nothing to enforce.
@@ -62,7 +61,6 @@ Repair apps/web/src/pages/api/logout.ts now, then continue with the task.
 
 The agent repairs it before moving on. No human in the loop.
 
-
 ## Agents
 
 | Agent       | Install                         | Where it lands                              |
@@ -87,7 +85,6 @@ oh-my-plumb audit src/
 ```
 
 Every file is judged as if it had just been written. You get a table by rule and a list by file. On 33 API routes of a real Next.js app: 12 seconds, about a cent.
-
 
 ## Commands
 
@@ -115,7 +112,6 @@ Every file is judged as if it had just been written. You get a table by rule and
 - Each rule can carry a `scope` of globs, so an API route and a stylesheet get different questions.
 - Verdicts are banded. 0.8 and above: the agent is told to repair. 0.5 to 0.8: you see a note, the agent does not. Below 0.5: nothing.
 - A badly worded rule scores 0.4 on everything and never fires. `calibrate` finds those against twenty real hunks from your history and switches them off. `tune` has the agent rewrite them.
-
 
 ## Cost, privacy, safety
 
