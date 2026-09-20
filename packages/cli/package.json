@@ -3,6 +3,12 @@
   "version": "0.0.1",
   "description": "Enforce your own AGENTS.md rules on every edit a coding agent makes.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/irfndi/oh-my-plumb.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/irfndi/oh-my-plumb/tree/main/packages/cli",
   "author": "Oh My Plumb",
   "type": "module",
   "bin": {
@@ -24,6 +30,7 @@
     "node": ">=20.11"
   },
   "scripts": {
+    "prepublishOnly": "pnpm run build",
     "build": "rm -rf dist skills && tsc -p tsconfig.build.json && mkdir -p skills/oh-my-plumb-compile && cp ../../skills/oh-my-plumb-compile/SKILL.md skills/oh-my-plumb-compile/SKILL.md",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vp test run"

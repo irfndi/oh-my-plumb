@@ -7,4 +7,4 @@ npx oh-my-plumb login    # paste your TypeSafe key once
 npx oh-my-plumb init     # hooks into every agent on this machine
 ```
 
-Everything else, including which agents are supported, what a check costs and how the rubric works, is in the [main README](https://github.com/oh-my-plumb/oh-my-plumb#readme).
+Everything else, including which agents are supported, what a check costs and how the rubric works, is in the [main README](https://github.com/irfndi/oh-my-plumb#readme).
