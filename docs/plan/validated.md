@@ -88,6 +88,36 @@ validate_migration` via MCP JSON-RPC is Phase 3, not MVP.
    README agents table + Pi section, `init [agent]` help text, Jev adapter unchanged
    (`jev-latest`, `lib/jev.ts`, `lib/band.ts` thresholds act 0.8 / flag 0.5).
 
+## 3b. Positioning (why an out-of-context primitive, not an agent)
+
+TypeSafe's own notes on coding agents argue the agent loop is commodity
+(while-loop + few tools) and the leverage sits in typed primitives around it.
+Two of those observations are direct arguments for this architecture:
+
+- **Routing math.** Routing a session to a smaller model and back costs MORE
+  than staying on the large one, because the context is re-processed by the
+  big model on return. Our checks are out-of-context by construction: Tier 1
+  deterministic (no model), Tier 2 deterministic guards routed by file path,
+  Tier 3 one narrow Jev call carrying one rule plus one bounded diff. There is
+  no session state to re-process, so that cost cannot reach us. This is the
+  answer to "why not route the agent itself".
+- **Query-aware beats compression.** Compaction exists to squeeze shared state;
+  we ship no shared state, so no compression is needed. One rule plus at most
+  24k chars of diff per call is already the minimum a check requires.
+- **Tool routing failure mode.** High-cardinality off-policy tool calling is
+  where models are weakest. Our guards are routed by the hook, never chosen by
+  the model, so the failure mode is removed. Consequence: a guard bug cannot
+  be self-corrected by the agent, so guard reliability is load-bearing; guard
+  suites are mandatory, not optional.
+
+**Named risk.** TypeSafe lists permissions/approvals and MCP tool routing as
+"basic stuff integratable into any agent" — a native agent would absorb that
+category first, narrowing hook-per-host value to the other hosts. What a native
+agent cannot fold in: rules sourced from the user's own instruction files,
+enforced from outside the context window, identical across every harness. Hedge
+already built — adding `pi` cost one phase; the rubric and the tier pipeline
+are host-agnostic.
+
 ## 4. Risks
 
 - Pi/OMP API drift (rebrand divergence: `@earendil-works` vs OMP paths) — pin
