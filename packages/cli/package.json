@@ -64,7 +64,7 @@
       "./pi/oh-my-plumb.ts"
     ],
     "skills": [
-      "./skills/oh-my-plumb-compile"
+      "./skills"
     ]
   }
 }
