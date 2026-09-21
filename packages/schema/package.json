@@ -1,6 +1,6 @@
 {
   "name": "oh-my-plumb-schema",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The oh-my-plumb contract: the rubric document a coding agent compiles from a repository's instruction files, and the verdict a check returns.",
   "license": "MIT",
   "repository": {
