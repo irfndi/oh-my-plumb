@@ -1,6 +1,3 @@
-<p align="center">
-</p>
-
 <h1 align="center">oh-my-plumb</h1>
 
 <p align="center">
@@ -8,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20Codex%20%C2%B7%20OpenCode-111111?style=flat-square" alt="Works with Claude Code, Codex and OpenCode">
+  <img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20Codex%20%C2%B7%20OpenCode%20%C2%B7%20Pi-111111?style=flat-square" alt="Works with Claude Code, Codex, OpenCode and Pi">
   <img src="https://img.shields.io/badge/license-MIT-111111?style=flat-square" alt="MIT license">
 </p>
 

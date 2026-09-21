@@ -55,5 +55,16 @@
     "typescript": "7.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:"
+  },
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./pi/oh-my-plumb.ts"
+    ],
+    "skills": [
+      "./skills/oh-my-plumb-compile"
+    ]
   }
 }
