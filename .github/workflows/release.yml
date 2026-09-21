@@ -33,7 +33,7 @@ jobs:
       # One tag publishes only its own package; bump both in lockstep otherwise.
       - name: Publish schema
         if: startsWith(github.ref, 'refs/tags/oh-my-plumb-schema-v')
-        run: npm publish --workspace oh-my-plumb-schema --access public --provenance
+        run: pnpm --filter oh-my-plumb-schema publish --access public --provenance
       - name: Publish cli
         if: startsWith(github.ref, 'refs/tags/oh-my-plumb-v')
-        run: npm publish --workspace packages/cli --access public --provenance
+        run: pnpm --filter ./packages/cli publish --access public --provenance
