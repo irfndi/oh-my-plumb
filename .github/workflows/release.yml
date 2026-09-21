@@ -17,11 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+      # No registry-url: it makes setup-node export an empty NODE_AUTH_TOKEN
+      # (the secret was deleted), which forces anonymous auth and blocks OIDC.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-          registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - run: curl -fsSL https://vite.plus | bash
       - run: echo "$HOME/.local/share/vite-plus/bin" >> "$GITHUB_PATH"
