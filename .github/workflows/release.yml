@@ -17,12 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-      # No registry-url: it makes setup-node export an empty NODE_AUTH_TOKEN
-      # (the secret was deleted), which forces anonymous auth and blocks OIDC.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: pnpm
+          node-version: 24
       - run: pnpm install --frozen-lockfile
       - run: curl -fsSL https://vite.plus | bash
       - run: echo "$HOME/.local/share/vite-plus/bin" >> "$GITHUB_PATH"
@@ -36,7 +33,7 @@ jobs:
       # One tag publishes only its own package; bump both in lockstep otherwise.
       - name: Publish schema
         if: startsWith(github.ref, 'refs/tags/oh-my-plumb-schema-v')
-        run: pnpm --filter oh-my-plumb-schema publish --access public --provenance
+        run: npm publish --workspace oh-my-plumb-schema --access public --provenance
       - name: Publish cli
         if: startsWith(github.ref, 'refs/tags/oh-my-plumb-v')
-        run: pnpm --filter ./packages/cli publish --access public --provenance
+        run: npm publish --workspace packages/cli --access public --provenance
