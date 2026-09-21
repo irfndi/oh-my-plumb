@@ -1,6 +1,6 @@
 {
   "name": "oh-my-plumb-schema",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "The oh-my-plumb contract: the rubric document a coding agent compiles from a repository's instruction files, and the verdict a check returns.",
   "license": "MIT",
   "repository": {
@@ -8,7 +8,7 @@
     "url": "git+https://github.com/irfndi/oh-my-plumb.git",
     "directory": "packages/schema"
   },
-  "homepage": "https://github.com/irfndi/oh-my-plumb/tree/main/packages/schema",
+  "homepage": "https://github.com/irfndi/oh-my-plumb/tree/master/packages/schema",
   "author": "irfndi",
   "type": "module",
   "sideEffects": false,

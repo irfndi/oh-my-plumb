@@ -28,15 +28,17 @@ jobs:
       - run: pnpm -r run build
       - run: pnpm -r run typecheck
       - run: pnpm -r run test
-      # Publish by path: `--filter oh-my-plumb` matches the root package too (private).
+      # Publish by filter: `--filter oh-my-plumb` also matches the private root
+      # package, so name the schema explicitly and filter cli by directory.
       # One tag publishes only its own package; bump both in lockstep otherwise.
+      # Auth: NPM_TOKEN (granular, 2FA-bypass) OR npm trusted publishing.
       - name: Publish schema
         if: startsWith(github.ref, 'refs/tags/oh-my-plumb-schema-v')
-        run: pnpm -C packages/schema publish --access public --provenance --no-git-checks
+        run: pnpm --filter oh-my-plumb-schema publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish cli
         if: startsWith(github.ref, 'refs/tags/oh-my-plumb-v')
-        run: pnpm -C packages/cli publish --access public --provenance --no-git-checks
+        run: pnpm --filter ./packages/cli publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

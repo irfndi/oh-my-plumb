@@ -1,6 +1,6 @@
 {
   "name": "oh-my-plumb",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Enforce your own AGENTS.md rules on every edit a coding agent makes.",
   "license": "MIT",
   "repository": {
@@ -8,7 +8,7 @@
     "url": "git+https://github.com/irfndi/oh-my-plumb.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://github.com/irfndi/oh-my-plumb/tree/main/packages/cli",
+  "homepage": "https://github.com/irfndi/oh-my-plumb/tree/master/packages/cli",
   "author": "irfndi",
   "type": "module",
   "bin": {
