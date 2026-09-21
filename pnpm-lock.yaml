@@ -48,8 +48,8 @@ importers:
         specifier: 5.0.0
         version: 5.0.0(ink@6.8.0(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
       oh-my-plumb-schema:
-        specifier: workspace:*
-        version: link:../schema
+        specifier: 0.1.1
+        version: 0.1.1
       picomatch:
         specifier: 4.0.7
         version: 4.0.7
@@ -1138,6 +1138,10 @@ packages:
     resolution: {integrity: sha512-XrsrhT5sybtKI6wakr2SPOlGZWWYbUXZ7a0jT8/QOeAPau+1X/bSegNe5YR75oJmEZQbKningirmGOEJCIk61Q==}
     engines: {node: '>=12.20.0'}
 
+  oh-my-plumb-schema@0.1.1:
+    resolution: {integrity: sha512-8x4Bug50XwlPdnJhL/+8lKxhoUHiH7ZLP5ouyn1AUBtO+lhSLAih1u8/56Ik0K+AREmwz+asTfVkziS8Oi1MsQ==}
+    engines: {node: '>=20.11'}
+
   onetime@5.1.2:
     resolution: {integrity: sha512-kbpaSSGJTWdAY5KPVeMOKXSrPtr8C8C7wodJbcsd51jRnmD+GZu8Y0VoU6Dm5Z4vWr0Ig/1NKuWRKf7j5aaYSg==}
     engines: {node: '>=6'}
@@ -2097,6 +2101,10 @@ snapshots:
   nanoid@3.3.19: {}
 
   obug@2.2.1: {}
+
+  oh-my-plumb-schema@0.1.1:
+    dependencies:
+      zod: 4.6.5
 
   onetime@5.1.2:
     dependencies:
