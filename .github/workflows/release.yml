@@ -37,5 +37,4 @@ jobs:
         run: npm publish --access public --provenance
       - name: Publish cli
         if: startsWith(github.ref, 'refs/tags/oh-my-plumb-v')
-        working-directory: packages/cli
-        run: npm publish --access public --provenance
+        run: pnpm --filter ./packages/cli publish --access public --provenance

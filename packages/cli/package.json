@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@ai-sdk/typesafe-ai": "3",
-    "oh-my-plumb-schema": "0.1.1",
+    "oh-my-plumb-schema": "workspace:*",
     "ai": "^7.0.105",
     "diff": "9.0.0",
     "ink": "6.8.0",
