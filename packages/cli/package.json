@@ -12,7 +12,7 @@
   "author": "irfndi",
   "type": "module",
   "bin": {
-    "oh-my-plumb": "./dist/bin.js"
+    "oh-my-plumb": "dist/bin.js"
   },
   "files": [
     "dist",
