@@ -21,13 +21,22 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
-      # Build first: dist/ is gitignored and prepublishOnly runs per-package anyway.
+      - run: curl -fsSL https://vite.plus | bash
+      - run: echo "$HOME/.local/share/vite-plus/bin" >> "$GITHUB_PATH"
+      - run: vp fmt --check .
+      # Ordered: vp run -r parallelizes and cli compiles before schema dist exists.
       - run: pnpm -r run build
-      - name: "Publish schema (always: cli depends on it)"
-        run: pnpm publish --filter oh-my-plumb-schema --access public --provenance --no-git-checks
+      - run: pnpm -r run typecheck
+      - run: pnpm -r run test
+      # Publish by path: `--filter oh-my-plumb` matches the root package too (private).
+      # One tag publishes only its own package; bump both in lockstep otherwise.
+      - name: Publish schema
+        if: startsWith(github.ref, 'refs/tags/oh-my-plumb-schema-v')
+        run: pnpm -C packages/schema publish --access public --provenance --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish cli
-        run: pnpm publish --filter oh-my-plumb --access public --provenance --no-git-checks
+        if: startsWith(github.ref, 'refs/tags/oh-my-plumb-v')
+        run: pnpm -C packages/cli publish --access public --provenance --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -19,6 +19,7 @@ jobs:
       # Package test scripts invoke vp (curl-installed, not a devDependency).
       - run: curl -fsSL https://vite.plus | bash
       - run: echo "$HOME/.local/share/vite-plus/bin" >> "$GITHUB_PATH"
+      - run: vp fmt --check .
       # Ordered: vp run -r parallelizes and cli compiles before schema dist exists.
       - run: pnpm -r run build
       - run: pnpm -r run typecheck
