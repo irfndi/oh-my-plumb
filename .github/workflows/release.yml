@@ -35,6 +35,13 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/oh-my-plumb-schema-v')
         working-directory: packages/schema
         run: npm publish --access public --provenance
+      # Same shape as schema: pnpm's publish delegation breaks OIDC (ENEEDAUTH).
+      # npm publish rejects the workspace: protocol, so the schema dep is pinned
+      # to the released version first.
+      - name: Pin schema version for publish
+        if: startsWith(github.ref, 'refs/tags/oh-my-plumb-v')
+        run: node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('packages/cli/package.json','utf8'));const v=require('./packages/schema/package.json').version;p.dependencies['oh-my-plumb-schema']='^'+v;fs.writeFileSync('packages/cli/package.json',JSON.stringify(p,null,2)+'\n')"
       - name: Publish cli
         if: startsWith(github.ref, 'refs/tags/oh-my-plumb-v')
-        run: pnpm --filter ./packages/cli publish --access public --provenance
+        working-directory: packages/cli
+        run: npm publish --access public --provenance
