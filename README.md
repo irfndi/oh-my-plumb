@@ -116,6 +116,42 @@ Every file is judged as if it had just been written. You get a table by rule and
 - Verdicts are banded. 0.8 and above: the agent is told to repair. 0.5 to 0.8: you see a note, the agent does not. Below 0.5: nothing.
 - A badly worded rule scores 0.4 on everything and never fires. `calibrate` finds those against twenty real hunks from your history and switches them off. `tune` has the agent rewrite them.
 
+## Guard scripts
+
+Some rules are exact. "Use `type`, not `interface`" is one: either the word is in the file or it is not. For those, you can ship a guard script instead of asking the model, and it wins three ways:
+
+- Exact: the same file gets the same verdict every time, with no score to band.
+- Local: the script runs inside the hook, so the diff never leaves your machine.
+- Free: no tokens, no API call.
+
+A guard is a script committed with your repo. The hook finds it at `skills/<name>/guard.mjs` (`guard.js` and `guard.sh` also work; it searches `skills/`, `.pi/skills/` and `.claude/skills/`). [`skills/no-interface`](skills/no-interface) is a working example. A rubric rule points at it with a `guard` check:
+
+```json
+{
+  "id": "type-not-interface",
+  "text": "Use `type`, not `interface`.",
+  "source": { "path": "AGENTS.md", "line": 41 },
+  "check": {
+    "type": "guard",
+    "skill": "no-interface",
+    "scope": "{*.ts,*.tsx}",
+    "text": "Use `type`, not `interface`."
+  }
+}
+```
+
+`scope` is the glob of files the guard watches. A check may carry a `command` (`["node", "./scripts/check.mjs"]`) instead of a `skill` when the script lives outside a skill.
+
+### The contract
+
+On every in-scope edit the hook spawns the script once:
+
+- The edited file's repo-relative path arrives in `FILE_PATH`, and its new contents arrive on stdin.
+- The script prints one line of JSON and nothing after it: `{"isError": false}` to pass, or `{"isError": true, "content": "..."}` to block. The content is what the agent reads, so write it as an instruction.
+- The script exits 0. A block is a verdict in the JSON, and the exit code carries nothing.
+- The script gets 2 seconds, then the hook kills it and counts that as a pass.
+- Every failure is a silent pass: a hang, a crash, a missing script or interpreter, no output, or output that is not the JSON line above. The edit goes through, the hook still exits 0, and the session keeps running.
+
 ## Cost, privacy, safety
 
 - Changed lines go to TypeSafe under your key, with zero data retention requested on every call, and nowhere else.
@@ -142,6 +178,7 @@ Removes oh-my-plumb's own entries and nothing else. Rubric files and `~/.oh-my-p
 - `packages/schema`: the rubric, hook payloads, verdicts and events as zod schemas.
 - `packages/cli`: the `oh-my-plumb` command, the hook script and the OpenCode plugin.
 - `skills/oh-my-plumb-compile`: the procedure the agent follows to compile a rubric.
+- `skills/no-interface`: an example guard script and the contract it follows.
 
 ## License
 
