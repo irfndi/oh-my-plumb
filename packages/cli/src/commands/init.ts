@@ -65,7 +65,7 @@ export const runInit = async (argv: string[]): Promise<number> => {
   const hosts = chooseHosts(positionals);
   const script = hookScriptPath();
   const stack = detectStack(root);
-  const routes = routesFor(stack);
+  const routes = routesFor(stack, root);
   const steps: Step[] = [
     {
       ok: true,
@@ -89,7 +89,7 @@ export const runInit = async (argv: string[]): Promise<number> => {
       r.tier === 2
         ? [
             `  - tier: ${r.tier} trigger: "${r.trigger}" action: "${r.action}"`,
-            `    mcp: postgres-inspector validate_migration node ./scripts/validate-migration.mjs`,
+            `    mcp: ${r.mcp.server} ${r.mcp.tool} ${r.mcp.command.join(" ")}`,
           ]
         : [`  - tier: ${r.tier} trigger: "${r.trigger}" action: "${r.action}"`],
     ),

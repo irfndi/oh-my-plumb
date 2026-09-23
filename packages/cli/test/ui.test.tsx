@@ -94,7 +94,15 @@ describe("views", () => {
   it("report names the dead rules out loud", () => {
     const { lastFrame } = render(
       <ReportView
-        data={{ root: "/r", rules, events: [], stats: new Map(), dead: [], problems: [] }}
+        data={{
+          root: "/r",
+          rules,
+          events: [],
+          stats: new Map(),
+          dead: [],
+          problems: [],
+          missingRoutes: [],
+        }}
       />,
     );
     const frame = lastFrame() ?? "";
@@ -106,6 +114,26 @@ describe("views", () => {
     expect(frame).toContain("not configured");
     expect(frame).toContain("Not checked");
     expect(frame).toContain("ask-first");
+  });
+
+  it("report calls out a tier 2 route whose guard is missing", () => {
+    const { lastFrame } = render(
+      <ReportView
+        data={{
+          root: "/r",
+          rules,
+          events: [],
+          stats: new Map(),
+          dead: [],
+          problems: [],
+          missingRoutes: [{ trigger: "drizzle/**", gaps: ["scripts/v.mjs does not exist"] }],
+        }}
+      />,
+    );
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("route points at a guard that is not here");
+    expect(frame).toContain("drizzle/**");
+    expect(frame).toContain("scripts/v.mjs does not exist");
   });
 
   it("check ends with the repair count", () => {

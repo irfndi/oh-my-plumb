@@ -1,7 +1,10 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 import { ruleSchema } from "oh-my-plumb-schema";
-import { detectStack, routesFor } from "../src/lib/detect.js";
+import { collectReport } from "../src/commands/report.js";
+import { detectStack, routesFor, type DetectedStack } from "../src/lib/detect.js";
 import { fastCheck } from "../src/lib/tier1.js";
 
 describe("tier1 fast path", () => {
@@ -86,15 +89,16 @@ describe("tier1 fast path", () => {
 });
 
 describe("detect", () => {
-  it("finds this repo's own manifests and routes all three tiers", () => {
+  it("finds this repo's own manifests and routes only the guards this repo has", () => {
     const root = path.resolve(import.meta.dirname, "..", "..", "..");
     const stack = detectStack(root);
     expect(stack.manifests).toContain("package.json");
+    // This repo has no migration script, so init must not invent the tier-2 route (issue #16).
     expect(
-      routesFor(stack)
+      routesFor(stack, root)
         .map((r) => r.tier)
         .sort(),
-    ).toEqual([1, 2, 3]);
+    ).toEqual([1, 3]);
   });
 });
 
@@ -172,5 +176,75 @@ describe("init rules.yaml round-trip", () => {
     expect(routes[0]?.mcp?.tool).toBe("validate_migration");
     expect(routes[0]?.mcp?.command).toEqual(["node", "./scripts/validate-migration.mjs"]);
     expect(guards.routesForFile(routes, "prisma/migrations/001.sql")).toHaveLength(1);
+  });
+});
+
+describe("init route gating", () => {
+  const stackWith = (mcpServers: string[]): DetectedStack => ({
+    manifests: ["package.json"],
+    lintConfigs: [],
+    mcpServers,
+    skills: [],
+  });
+
+  it("emits no tier-2 route unless the MCP server and the script are both here", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-init-route-"));
+    const tiers = (stack: DetectedStack): (1 | 2 | 3)[] =>
+      routesFor(stack, root).map((r) => r.tier);
+
+    expect(tiers(stackWith([]))).not.toContain(2);
+    expect(tiers(stackWith([".pi/mcp.json:postgres-inspector"]))).not.toContain(2);
+
+    mkdirSync(path.join(root, "scripts"), { recursive: true });
+    writeFileSync(path.join(root, "scripts", "validate-migration.mjs"), "");
+    expect(tiers(stackWith([".pi/mcp.json:postgres-inspector"]))).toContain(2);
+  });
+});
+
+describe("report missing routes", () => {
+  it("lists a configured route whose script is missing, then drops it once it resolves", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-report-route-"));
+    mkdirSync(path.join(root, ".oh-my-plumb"), { recursive: true });
+    writeFileSync(
+      path.join(root, ".oh-my-plumb", "rubric.json"),
+      JSON.stringify({
+        version: 1,
+        compiledAt: "2026-09-23T00:00:00.000Z",
+        sources: [],
+        rules: [
+          {
+            id: "one-rule",
+            text: "One rule.",
+            source: { path: "AGENTS.md" },
+            when: "edit",
+            check: { type: "model", question: { type: "boolean", instructions: "q" } },
+          },
+        ],
+      }),
+    );
+    writeFileSync(
+      path.join(root, ".oh-my-plumb", "rules.yaml"),
+      [
+        `version: "1.0"`,
+        `routes:`,
+        `  - tier: 2 trigger: "{prisma/migrations,drizzle}/**" action: "x"`,
+        `    mcp: postgres-inspector validate_migration node ./scripts/validate-migration.mjs`,
+        ``,
+      ].join("\n"),
+    );
+
+    const listed = collectReport(root)?.missingRoutes;
+    expect(listed).toHaveLength(1);
+    expect(listed?.[0]?.trigger).toBe("{prisma/migrations,drizzle}/**");
+    expect(listed?.[0]?.gaps.join(" ")).toContain("scripts/validate-migration.mjs");
+
+    mkdirSync(path.join(root, "scripts"), { recursive: true });
+    writeFileSync(path.join(root, "scripts", "validate-migration.mjs"), "");
+    mkdirSync(path.join(root, ".pi"), { recursive: true });
+    writeFileSync(
+      path.join(root, ".pi", "mcp.json"),
+      JSON.stringify({ mcpServers: { "postgres-inspector": {} } }),
+    );
+    expect(collectReport(root)?.missingRoutes).toEqual([]);
   });
 });

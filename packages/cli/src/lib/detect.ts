@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { findLintConfigs } from "./lintConfig.js";
 import { homeDir } from "./paths.js";
+import { routeGaps, type McpRoute, type Tier2Route } from "./guards.js";
 
 /**
  * Phase 2: zero-config project auto-detection. Inspects the repo and emits
@@ -91,10 +92,22 @@ export const detectStack = (root: string): DetectedStack => {
   };
 };
 
-export type TierRoute = { tier: 1 | 2 | 3; trigger: string; action: string };
+export type TierRoute =
+  | { tier: 1 | 3; trigger: string; action: string }
+  | { tier: 2; trigger: string; action: string; mcp: McpRoute };
+
+/** The migration guard init looks for: a named MCP server running a local script. */
+const MIGRATION_GUARD = {
+  trigger: "{prisma/migrations,drizzle}/**",
+  mcp: {
+    server: "postgres-inspector",
+    tool: "validate_migration",
+    command: ["node", "./scripts/validate-migration.mjs"],
+  },
+} satisfies Tier2Route;
 
 /** Thin adapter: detected stack → tier routes for rules.yaml. rubric.json stays the Tier-3 store. */
-export const routesFor = (stack: DetectedStack): TierRoute[] => {
+export const routesFor = (stack: DetectedStack, root: string): TierRoute[] => {
   const routes: TierRoute[] = [];
   if (
     stack.lintConfigs.length > 0 ||
@@ -106,11 +119,13 @@ export const routesFor = (stack: DetectedStack): TierRoute[] => {
       action: "overlaps-pattern fast path (Tier 1); full linter in audit/check",
     });
   }
-  if (stack.manifests.some((m) => /prisma|drizzle|migrations?/i.test(m)) || true) {
+  // Only a route whose guard is really here: detected server plus existing script.
+  if (routeGaps(root, MIGRATION_GUARD, stack.mcpServers).length === 0) {
     routes.push({
       tier: 2,
-      trigger: "{prisma/migrations,drizzle}/**",
+      trigger: MIGRATION_GUARD.trigger,
       action: "local migration guard (Tier 2); MCP validate_migration in Phase 3",
+      mcp: MIGRATION_GUARD.mcp,
     });
   }
   routes.push({ tier: 3, trigger: "**/*", action: "Jev micro-eval over rubric.json" });

@@ -145,6 +145,40 @@ export const readTier2Routes = (root: string): Tier2Route[] => {
   return routes;
 };
 
+/** The local file a guard command runs, or undefined when the command is not a local script. */
+const commandFile = (command: readonly string[]): string | undefined => {
+  const first = command[0];
+  if (first === "node") return command[1];
+  // ponytail: only local script targets are checked; a bare binary would need a PATH walk
+  return first !== undefined && first.includes("/") ? first : undefined;
+};
+
+/**
+ * Read-only: why a configured route cannot run here; empty means it resolves.
+ * A skill route only parses when its guard file already resolved, so only an
+ * mcp route whose server or script is gone, and a route with no command, are missing.
+ */
+export const routeGaps = (
+  root: string,
+  route: Tier2Route,
+  mcpServers: readonly string[],
+): string[] => {
+  const gaps: string[] = [];
+  if (route.mcp !== undefined) {
+    const { server, command } = route.mcp;
+    if (!mcpServers.some((detected) => detected.endsWith(`:${server}`)))
+      gaps.push(`MCP server "${server}" is not configured here`);
+    const file = commandFile(command);
+    if (command[0] === "node" && file === undefined)
+      gaps.push(`command "${command.join(" ")}" names no script`);
+    else if (file !== undefined && !existsSync(path.resolve(root, file)))
+      gaps.push(`${file} does not exist`);
+  } else if (route.skill === undefined) {
+    gaps.push("no guard command resolves here");
+  }
+  return gaps;
+};
+
 /** Guard deadline: a guard that hangs is a skip, never a hold. */
 export const GUARD_TIMEOUT_MS = 2_000;
 
