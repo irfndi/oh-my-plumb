@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <strong>1 in 13 turns break a rule no linter can catch &middot; oh-my-plumb does  &middot; 300 ms per check &middot; a tenth of a cent per turn</strong><br>
+  <strong>1 in 13 turns break a rule no linter can catch &middot; oh-my-plumb does  &middot; 0.4 to 1.3 s per check &middot; a tenth of a cent per turn</strong><br>
   <sub>Measured by replaying 93 real Claude Code sessions (1,256 edits, 147 turns) in two repos against their own AGENTS.md, for 22 cents. Jev flagged 39 edits and 15 turns; an independent reviewer confirmed 10 and 11. The turn-level catches (single-use abstractions, oversized files, duplicated logic) held up 11 times in 15. Method, per-rule table and what was wrong: <a href="benchmarks/replay/README.md">benchmarks/replay</a>.</sub>
 </p>
 
@@ -37,7 +37,7 @@ https://github.com/user-attachments/assets/78c91eea-5533-4262-b8c9-de1be37ef202
 
 oh-my-plumb enforces exactly those rules. On every edit (or turn) it asks [Jev](https://typesafe.ai), TypeSafe's decision model, one question per rule and gets a probability back. Jev sees the rule and the diff, never the conversation, so edit 200 is checked like edit 1. Break a rule and the agent is told which one and fixes it in the same turn.
 
-- One call per edit, about 300 ms, a few thousandths of a cent.
+- One call per edit, 0.4 to 1.3 s, a few thousandths of a cent.
 - Rules a linter could check are handed to your linter instead.
 - No built-in rules. No instruction files, nothing to enforce.
 - Your key, your data. Nothing here talks to a server of ours.
@@ -46,7 +46,7 @@ oh-my-plumb enforces exactly those rules. On every edit (or turn) it asks [Jev](
 
 Checking every edit against every rule was never worth doing with an ordinary LLM. A check is about 2,500 tokens. At typical model prices that is a cent or more, and a few seconds, per edit, and the answer comes back as prose you then have to parse and cannot fully trust. Two hundred edits a day made it a non-starter.
 
-Jev changes the arithmetic. It is a decision model, so it answers a typed question with a calibrated probability and nothing else. There is no free text, so there is nothing to make up. It is up to 100x cheaper than a typical LLM and answers in about 300 ms. That is what makes it reasonable to check every edit, every time.
+Jev changes the arithmetic. It is a decision model, so it answers a typed question with a calibrated probability and nothing else. There is no free text, so there is nothing to make up. It is up to 100x cheaper than a typical LLM and answers in about a second. That is what makes it reasonable to check every edit, every time.
 
 ## Three minutes to the first catch
 
@@ -120,7 +120,7 @@ Every file is judged as if it had just been written. You get a table by rule and
 
 - Changed lines go to TypeSafe under your key, with zero data retention requested on every call, and nowhere else.
 - Key lookup order: the environment (`TYPESAFE_AI_API_KEY`), then `.env.local` and `.env` at the repo root, then `~/.oh-my-plumb/.env`. Never a flag, never logged. Set `AI_GATEWAY_API_KEY` instead of a TypeSafe key to go through your Vercel AI Gateway.
-- A check on this repo's 13 rules is 1,000 to 1,600 input tokens: $0.00004 to $0.00007, about 300 ms for Jev and about 1 s for the whole hook including Node startup. A turn of 15 edits costs a tenth of a cent. Measured 2026-09-18, direct to TypeSafe. `oh-my-plumb bench` measures yours.
+- A check on this repo's 56-rule rubric, about a dozen rules per edit, is 1,300 to 2,000 input tokens: $0.00006 to $0.00008, 0.4 to 1.3 s for Jev and 1.4 to 2.5 s for the whole hook including Node startup. A turn of 15 edits costs a tenth of a cent. Measured 2026-09-23, direct to TypeSafe. `oh-my-plumb bench` measures yours.
 - The hooks cannot break your session. Every path exits 0, has a hard deadline, and prints only what the host expects.
 - No key or no network: the edit goes through unchecked and the miss is logged in `.oh-my-plumb/events.jsonl`, where `report` counts it.
 
