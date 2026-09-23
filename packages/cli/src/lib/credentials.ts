@@ -1,5 +1,6 @@
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { PlumbError } from "oh-my-plumb-schema";
 import { GATEWAY_KEY_ENV, TYPESAFE_KEY_ENV } from "./constants.js";
 import { globalOhMyPlumbDir } from "./paths.js";
 import { readRegularText } from "./regularFile.js";
@@ -15,10 +16,16 @@ export type Credentials =
 
 export const KEY_NAMES: readonly string[] = [TYPESAFE_KEY_ENV, GATEWAY_KEY_ENV];
 
+/** Names a user may set by mistake; oh-my-plumb does not read them, so the setup looks right but every command fails. */
+const NEAR_MISS_NAMES: readonly string[] = ["TYPESAFE_API_KEY", "TYPESAFE_KEY", "JEV_API_KEY"];
+
 export const userEnvPath = (): string => path.join(globalOhMyPlumbDir(), ".env");
 
-/** Only the two oh-my-plumb keys are read from a file; nothing else in it is touched or loaded. */
-export const parseEnvFile = (text: string): Map<string, string> => {
+/** Only the named keys are read from a file (the two oh-my-plumb keys unless told otherwise); nothing else in it is touched or loaded. */
+export const parseEnvFile = (
+  text: string,
+  names: readonly string[] = KEY_NAMES,
+): Map<string, string> => {
   const found = new Map<string, string>();
   for (const raw of text.split("\n")) {
     const line = raw.trim();
@@ -27,7 +34,7 @@ export const parseEnvFile = (text: string): Map<string, string> => {
     if (m === null) continue;
     const name = m[1];
     let value = (m[2] ?? "").trim();
-    if (name === undefined || !KEY_NAMES.includes(name)) continue;
+    if (name === undefined || !names.includes(name)) continue;
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"))
@@ -102,3 +109,28 @@ export const saveUserKey = (name: string, key: string): string => {
 };
 
 export const NO_KEY_HINT = `No API key found. Run "oh-my-plumb login" with your TypeSafe key, or put ${TYPESAFE_KEY_ENV} in the environment or a .env file at the repo root.`;
+
+/** The same places findCredentials looks, in its order, so the hint names what the user actually has. Only names reach the message, never values. */
+const noKeyHint = (root: string): string => {
+  const files: [string, string][] = [
+    [".env.local", path.join(root, ".env.local")],
+    [".env", path.join(root, ".env")],
+    [userEnvPath(), userEnvPath()],
+  ];
+  const found: string[] = NEAR_MISS_NAMES.filter((name) => (process.env[name] ?? "") !== "").map(
+    (name) => `Found ${name} in the environment — rename it to ${TYPESAFE_KEY_ENV}`,
+  );
+  for (const [label, file] of files) {
+    const text = readRegularText(file);
+    if (text === undefined) continue;
+    for (const name of parseEnvFile(text, NEAR_MISS_NAMES).keys())
+      found.push(`Found ${name} in ${label} — rename it to ${TYPESAFE_KEY_ENV}`);
+  }
+  return found.length === 0 ? NO_KEY_HINT : `${NO_KEY_HINT} ${found.join("; ")}`;
+};
+
+/** The one owner of the no-key error: every command guard runs through here. */
+export const requireApiKey = (root: string): void => {
+  if (hasApiKey(root)) return;
+  throw new PlumbError("NO_API_KEY", noKeyHint(root));
+};

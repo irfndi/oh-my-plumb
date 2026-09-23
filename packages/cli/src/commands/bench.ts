@@ -5,7 +5,7 @@ import { PlumbError } from "oh-my-plumb-schema";
 import { judgesDiff, runCheck } from "../lib/checkRunner.js";
 import { EDIT_CHECK_TIMEOUT_MS, TURN_CHECK_TIMEOUT_MS } from "../lib/constants.js";
 import { readEvents } from "../lib/events.js";
-import { hasApiKey, NO_KEY_HINT } from "../lib/credentials.js";
+import { requireApiKey } from "../lib/credentials.js";
 import { loadRubric } from "../lib/loadRubric.js";
 import { hookScriptPath } from "../lib/packageRoot.js";
 import { findRepoRoot } from "../lib/paths.js";
@@ -77,7 +77,7 @@ export const runBench = async (argv: string[]): Promise<number> => {
   });
   const runs = Math.max(1, Number(values.runs));
   const root = findRepoRoot(process.cwd());
-  if (!hasApiKey(root)) throw new PlumbError("NO_API_KEY", NO_KEY_HINT);
+  requireApiKey(root);
   const loaded = loadRubric(root);
   if (loaded.rules.length === 0)
     throw new PlumbError(

@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { PlumbError, assertNever, hostSchema, type Host } from "oh-my-plumb-schema";
-import { hasApiKey, NO_KEY_HINT } from "../lib/credentials.js";
+import { requireApiKey } from "../lib/credentials.js";
 import { hostLabel } from "../lib/hosts.js";
 import { loadRubric } from "../lib/loadRubric.js";
 import { findRepoRoot } from "../lib/paths.js";
@@ -85,7 +85,7 @@ export const runReplay = async (argv: string[]): Promise<number> => {
   const host: Host = named.success ? named.data : "claude";
   const paths = named.success ? rest : positionals;
   const root = findRepoRoot(values.repo ?? process.cwd());
-  if (!hasApiKey(root)) throw new PlumbError("NO_API_KEY", NO_KEY_HINT);
+  requireApiKey(root);
   const loaded = loadRubric(root);
   if (loaded.rules.length === 0)
     throw new PlumbError(

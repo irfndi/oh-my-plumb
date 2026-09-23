@@ -11,7 +11,7 @@ import { collectToolCallSamples, summarizeCalibration } from "../lib/calibration
 import { runCheck, runToolCallCheck } from "../lib/checkRunner.js";
 import { EDIT_CHECK_TIMEOUT_MS, TURN_CHECK_TIMEOUT_MS } from "../lib/constants.js";
 import { recentHistory } from "../lib/git.js";
-import { hasApiKey, NO_KEY_HINT } from "../lib/credentials.js";
+import { requireApiKey } from "../lib/credentials.js";
 import { findRepoRoot, globalRubricPath, homeDir, rubricPath } from "../lib/paths.js";
 import { ruleAppliesToTool } from "../lib/scope.js";
 import type { ReplayCall } from "../lib/replay.js";
@@ -65,7 +65,7 @@ export const runCalibrate = async (argv: string[]): Promise<number> => {
     },
   });
   const repoRoot = findRepoRoot(process.cwd());
-  if (!hasApiKey(repoRoot)) throw new PlumbError("NO_API_KEY", NO_KEY_HINT);
+  requireApiKey(repoRoot);
   const file = values.global ? globalRubricPath() : rubricPath(repoRoot);
   const read = readRubric(file);
   if (read.kind === "missing")
