@@ -11,6 +11,7 @@ const rule = (over: Partial<Rule> & Pick<Rule, "id" | "check">): Rule => ({
   text: "t",
   source: { path: "AGENTS.md" },
   status: "active",
+  target: "diff",
   ...over,
 });
 

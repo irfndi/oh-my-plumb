@@ -94,6 +94,33 @@ describe("rubricSchema", () => {
     expect(rubricSchema.safeParse({ ...base, rules: [ok, ok] }).success).toBe(false);
   });
 
+  it("defaults a rule's target to diff, and accepts a tool-call rule scoped to tool names", () => {
+    const diffRule = {
+      id: "no-interface",
+      text: "Use type, never interface",
+      source: { path: "AGENTS.md" },
+      check: { type: "lint", how: "@typescript-eslint/consistent-type-definitions" },
+    };
+    expect(rubricSchema.parse({ ...base, rules: [diffRule] }).rules[0]?.target).toBe("diff");
+    expect(
+      rubricSchema.parse({ ...base, rules: [{ ...diffRule, target: "diff" }] }).rules[0]?.target,
+    ).toBe("diff");
+
+    const toolRule = {
+      id: "use-rtk",
+      text: "Always prefix shell commands with rtk",
+      source: { path: "RTK.md", line: 2 },
+      target: "toolCall",
+      scope: ["Bash", "mcp__postgres__*"],
+      when: "edit",
+      check: { type: "model", question: { type: "boolean", instructions: "Does it run rtk?" } },
+    };
+    expect(rubricSchema.parse({ ...base, rules: [toolRule] }).rules[0]?.target).toBe("toolCall");
+    expect(
+      rubricSchema.safeParse({ ...base, rules: [{ ...toolRule, target: "callLog" }] }).success,
+    ).toBe(false);
+  });
+
   it("validates choice and score questions", () => {
     const choice = {
       id: "service-shape",

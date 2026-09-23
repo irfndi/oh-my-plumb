@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
-import { ruleAppliesTo } from "../src/lib/scope.js";
-import { groupByScope, selectRules } from "../src/lib/checkRunner.js";
+import { ruleAppliesTo, ruleAppliesToTool } from "../src/lib/scope.js";
+import { groupByScope, selectRules, selectToolCallRules } from "../src/lib/checkRunner.js";
 import type { Rule } from "oh-my-plumb-schema";
 
 const rule = (over: Partial<Rule> & Pick<Rule, "id" | "check">): Rule => ({
   text: "t",
   source: { path: "AGENTS.md" },
   status: "active",
+  target: "diff",
   ...over,
 });
 
@@ -58,6 +59,44 @@ describe("scope", () => {
     expect(selectRules(rules, "edit", ["lib/a.ts"]).map((r) => r.id)).toEqual(["edit"]);
     expect(selectRules(rules, "edit", ["src/a.ts"]).map((r) => r.id)).toEqual(["edit", "scoped"]);
     expect(selectRules(rules, "turn", ["src/a.ts"]).map((r) => r.id)).toEqual(["turn"]);
+  });
+});
+
+describe("tool-call scope", () => {
+  it("matches tool names, not file paths", () => {
+    expect(ruleAppliesToTool({ scope: undefined }, "Bash")).toBe(true);
+    expect(ruleAppliesToTool({ scope: ["Bash"] }, "Bash")).toBe(true);
+    expect(ruleAppliesToTool({ scope: ["Bash"] }, "mcp__postgres__query")).toBe(false);
+    expect(ruleAppliesToTool({ scope: ["mcp__postgres__*"] }, "mcp__postgres__query")).toBe(true);
+    expect(ruleAppliesToTool({ scope: ["mcp__postgres__*"] }, "Bash")).toBe(false);
+  });
+
+  it("selects tool-call rules by phase and tool name, and never leaks a diff rule either way", () => {
+    const call = (id: string, over: Partial<Rule>): Rule =>
+      rule({
+        id,
+        target: "toolCall",
+        when: "edit",
+        check: { type: "model", question: { type: "boolean", instructions: "?" } },
+        ...over,
+      });
+    const rules: Rule[] = [
+      rule({
+        id: "diff-rule",
+        when: "edit",
+        check: { type: "model", question: { type: "boolean", instructions: "?" } },
+      }),
+      call("bash-only", { scope: ["Bash"] }),
+      call("postgres", { scope: ["mcp__postgres__*"] }),
+      call("on-turn", { when: "turn" }),
+      call("switched-off", { status: "disabled" }),
+    ];
+    expect(selectToolCallRules(rules, "edit", "Bash").map((r) => r.id)).toEqual(["bash-only"]);
+    expect(selectToolCallRules(rules, "edit", "mcp__postgres__query").map((r) => r.id)).toEqual([
+      "postgres",
+    ]);
+    expect(selectToolCallRules(rules, "turn", "Bash").map((r) => r.id)).toEqual(["on-turn"]);
+    expect(selectRules(rules, "edit", ["src/a.ts"]).map((r) => r.id)).toEqual(["diff-rule"]);
   });
 });
 

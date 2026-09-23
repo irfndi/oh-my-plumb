@@ -76,6 +76,13 @@ export const applyPatchToolInputSchema = z.object({
   command: z.string(),
 });
 
+/** One recorded tool call: the tool's name plus the input it was called with. */
+export const toolCallSchema = z.object({
+  tool: z.string().min(1),
+  input: z.unknown().optional(),
+});
+export type ToolCall = z.infer<typeof toolCallSchema>;
+
 const postToolUseBase = {
   ...common,
   hook_event_name: z.literal("PostToolUse"),

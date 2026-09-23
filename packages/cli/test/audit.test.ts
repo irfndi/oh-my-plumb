@@ -17,6 +17,7 @@ const rule = (id: string, scope?: string[]): Rule => ({
   text: "t",
   source: { path: "AGENTS.md" },
   status: "active",
+  target: "diff",
   when: "edit",
   ...(scope ? { scope } : {}),
   check: { type: "model", question: { type: "boolean", instructions: "?" } },

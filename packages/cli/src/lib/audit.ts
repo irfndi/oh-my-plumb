@@ -2,7 +2,7 @@ import { lstatSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import type { Rule, Thresholds, Verdict } from "oh-my-plumb-schema";
-import { loudestVerdicts, runCheck, type CheckOutcome } from "./checkRunner.js";
+import { judgesDiff, loudestVerdicts, runCheck, type CheckOutcome } from "./checkRunner.js";
 import { MAX_DIFF_INPUT_CHARS } from "./constants.js";
 import { isExcludedPath, relativeToRoot } from "./paths.js";
 import { readRegularText } from "./regularFile.js";
@@ -58,7 +58,7 @@ export const auditableFiles = (
   rules: readonly Rule[],
 ): { files: string[]; skipped: { tooBig: string[]; outOfScope: number } } => {
   const editRules = rules.filter(
-    (r) => isModelRule(r) && r.status === "active" && r.when === "edit",
+    (r) => isModelRule(r) && judgesDiff(r) && r.status === "active" && r.when === "edit",
   );
   const kept: string[] = [];
   const tooBig: string[] = [];

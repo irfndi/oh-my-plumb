@@ -6,6 +6,10 @@ export const RUBRIC_VERSION = 1;
 export const ruleWhenSchema = z.enum(["edit", "turn"]);
 export type RuleWhen = z.infer<typeof ruleWhenSchema>;
 
+/** What a rule is judged against: a code diff (today's default) or one recorded tool call. */
+export const ruleTargetSchema = z.enum(["diff", "toolCall"]);
+export type RuleTarget = z.infer<typeof ruleTargetSchema>;
+
 export const ruleStatusSchema = z.enum(["active", "weak", "noisy", "disabled"]);
 export type RuleStatus = z.infer<typeof ruleStatusSchema>;
 
@@ -164,7 +168,9 @@ export const ruleSchema = z
     /** The rule as the user wrote it, quoted or lightly shortened. */
     text: z.string().min(1).max(600),
     source: ruleSourceSchema,
-    /** Globs relative to the repo root. Absent means every file. */
+    /** What the rule judges: a diff (default) or one recorded tool call. */
+    target: ruleTargetSchema.default("diff"),
+    /** Globs relative to the repo root for a diff rule, tool names for a tool-call rule. Absent means all. */
     scope: z.array(z.string().min(1)).min(1).optional(),
     when: ruleWhenSchema.optional(),
     check: checkSchema,

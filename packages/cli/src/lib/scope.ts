@@ -16,3 +16,7 @@ const matcherFor = (globs: readonly string[]): ((p: string) => boolean) => {
 /** Repo-relative posix path against the rule's globs. No scope means every file. */
 export const ruleAppliesTo = (rule: Pick<Rule, "scope">, relativePath: string): boolean =>
   rule.scope === undefined || matcherFor(rule.scope)(relativePath);
+
+/** Tool name against a tool-call rule's globs. No scope means every tool. */
+export const ruleAppliesToTool = (rule: Pick<Rule, "scope">, tool: string): boolean =>
+  rule.scope === undefined || matcherFor(rule.scope)(tool);

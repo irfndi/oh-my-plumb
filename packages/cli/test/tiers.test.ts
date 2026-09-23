@@ -65,6 +65,29 @@ describe("tier1 fast path", () => {
     expect(skipped).toHaveLength(1);
   });
 
+  it("leaves tool-call rules to the tool-call check", () => {
+    const rules = [
+      rule({
+        id: "use-rtk",
+        target: "toolCall",
+        when: "edit",
+        check: {
+          type: "model",
+          question: { type: "boolean", instructions: "q" },
+          pattern: "npm install",
+        },
+      }),
+    ];
+    const { verdicts, skipped } = fastCheck(
+      rules,
+      "edit",
+      [{ file: "src/a.ts", text: "@@ -0,0 +1 @@\n+npm install" }],
+      { act: 0.8, flag: 0.5 },
+    );
+    expect(verdicts).toHaveLength(0);
+    expect(skipped).toHaveLength(0);
+  });
+
   it("scopes hits per file: a hit in A leaves B clean", () => {
     const rules = [
       rule({
