@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo/oh-my-plumb-icon.svg" width="120" height="120" alt="oh-my-plumb logo: a faceted brass plumb bob hanging true over a level mark">
+</p>
+
 <h1 align="center">oh-my-plumb</h1>
 
 <p align="center">
@@ -27,7 +31,9 @@ Then start `claude`, `codex`, `opencode` or `pi` as usual. That is the whole set
 
 Your AGENTS.md, CLAUDE.md and the rest of your project instructions are full of rules no linter can check. "Use Yup, don't validate by hand." "No helper with one caller." "Never let a raw error reach a user." "Don't add what wasn't asked for." Nothing can script those, so nothing enforces them. In 93 real sessions, the agent broke one on 1 turn in 13, from the first edit on.
 
-https://github.com/user-attachments/assets/a39c14ed-336a-4d68-8366-18e960916669
+<a href="assets/vid/oh-my-plumb-pi-demo.mp4"><img src="assets/vid/oh-my-plumb-pi-demo-poster.jpg" alt="oh-my-plumb on pi: the agent writes a draft that breaks four AGENTS.md rules, Jev blocks the edit, and the agent repairs it" width="100%"></a>
+
+<sub>40 seconds on pi, recreated from a real run: the scores and timings are the ones Jev logged. Click to play.</sub>
 
 oh-my-plumb enforces exactly those rules. On every edit (or turn) it asks [Jev](https://typesafe.ai), TypeSafe's decision model, one question per rule and gets a probability back. Jev sees the rule and the diff, never the conversation, so edit 200 is checked like edit 1. Break a rule and the agent is told which one and fixes it in the same turn.
 
@@ -45,7 +51,7 @@ Jev changes the arithmetic. It is a decision model, so it answers a typed questi
 ## Three minutes to the first catch
 
 1. Get a TypeSafe API key at [typesafe.ai](https://typesafe.ai), or use a Vercel AI Gateway key you already have.
-2. Run `npx oh-my-plumb login` and paste it. It is stored once, in `~/.oh-my-plumb/.env`, owner-only. A `.env` at the repo root works too.
+2. Run `npx oh-my-plumb login` and paste it. It is stored once, in `~/.oh-my-plumb/.env`, owner-only. A `.env` at the repo root works too, as `TYPESAFE_AI_API_KEY=...`.
 3. Run `npx oh-my-plumb init` in your repo.
 4. Start your agent. Its first turn compiles your rules into `.oh-my-plumb/rubric.json` and tells you what it found.
 5. Ask for something your rules forbid. An AGENTS.md that says "use Yup, never validate by hand" produces this the moment the agent writes a manual guard:
@@ -73,7 +79,7 @@ Codex only: start `codex`, type `/hooks`, and accept the four oh-my-plumb entrie
 
 OpenCode only: there are no hook processes, so oh-my-plumb runs as a plugin.
 
-Pi only: oh-my-plumb runs as an in-process extension (`tool_result` returns a patch, `turn_end` sends a follow-up). Same checks, same messages: an edit that breaks a rule gets the repair request appended to its tool result, and a turn that ends with one gets a single follow-up message.
+Pi only: oh-my-plumb runs as an in-process extension. It reads each file before pi's `edit` or `write` runs, so the check sees the real diff. Same checks, same messages: an edit that breaks a rule gets the repair request appended to its tool result, and the turn check runs once, when pi is about to stop, asking for one more round if something is still broken. A `--project` install lands in `.pi/extensions/`, which pi loads only in a trusted project: accept pi's trust prompt, or pass `--approve` to `pi -p`.
 
 ## See what your codebase already breaks
 
@@ -113,7 +119,7 @@ Every file is judged as if it had just been written. You get a table by rule and
 ## Cost, privacy, safety
 
 - Changed lines go to TypeSafe under your key, with zero data retention requested on every call, and nowhere else.
-- Key lookup order: the environment, then `.env.local` and `.env` at the repo root, then `~/.oh-my-plumb/.env`. Never a flag, never logged. Set `AI_GATEWAY_API_KEY` instead of a TypeSafe key to go through your Vercel AI Gateway.
+- Key lookup order: the environment (`TYPESAFE_AI_API_KEY`), then `.env.local` and `.env` at the repo root, then `~/.oh-my-plumb/.env`. Never a flag, never logged. Set `AI_GATEWAY_API_KEY` instead of a TypeSafe key to go through your Vercel AI Gateway.
 - A check on this repo's 13 rules is 1,000 to 1,600 input tokens: $0.00004 to $0.00007, about 300 ms for Jev and about 1 s for the whole hook including Node startup. A turn of 15 edits costs a tenth of a cent. Measured 2026-09-18, direct to TypeSafe. `oh-my-plumb bench` measures yours.
 - The hooks cannot break your session. Every path exits 0, has a hard deadline, and prints only what the host expects.
 - No key or no network: the edit goes through unchecked and the miss is logged in `.oh-my-plumb/events.jsonl`, where `report` counts it.
