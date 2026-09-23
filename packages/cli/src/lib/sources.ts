@@ -1,8 +1,8 @@
 import { readdirSync, existsSync, type Dirent } from "node:fs";
 import path from "node:path";
 import { createSourceSha, type Rubric } from "oh-my-plumb-schema";
-import { homeDir, resolveSourcePath, toSourcePath } from "./paths.js";
-import { readRegularFile } from "./regularFile.js";
+import { expandHome, homeDir, resolveSourcePath, toSourcePath } from "./paths.js";
+import { readRegularFile, readRegularText } from "./regularFile.js";
 
 export type SourceCandidate = {
   /** Rubric spelling: repo-relative or "~/...". */
@@ -15,9 +15,23 @@ export type SourceCandidate = {
   origin: "root" | "nested" | "global" | "contributing";
 };
 
-const ROOT_NAMES = ["AGENTS.md", "CLAUDE.md", ".cursorrules"];
+const ROOT_NAMES = [
+  "AGENTS.md",
+  "CLAUDE.md",
+  ".cursorrules",
+  "GEMINI.md",
+  "CLAUDE.local.md",
+  "AGENTS.override.md",
+  ".github/copilot-instructions.md",
+  ".windsurfrules",
+];
 const NESTED_NAMES = ["AGENTS.md", "CLAUDE.md"];
-const GLOBAL_NAMES = ["~/.claude/CLAUDE.md", "~/.codex/AGENTS.md", "~/.config/opencode/AGENTS.md"];
+const GLOBAL_NAMES = [
+  "~/.claude/CLAUDE.md",
+  "~/.codex/AGENTS.md",
+  "~/.config/opencode/AGENTS.md",
+  "~/.pi/agent/AGENTS.md",
+];
 const SKIP_DIRS = new Set([
   "node_modules",
   ".git",
@@ -36,6 +50,112 @@ const SKIP_DIRS = new Set([
   ".opencode",
 ]);
 const MAX_DEPTH = 6;
+
+/** Cursor's `globs:` front matter. Absent or malformed falls back to the file's default scope. */
+const cursorScope = (text: string | undefined): string | undefined => {
+  if (text === undefined) return undefined;
+  const lines = text.split("\n");
+  if (lines[0]?.trim() !== "---") return undefined;
+  for (const line of lines.slice(1)) {
+    if (line.trim() === "---") return undefined;
+    const match = /^\s*globs:\s*(.*)$/.exec(line);
+    if (match === null) continue;
+    let value = (match[1] ?? "").trim();
+    const quote = value[0];
+    if (quote === '"' || quote === "'") {
+      if (value.length < 2 || !value.endsWith(quote)) return undefined;
+      value = value.slice(1, -1).trim();
+    }
+    return value.length > 0 ? value : undefined;
+  }
+  return undefined;
+};
+
+/** Every `.cursor/rules/*.mdc` directly under `dir`, inside the walk's depth and skip limits. */
+const scanCursorRules = (root: string, dir: string, out: SourceCandidate[]): void => {
+  const rulesDir = path.join(dir, ".cursor", "rules");
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(rulesDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const atRoot = dir === root;
+  const rel = toSourcePath(root, dir);
+  const origin: SourceCandidate["origin"] = atRoot ? "root" : "nested";
+  const fallback = atRoot ? "**/*" : `${rel}/**/*`;
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".mdc")) continue;
+    const file = path.join(rulesDir, entry.name);
+    out.push({
+      path: toSourcePath(root, file),
+      absolute: file,
+      scope: cursorScope(readRegularText(file)) ?? fallback,
+      required: true,
+      origin,
+    });
+  }
+};
+
+const AT_IMPORT = /(?:^|[\s`(])@([^\s`)\]}"',;:!?]+)/gm;
+
+/** `@path` import tokens, the spelling Claude Code follows inside CLAUDE.md. */
+const importTokens = (text: string): string[] => {
+  const tokens: string[] = [];
+  for (const match of text.matchAll(AT_IMPORT)) {
+    if (match[1] !== undefined) tokens.push(match[1]);
+  }
+  return tokens;
+};
+
+/** An import resolves against the file carrying it; `~` and absolute paths resolve as spelled. */
+const resolveImport = (fromFile: string, spec: string): string =>
+  spec === "~" || spec.startsWith("~/")
+    ? expandHome(spec)
+    : path.isAbsolute(spec)
+      ? spec
+      : path.resolve(path.dirname(fromFile), spec);
+
+const scopeOf = (spelling: string): string => {
+  const dir = spelling.split("/").slice(0, -1).join("/");
+  return dir === "" || dir.startsWith("~") ? "**/*" : `${dir}/**/*`;
+};
+
+const originOf = (spelling: string): SourceCandidate["origin"] =>
+  spelling.startsWith("~") ? "global" : spelling.includes("/") ? "nested" : "root";
+
+/**
+ * Follow `@path` imports in CLAUDE.md files the way the compile skill follows
+ * pointers: the target is a source in its own right, with the scope of where it lives.
+ */
+const followImports = (root: string, found: SourceCandidate[]): void => {
+  const seen = new Set(found.map((c) => path.resolve(c.absolute)));
+  const queue = found
+    .filter((c) => path.basename(c.path) === "CLAUDE.md")
+    .map((c) => ({ file: c.absolute, depth: 0 }));
+  while (queue.length > 0) {
+    const next = queue.shift();
+    if (next === undefined) break;
+    if (next.depth >= MAX_DEPTH) continue;
+    const text = readRegularText(next.file);
+    if (text === undefined) continue;
+    for (const spec of importTokens(text)) {
+      const target = path.resolve(resolveImport(next.file, spec));
+      if (seen.has(target)) continue;
+      const spelling = toSourcePath(root, target);
+      if (path.isAbsolute(spelling) || readRegularFile(target) === undefined) continue;
+      seen.add(target);
+      found.push({
+        path: spelling,
+        absolute: target,
+        scope: scopeOf(spelling),
+        required: true,
+        origin: originOf(spelling),
+      });
+      queue.push({ file: target, depth: next.depth + 1 });
+    }
+  }
+};
 
 const walkNested = (root: string, dir: string, depth: number, out: SourceCandidate[]): void => {
   if (depth > MAX_DEPTH) return;
@@ -61,6 +181,7 @@ const walkNested = (root: string, dir: string, depth: number, out: SourceCandida
         });
       }
     }
+    scanCursorRules(root, sub, out);
     walkNested(root, sub, depth + 1, out);
   }
 };
@@ -73,6 +194,7 @@ export const discoverProjectSources = (root: string): SourceCandidate[] => {
       found.push({ path: name, absolute: file, scope: "**/*", required: true, origin: "root" });
     }
   }
+  scanCursorRules(root, root, found);
   walkNested(root, root, 1, found);
   const contributing = path.join(root, "CONTRIBUTING.md");
   if (existsSync(contributing)) {
@@ -84,16 +206,20 @@ export const discoverProjectSources = (root: string): SourceCandidate[] => {
       origin: "contributing",
     });
   }
+  followImports(root, found);
   return found;
 };
 
-export const discoverGlobalSources = (): SourceCandidate[] =>
-  GLOBAL_NAMES.flatMap((p) => {
+export const discoverGlobalSources = (): SourceCandidate[] => {
+  const found: SourceCandidate[] = GLOBAL_NAMES.flatMap((p) => {
     const absolute = path.join(homeDir(), p.slice(2));
     return existsSync(absolute)
       ? [{ path: p, absolute, scope: "**/*", required: true, origin: "global" as const }]
       : [];
   });
+  followImports(homeDir(), found);
+  return found;
+};
 
 export const hashFile = (absolute: string): string | undefined => {
   const bytes = readRegularFile(absolute);
