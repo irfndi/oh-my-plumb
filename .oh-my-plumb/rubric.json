@@ -7,11 +7,6 @@
       "path": "AGENTS.md",
       "sha": "8bc675e28634bf49c413585fde68c2102dfc6ee5246dade9a9c87db941fa55cf",
       "scope": "**/*"
-    },
-    {
-      "path": "CLAUDE.md",
-      "sha": "d4bbffd5374e4d5654d45971aeaddb019da577bfb64e9d1581cb2c5fa434b8cb",
-      "scope": "**/*"
     }
   ],
   "rules": [
