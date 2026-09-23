@@ -1,5 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import JSON5 from "json5";
+import { parse as parseToml } from "smol-toml";
+import { z } from "zod";
 import { findLintConfigs } from "./lintConfig.js";
 import { homeDir } from "./paths.js";
 import { routeGaps, type McpRoute } from "./guards.js";
@@ -33,7 +36,15 @@ const MANIFESTS = [
   "package.json",
 ];
 
-const MCP_PATHS = [".pi/mcp.json", ".claude/mcp.json", ".codex/mcp.json", ".opencode/mcp.json"];
+const MCP_PATHS = [
+  ".pi/mcp.json",
+  ".claude/mcp.json",
+  ".codex/mcp.json",
+  ".opencode/mcp.json",
+  ".mcp.json",
+  "opencode.json",
+  "opencode.jsonc",
+];
 
 const SKILL_DIRS = [".pi/skills", "skills", ".claude/skills"];
 
@@ -48,24 +59,58 @@ const namesIn = (pkgJson: string): string[] => {
   }
 };
 
-/** MCP server names from a config file, tolerating the common shapes. */
-const serversIn = (file: string): string[] => {
+const serverNameMap = z.record(z.string(), z.unknown()).transform((rec) => Object.keys(rec));
+
+const namedServer = z.object({ name: z.string() });
+
+const serverNameList = z.array(z.unknown()).transform((list) =>
+  list.flatMap((s) => {
+    const parsed = namedServer.safeParse(s);
+    return parsed.success ? [parsed.data.name] : [];
+  }),
+);
+
+// A wrong-typed key skips only that shape, matching the old key-by-key tolerance.
+const jsonMcpDoc = z
+  .object({
+    mcpServers: serverNameMap.optional().catch(undefined),
+    servers: z.union([serverNameList, serverNameMap]).optional().catch(undefined),
+    mcp: serverNameMap.optional().catch(undefined),
+  })
+  .transform((doc) => doc.mcpServers ?? doc.servers ?? doc.mcp ?? []);
+
+const codexMcpDoc = z
+  .object({ mcp_servers: serverNameMap.optional().catch(undefined) })
+  .transform((doc) => doc.mcp_servers ?? []);
+
+/** `claude mcp add` defaults to the local scope, which Claude Code keeps per project in ~/.claude.json. */
+const claudeLocalDoc = (root: string) =>
+  z
+    .object({
+      projects: z
+        .record(z.string(), z.object({ mcpServers: serverNameMap.optional().catch(undefined) }))
+        .optional()
+        .catch(undefined),
+    })
+    .transform((doc) => doc.projects?.[path.resolve(root)]?.mcpServers ?? []);
+
+/** MCP server names from a host config file, tolerating the common shapes. */
+const serversIn = (file: string, root: string): string[] => {
   try {
-    const raw = JSON.parse(readFileSync(file, "utf8")) as unknown;
-    if (raw && typeof raw === "object") {
-      const rec = raw as Record<string, unknown>;
-      for (const key of ["mcpServers", "servers", "mcp"]) {
-        const v = rec[key];
-        if (v && typeof v === "object" && !Array.isArray(v)) return Object.keys(v);
-      }
-      if (Array.isArray(rec.servers)) {
-        return rec.servers.flatMap((s) =>
-          s && typeof s === "object" && "name" in s && typeof s.name === "string" ? [s.name] : [],
-        );
-      }
+    const text = readFileSync(file, "utf8");
+    if (file.endsWith(".toml")) {
+      const doc = codexMcpDoc.safeParse(parseToml(text));
+      return doc.success ? doc.data : [];
     }
-  } catch {}
-  return [];
+    // JSON5 also reads the comments and trailing commas OpenCode allows in its config.
+    const raw: unknown = JSON5.parse(text);
+    const doc = jsonMcpDoc.safeParse(raw);
+    const local =
+      path.basename(file) === ".claude.json" ? claudeLocalDoc(root).safeParse(raw) : undefined;
+    return [...(doc.success ? doc.data : []), ...(local?.success ? local.data : [])];
+  } catch {
+    return [];
+  }
 };
 
 export const detectStack = (root: string): DetectedStack => {
@@ -73,13 +118,20 @@ export const detectStack = (root: string): DetectedStack => {
   const manifests = MANIFESTS.filter((m) => existsSync(at(m)));
   const lintConfigs = findLintConfigs(root);
   const mcpServers = MCP_PATHS.filter((m) => existsSync(at(m))).flatMap((m) =>
-    serversIn(at(m)).map((s) => `${m}:${s}`),
+    serversIn(at(m), root).map((s) => `${m}:${s}`),
   );
   const skills = SKILL_DIRS.filter((d) => existsSync(at(d)));
-  const globalMcp = ["~/.pi/mcp.json", "~/.claude/mcp.json"].flatMap((m) => {
+  const globalMcp = [
+    "~/.pi/mcp.json",
+    "~/.claude/mcp.json",
+    "~/.claude.json",
+    "~/.codex/config.toml",
+    "~/.config/opencode/opencode.json",
+    "~/.config/opencode/opencode.jsonc",
+  ].flatMap((m) => {
     const file = path.join(homeDir(), m.slice(2));
     // The "~/" spelling stays in the entry so it can be listed as a rubric source.
-    return existsSync(file) ? serversIn(file).map((s) => `${m}:${s}`) : [];
+    return existsSync(file) ? serversIn(file, root).map((s) => `${m}:${s}`) : [];
   });
   const pkgScripts = existsSync(at("package.json")) ? namesIn(at("package.json")) : [];
   const scriptSkills = pkgScripts.filter((s) =>
@@ -88,7 +140,7 @@ export const detectStack = (root: string): DetectedStack => {
   return {
     manifests,
     lintConfigs,
-    mcpServers: [...mcpServers, ...globalMcp],
+    mcpServers: [...new Set([...mcpServers, ...globalMcp])],
     skills: [...skills, ...scriptSkills.map((s) => `package.json#scripts.${s}`)],
   };
 };

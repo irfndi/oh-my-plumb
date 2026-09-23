@@ -36,13 +36,15 @@
   },
   "dependencies": {
     "@ai-sdk/typesafe-ai": "3",
-    "oh-my-plumb-schema": "workspace:*",
     "ai": "^7.0.105",
     "diff": "9.0.0",
     "ink": "6.8.0",
     "ink-spinner": "5.0.0",
+    "json5": "^2.2.3",
+    "oh-my-plumb-schema": "workspace:*",
     "picomatch": "4.0.7",
     "react": "19.3.0",
+    "smol-toml": "^1.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

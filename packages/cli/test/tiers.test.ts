@@ -102,6 +102,74 @@ describe("detect", () => {
         .sort(),
     ).toEqual([1, 3]);
   });
+
+  it("reads MCP servers from the files each host actually uses", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-detect-"));
+    const home = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-home-"));
+    const saved = process.env.OH_MY_PLUMB_HOME_DIR;
+    process.env.OH_MY_PLUMB_HOME_DIR = home;
+    try {
+      writeFileSync(
+        path.join(root, ".mcp.json"),
+        JSON.stringify({ mcpServers: { repoClaude: {} } }),
+      );
+      writeFileSync(path.join(root, "opencode.json"), JSON.stringify({ mcp: { projectOc: {} } }));
+      mkdirSync(path.join(home, ".codex"), { recursive: true });
+      writeFileSync(
+        path.join(home, ".codex", "config.toml"),
+        '[mcp_servers.codexPg]\ncommand = "pg"\n',
+      );
+      writeFileSync(
+        path.join(home, ".claude.json"),
+        JSON.stringify({
+          mcpServers: { userClaude: {} },
+          projects: { "/x": {}, [root]: { mcpServers: { localClaude: {} } } },
+        }),
+      );
+      mkdirSync(path.join(home, ".config", "opencode"), { recursive: true });
+      // OpenCode allows comments and trailing commas in its config.
+      writeFileSync(
+        path.join(home, ".config", "opencode", "opencode.json"),
+        '{\n  // servers\n  "mcp": { "globalOc": {}, },\n}\n',
+      );
+      // The legacy per-host path and the array shape still read.
+      mkdirSync(path.join(root, ".pi"), { recursive: true });
+      writeFileSync(
+        path.join(root, ".pi", "mcp.json"),
+        JSON.stringify({ servers: [{ name: "piArray" }, { nope: 1 }] }),
+      );
+      expect(detectStack(root).mcpServers).toEqual([
+        ".pi/mcp.json:piArray",
+        ".mcp.json:repoClaude",
+        "opencode.json:projectOc",
+        "~/.claude.json:userClaude",
+        "~/.claude.json:localClaude",
+        "~/.codex/config.toml:codexPg",
+        "~/.config/opencode/opencode.json:globalOc",
+      ]);
+    } finally {
+      if (saved === undefined) delete process.env.OH_MY_PLUMB_HOME_DIR;
+      else process.env.OH_MY_PLUMB_HOME_DIR = saved;
+    }
+  });
+
+  it("skips missing and malformed host config files without throwing", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-detect-"));
+    const home = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-home-"));
+    const saved = process.env.OH_MY_PLUMB_HOME_DIR;
+    process.env.OH_MY_PLUMB_HOME_DIR = home;
+    try {
+      writeFileSync(path.join(root, ".mcp.json"), "{ not json");
+      writeFileSync(path.join(root, "opencode.json"), JSON.stringify({ mcp: "nope" }));
+      mkdirSync(path.join(home, ".codex"), { recursive: true });
+      writeFileSync(path.join(home, ".codex", "config.toml"), "mcp_servers = [broken");
+      writeFileSync(path.join(home, ".claude.json"), "also not json");
+      expect(detectStack(root).mcpServers).toEqual([]);
+    } finally {
+      if (saved === undefined) delete process.env.OH_MY_PLUMB_HOME_DIR;
+      else process.env.OH_MY_PLUMB_HOME_DIR = saved;
+    }
+  });
 });
 
 describe("phase 3 guards", () => {
