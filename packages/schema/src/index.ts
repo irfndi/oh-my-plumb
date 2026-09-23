@@ -18,6 +18,7 @@ export {
   questionSchema,
   lintCheckSchema,
   modelCheckSchema,
+  guardCheckSchema,
   deferredCheckSchema,
   unenforceableCheckSchema,
   checkSchema,

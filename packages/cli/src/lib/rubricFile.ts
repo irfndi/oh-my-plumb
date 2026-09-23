@@ -86,6 +86,7 @@ export const bucketCounts = (rules: readonly Rule[]): BucketCounts => {
   const counts: BucketCounts = {
     lint: 0,
     model: 0,
+    guard: 0,
     deferred: 0,
     unenforceable: 0,
     total: rules.length,

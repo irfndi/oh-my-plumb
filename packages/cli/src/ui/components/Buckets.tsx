@@ -23,6 +23,7 @@ export function Buckets({ rules }: { rules: readonly Rule[] }) {
       <Text color={palette.cloud}> rules</Text>
       {part(c.model, "checked by Jev", palette.indigo)}
       {part(c.lint, "for your linter", palette.sage)}
+      {part(c.guard, "by a guard", palette.plum)}
       {part(c.deferred, "deferred", palette.ceramicWarm)}
       {part(c.unenforceable, "unenforceable", palette.ash)}
     </Box>

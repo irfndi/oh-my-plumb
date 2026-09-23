@@ -21,7 +21,7 @@ import { boundState, remainingMs, unifiedDiff } from "../lib/diff.js";
 import { appendEvent } from "../lib/events.js";
 import { blobIdsAt, diffTrees, snapshotTree, splitDiff, type FileDiff } from "../lib/git.js";
 import { hasApiKey } from "../lib/credentials.js";
-import { loadRules } from "../lib/loadRules.js";
+import { loadRubric } from "../lib/loadRubric.js";
 import { debug } from "../lib/output.js";
 import { findRepoRoot, isExcludedPath, relativeToRoot } from "../lib/paths.js";
 import { readRegularFile, readRegularText } from "../lib/regularFile.js";
@@ -149,7 +149,7 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
   if (!hasTurnState(dir)) return finish({ kind: "silent" });
   if (stopCheckCount(dir) >= MAX_STOP_CHECKS_PER_TURN) return finish({ kind: "silent" });
 
-  const loaded = loadRules(root);
+  const loaded = loadRubric(root);
   for (const problem of loaded.problems) debug(problem);
   if (loaded.rules.length === 0) return finish({ kind: "silent" });
 

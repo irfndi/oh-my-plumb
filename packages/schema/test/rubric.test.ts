@@ -7,6 +7,21 @@ const base = {
   sources: [{ path: "AGENTS.md" }],
 };
 
+const guardRule = {
+  id: "guard-postgres-inspector-validate-migration",
+  text: "Migration files must be validated by the local migration guard",
+  source: { path: ".pi/mcp.json" },
+  scope: ["{prisma/migrations,drizzle}/**"],
+  check: {
+    type: "guard",
+    command: ["node", "./scripts/validate-migration.mjs"],
+    server: "postgres-inspector",
+    tool: "validate_migration",
+    scope: "{prisma/migrations,drizzle}/**",
+    text: "Migration files must be validated by the local migration guard",
+  },
+};
+
 describe("rubricSchema", () => {
   it("accepts a lint rule, a model rule with a phase, and the two reporting buckets", () => {
     const parsed = rubricSchema.parse({
@@ -123,6 +138,30 @@ describe("rubricSchema", () => {
       check: { ...score.check, question: { ...score.check.question, violatingFrom: 4 } },
     };
     expect(rubricSchema.safeParse({ ...base, rules: [badScore] }).success).toBe(false);
+  });
+
+  it("accepts a guard rule and round-trips it through the rubric", () => {
+    const parsed = rubricSchema.parse({ ...base, rules: [guardRule] });
+    const rule = parsed.rules[0];
+    if (rule === undefined || rule.check.type !== "guard") throw new Error("guard rule missing");
+    expect(rule.check.command).toEqual(["node", "./scripts/validate-migration.mjs"]);
+    expect(rule.check.scope).toBe("{prisma/migrations,drizzle}/**");
+    expect(rule.check.text).toBe(guardRule.check.text);
+    // What `rubric validate` writes to disk parses back the same way.
+    expect(rubricSchema.safeParse(JSON.parse(JSON.stringify(parsed))).success).toBe(true);
+  });
+
+  it("rejects a guard with neither a command nor a skill", () => {
+    const result = rubricSchema.safeParse({
+      ...base,
+      rules: [
+        {
+          ...guardRule,
+          check: { type: "guard", scope: guardRule.check.scope, text: guardRule.check.text },
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
   });
 });
 

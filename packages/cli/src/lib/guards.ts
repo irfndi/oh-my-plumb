@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
+import type { Rule } from "oh-my-plumb-schema";
 import { z } from "zod";
 
 /**
@@ -16,19 +17,23 @@ import { z } from "zod";
  *    (`<dir>/<name>/guard.{mjs,js,sh}`), run with `$FILE_PATH` in env,
  *    same deadline + silent-pass contract.
  *
- * rules.yaml (written by `init`) declares the trigger→guard mapping;
- * this module executes it. rubric.json stays the Tier-3 store.
+ * Rubric guard checks (recorded by `init`) declare the trigger→guard mapping;
+ * this module executes them, and every hit names the rule that owns it.
  */
 
 // Rejecting an odd content shape would turn an isError hit into a silent pass.
 const guardOutputSchema = z.object({ isError: z.boolean(), content: z.unknown().optional() });
 
 export type McpRoute = { server: string; tool: string; command: string[] };
-export type SkillRoute = { name: string; entry: string };
-export type Tier2Route = {
+/** One guard check resolved for routing: where it triggers, what runs, which rule owns it. */
+export type GuardRoute = {
+  /** The owning rubric rule: the id a guard hit reports. */
+  ruleId: string;
   trigger: string;
-  mcp?: McpRoute;
-  skill?: SkillRoute;
+  command?: string[];
+  server?: string;
+  /** Resolved skill guard entry: the absolute path of `<dir>/<name>/guard.*`. */
+  skill?: string;
 };
 
 export type GuardHit = { ruleId: string; source: string; reason: string };
@@ -58,7 +63,7 @@ const matches = (trigger: string, file: string): boolean => {
   return false;
 };
 
-export const routesForFile = (routes: readonly Tier2Route[], file: string): Tier2Route[] =>
+export const routesForFile = (routes: readonly GuardRoute[], file: string): GuardRoute[] =>
   routes.filter((r) => matches(r.trigger, file));
 
 /** Parse one JSON line of `{ isError, content }` from a guard process. */
@@ -103,47 +108,22 @@ export const resolveSkillGuard = (
 
 export const SKILL_DIRS = [".pi/skills", "skills", ".claude/skills"];
 
-/** Read rules.yaml routes section (minimal line parser; full YAML is Phase-4 polish). */
-export const readTier2Routes = (root: string): Tier2Route[] => {
-  let text: string;
-  try {
-    text = readFileSync(path.join(root, ".oh-my-plumb", "rules.yaml"), "utf8");
-  } catch {
-    return [];
-  }
-  const routes: Tier2Route[] = [];
-  const lines = text.split("\n");
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i] ?? "";
-    const tier = line.match(/^\s*-\s*tier:\s*(\d+)/);
-    i += 1;
-    if (!tier || tier[1] !== "2") continue;
-    const trigger = (lines[i - 1]?.match(/trigger:\s*"([^"]+)"/)?.[1] ?? "").trim();
-    let mcp: McpRoute | undefined;
-    let skill: SkillRoute | undefined;
-    while (i < lines.length && !/^\s*-\s*tier:/.test(lines[i] ?? "")) {
-      const l = lines[i] ?? "";
-      const m = l.match(/mcp:\s*(\S+)\s+(\S+)\s+(.+)/);
-      if (m?.[1] !== undefined && m[2] !== undefined && m[3] !== undefined) {
-        mcp = { server: m[1], tool: m[2], command: m[3].split(/\s+/) };
-      }
-      const s = l.match(/skill:\s*(\S+)/);
-      if (s?.[1] !== undefined) {
-        const entry = resolveSkillGuard(root, SKILL_DIRS, s[1]);
-        if (entry !== undefined) skill = { name: s[1], entry };
-      }
-      i += 1;
-    }
-    if (trigger !== "")
-      routes.push({
-        trigger,
-        ...(mcp === undefined ? {} : { mcp }),
-        ...(skill === undefined ? {} : { skill }),
-      });
-  }
-  return routes;
-};
+/** Guard routes from the rubric: one per guard check, keyed to the rule that owns it. */
+export const guardRoutes = (rules: readonly Rule[], root: string): GuardRoute[] =>
+  rules.flatMap((rule) => {
+    if (rule.check.type !== "guard") return [];
+    const { command, server, skill, scope } = rule.check;
+    const entry = skill === undefined ? undefined : resolveSkillGuard(root, SKILL_DIRS, skill);
+    return [
+      {
+        ruleId: rule.id,
+        trigger: scope,
+        ...(command === undefined ? {} : { command }),
+        ...(server === undefined ? {} : { server }),
+        ...(entry === undefined ? {} : { skill: entry }),
+      },
+    ];
+  });
 
 /** The local file a guard command runs, or undefined when the command is not a local script. */
 const commandFile = (command: readonly string[]): string | undefined => {
@@ -154,26 +134,26 @@ const commandFile = (command: readonly string[]): string | undefined => {
 };
 
 /**
- * Read-only: why a configured route cannot run here; empty means it resolves.
- * A skill route only parses when its guard file already resolved, so only an
- * mcp route whose server or script is gone, and a route with no command, are missing.
+ * Read-only: why a configured guard cannot run here; empty means it resolves.
+ * A skill route only parses when its guard file already resolved, so only a
+ * guard whose server or script is gone, and one with no command, are missing.
  */
 export const routeGaps = (
   root: string,
-  route: Tier2Route,
+  route: Pick<GuardRoute, "command" | "server" | "skill">,
   mcpServers: readonly string[],
 ): string[] => {
   const gaps: string[] = [];
-  if (route.mcp !== undefined) {
-    const { server, command } = route.mcp;
-    if (!mcpServers.some((detected) => detected.endsWith(`:${server}`)))
-      gaps.push(`MCP server "${server}" is not configured here`);
+  const { command, server, skill } = route;
+  if (server !== undefined && !mcpServers.some((detected) => detected.endsWith(`:${server}`)))
+    gaps.push(`MCP server "${server}" is not configured here`);
+  if (command !== undefined) {
     const file = commandFile(command);
     if (command[0] === "node" && file === undefined)
       gaps.push(`command "${command.join(" ")}" names no script`);
     else if (file !== undefined && !existsSync(path.resolve(root, file)))
       gaps.push(`${file} does not exist`);
-  } else if (route.skill === undefined) {
+  } else if (skill === undefined) {
     gaps.push("no guard command resolves here");
   }
   return gaps;

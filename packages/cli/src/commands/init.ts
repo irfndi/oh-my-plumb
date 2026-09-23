@@ -2,14 +2,22 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { PlumbError, HOSTS, type Host } from "oh-my-plumb-schema";
+import {
+  PlumbError,
+  HOSTS,
+  RUBRIC_VERSION,
+  createRuleId,
+  ruleSchema,
+  type Host,
+  type Rubric,
+} from "oh-my-plumb-schema";
 import { resolveCredentials } from "../lib/credentials.js";
 import { detectHosts, hostLabel, installHost, parseHost, type Installed } from "../lib/hosts.js";
 import { hookScriptPath } from "../lib/packageRoot.js";
 import { ohMyPlumbDir, findRepoRoot, rubricPath } from "../lib/paths.js";
-import { readRubric } from "../lib/rubricFile.js";
+import { readRubric, writeRubric } from "../lib/rubricFile.js";
 import { discoverGlobalSources, discoverProjectSources } from "../lib/sources.js";
-import { detectStack, routesFor } from "../lib/detect.js";
+import { detectStack, routesFor, type DetectedStack, type TierRoute } from "../lib/detect.js";
 import type { Step } from "../ui/components/Checklist.js";
 import { showStatic } from "../ui/render.js";
 import { InitView } from "../ui/views/InitView.js";
@@ -39,6 +47,51 @@ export const chooseHosts = (names: readonly string[]): Host[] => {
       `none of ${HOSTS.join(", ")} is installed here; name one to install anyway`,
     );
   return found;
+};
+
+/** The rubric with a rule for every detected tier-2 guard; undefined when there is none to record. */
+export const withGuards = (
+  rubric: Rubric | undefined,
+  stack: Pick<DetectedStack, "mcpServers">,
+  routes: readonly TierRoute[],
+): Rubric | undefined => {
+  const guards = routes.filter(
+    (route): route is Extract<TierRoute, { tier: 2 }> => route.tier === 2,
+  );
+  if (guards.length === 0) return undefined;
+  const base: Rubric = rubric ?? {
+    version: RUBRIC_VERSION,
+    compiledAt: new Date().toISOString(),
+    sources: [],
+    rules: [],
+  };
+  const sources = [...base.sources];
+  const rules = [...base.rules];
+  for (const guard of guards) {
+    const entry = stack.mcpServers.find((detected) => detected.endsWith(`:${guard.mcp.server}`));
+    // routesFor only routes guards whose server is configured here, so the config is named.
+    if (entry === undefined) continue;
+    const rule = ruleSchema.parse({
+      id: createRuleId(`guard ${guard.mcp.server} ${guard.mcp.tool}`),
+      text: guard.action,
+      source: { path: entry.slice(0, entry.lastIndexOf(":")) },
+      scope: [guard.trigger],
+      check: {
+        type: "guard",
+        command: guard.mcp.command,
+        server: guard.mcp.server,
+        tool: guard.mcp.tool,
+        scope: guard.trigger,
+        text: guard.action,
+      },
+    });
+    const at = rules.findIndex((existing) => existing.id === rule.id);
+    if (at === -1) rules.push(rule);
+    else rules[at] = rule;
+    if (!sources.some((source) => source.path === rule.source.path))
+      sources.push({ path: rule.source.path });
+  }
+  return { ...base, sources, rules };
 };
 
 export const runInit = async (argv: string[]): Promise<number> => {
@@ -78,24 +131,20 @@ export const runInit = async (argv: string[]): Promise<number> => {
   ];
   mkdirSync(ohMyPlumbDir(root), { recursive: true });
   writeFileSync(path.join(ohMyPlumbDir(root), ".gitignore"), "events.jsonl\ncompile-skill.md\n");
-  const rulesYaml = [
-    `version: "1.0"`,
-    `detected:`,
-    `  manifests: [${stack.manifests.join(", ")}]`,
-    `  mcpServers: [${stack.mcpServers.join(", ")}]`,
-    `  skills: [${stack.skills.join(", ")}]`,
-    `routes:`,
-    ...routes.flatMap((r) =>
-      r.tier === 2
-        ? [
-            `  - tier: ${r.tier} trigger: "${r.trigger}" action: "${r.action}"`,
-            `    mcp: ${r.mcp.server} ${r.mcp.tool} ${r.mcp.command.join(" ")}`,
-          ]
-        : [`  - tier: ${r.tier} trigger: "${r.trigger}" action: "${r.action}"`],
-    ),
-    ``,
-  ].join("\n");
-  writeFileSync(path.join(ohMyPlumbDir(root), "rules.yaml"), rulesYaml);
+  const rubricFile = rubricPath(root);
+  const before = readRubric(rubricFile);
+  if (before.kind === "invalid") {
+    steps.push({
+      ok: false,
+      text: `${before.path} cannot be read, so the detected guard was not recorded`,
+    });
+  } else {
+    const guarded = withGuards(before.kind === "ok" ? before.rubric : undefined, stack, routes);
+    if (guarded !== undefined) {
+      writeRubric(rubricFile, guarded);
+      steps.push({ ok: true, text: "detected guard recorded as a rubric rule" });
+    }
+  }
   steps.push({
     ok: true,
     text: `detected ${stack.manifests.length} manifests, ${stack.mcpServers.length} MCP servers, ${stack.skills.length} skills`,

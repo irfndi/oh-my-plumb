@@ -6,7 +6,7 @@ import { EDIT_CHECK_TIMEOUT_MS, TURN_CHECK_TIMEOUT_MS } from "../lib/constants.j
 import { hasApiKey, NO_KEY_HINT } from "../lib/credentials.js";
 import { boundState } from "../lib/diff.js";
 import { splitDiff, workingTreeDiff } from "../lib/git.js";
-import { loadRules } from "../lib/loadRules.js";
+import { loadRubric } from "../lib/loadRubric.js";
 import { findRepoRoot } from "../lib/paths.js";
 import { say } from "../lib/ui.js";
 import { Header } from "../ui/components/Header.js";
@@ -27,7 +27,7 @@ export const runCheckCommand = async (argv: string[]): Promise<number> => {
     },
   });
   const root = findRepoRoot(process.cwd());
-  const loaded = loadRules(root);
+  const loaded = loadRubric(root);
   if (loaded.rules.length === 0)
     throw new PlumbError(
       "RUBRIC_MISSING",

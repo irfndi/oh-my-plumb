@@ -2,8 +2,8 @@ import { parseArgs } from "node:util";
 import type { PlumbEvent, Rule } from "oh-my-plumb-schema";
 import { detectStack } from "../lib/detect.js";
 import { readEvents } from "../lib/events.js";
-import { readTier2Routes, routeGaps } from "../lib/guards.js";
-import { loadRules } from "../lib/loadRules.js";
+import { guardRoutes, routeGaps } from "../lib/guards.js";
+import { loadRubric } from "../lib/loadRubric.js";
 import { findRepoRoot } from "../lib/paths.js";
 import { say } from "../lib/ui.js";
 import type { RuleStats } from "../ui/components/RuleTable.js";
@@ -29,7 +29,7 @@ const statsFrom = (events: readonly PlumbEvent[]): Map<string, RuleStats> => {
 const MIN_CHECKS_TO_CALL_DEAD = 20;
 
 export const collectReport = (root: string): ReportData | undefined => {
-  const loaded = loadRules(root);
+  const loaded = loadRubric(root);
   if (loaded.rules.length === 0) return undefined;
   const events = readEvents(root);
   const stats = statsFrom(events);
@@ -50,7 +50,7 @@ export const collectReport = (root: string): ReportData | undefined => {
     );
   });
   const mcpServers = detectStack(root).mcpServers;
-  const missingRoutes = readTier2Routes(root)
+  const missingRoutes = guardRoutes(loaded.rules, root)
     .map((route) => ({ trigger: route.trigger, gaps: routeGaps(root, route, mcpServers) }))
     .filter((route) => route.gaps.length > 0);
   return {

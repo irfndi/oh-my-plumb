@@ -2,11 +2,11 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { findLintConfigs } from "./lintConfig.js";
 import { homeDir } from "./paths.js";
-import { routeGaps, type McpRoute, type Tier2Route } from "./guards.js";
+import { routeGaps, type McpRoute } from "./guards.js";
 
 /**
  * Phase 2: zero-config project auto-detection. Inspects the repo and emits
- * the data `oh-my-plumb init` synthesizes into `.oh-my-plumb/rules.yaml`.
+ * the data `oh-my-plumb init` records as guard rules in the rubric.
  * Read-only: never writes, never spawns.
  */
 
@@ -76,10 +76,11 @@ export const detectStack = (root: string): DetectedStack => {
     serversIn(at(m)).map((s) => `${m}:${s}`),
   );
   const skills = SKILL_DIRS.filter((d) => existsSync(at(d)));
-  const globalMcp = ["~/.pi/mcp.json", "~/.claude/mcp.json"]
-    .map((m) => (m.startsWith("~/") ? path.join(homeDir(), m.slice(2)) : m))
-    .filter((m) => existsSync(m))
-    .flatMap((m) => serversIn(m).map((s) => `global:${s}`));
+  const globalMcp = ["~/.pi/mcp.json", "~/.claude/mcp.json"].flatMap((m) => {
+    const file = path.join(homeDir(), m.slice(2));
+    // The "~/" spelling stays in the entry so it can be listed as a rubric source.
+    return existsSync(file) ? serversIn(file).map((s) => `${m}:${s}`) : [];
+  });
   const pkgScripts = existsSync(at("package.json")) ? namesIn(at("package.json")) : [];
   const scriptSkills = pkgScripts.filter((s) =>
     /^(lint|check|test|typecheck|guard|validate)/.test(s),
@@ -104,9 +105,9 @@ const MIGRATION_GUARD = {
     tool: "validate_migration",
     command: ["node", "./scripts/validate-migration.mjs"],
   },
-} satisfies Tier2Route;
+} satisfies { trigger: string; mcp: McpRoute };
 
-/** Thin adapter: detected stack → tier routes for rules.yaml. rubric.json stays the Tier-3 store. */
+/** Thin adapter: detected stack → tier routes; init records the tier-2 guard in the rubric. */
 export const routesFor = (stack: DetectedStack, root: string): TierRoute[] => {
   const routes: TierRoute[] = [];
   if (
@@ -120,11 +121,17 @@ export const routesFor = (stack: DetectedStack, root: string): TierRoute[] => {
     });
   }
   // Only a route whose guard is really here: detected server plus existing script.
-  if (routeGaps(root, MIGRATION_GUARD, stack.mcpServers).length === 0) {
+  if (
+    routeGaps(
+      root,
+      { server: MIGRATION_GUARD.mcp.server, command: MIGRATION_GUARD.mcp.command },
+      stack.mcpServers,
+    ).length === 0
+  ) {
     routes.push({
       tier: 2,
       trigger: MIGRATION_GUARD.trigger,
-      action: "local migration guard (Tier 2); MCP validate_migration in Phase 3",
+      action: "Migration files must be validated by the local migration guard",
       mcp: MIGRATION_GUARD.mcp,
     });
   }
