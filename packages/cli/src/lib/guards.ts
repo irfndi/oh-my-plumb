@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 
 /**
  * Phase 3: MCP dispatch + skill-as-guardrail execution.
@@ -19,6 +20,10 @@ import path from "node:path";
  * rules.yaml (written by `init`) declares the trigger→guard mapping;
  * this module executes it. rubric.json stays the Tier-3 store.
  */
+
+// content stays unknown: a guard that reports isError with an odd content shape
+// must still block, so normalization below tolerates anything.
+const guardOutputSchema = z.object({ isError: z.boolean(), content: z.unknown().optional() });
 
 export type McpRoute = { server: string; tool: string; command: string[] };
 export type SkillRoute = { name: string; entry: string };
@@ -65,12 +70,14 @@ export const parseGuardOutput = (
   try {
     const last = text.trim().split("\n").pop() ?? "";
     if (last === "") return undefined;
-    const v = JSON.parse(last) as { isError?: unknown; content?: unknown };
-    if (typeof v.isError !== "boolean") return undefined;
+    const result = guardOutputSchema.safeParse(JSON.parse(last));
+    if (!result.success) return undefined;
+    const v = result.data;
     const content = Array.isArray(v.content)
       ? v.content
-          .filter((p) => p && typeof p === "object" && "text" in p)
-          .map((p) => String((p as { text: unknown }).text))
+          .flatMap((p: unknown) =>
+            typeof p === "object" && p !== null && "text" in p ? [String(p.text)] : [],
+          )
           .join("\n")
       : typeof v.content === "string"
         ? v.content
