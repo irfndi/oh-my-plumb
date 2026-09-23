@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { PlumbError, postToolUseInputSchema } from "oh-my-plumb-schema";
 import { MAX_TASK_CHARS } from "./constants.js";
-import type { ReplaySession, ReplayTurn } from "./replay.js";
+import { callSummary, type ReplaySession, type ReplayTurn } from "./replay.js";
 
 /** Sessions live in SQLite. The `sqlite3` binary reads it so the CLI needs no driver. */
 export const opencodeDbPath = (): string =>
@@ -132,7 +132,7 @@ export const opencodeSessionsFromRows = (
     if (rel !== "" && (rel.startsWith("..") || path.isAbsolute(rel))) continue;
     let session = sessions.get(row.sessionId);
     if (session === undefined) {
-      session = { file: row.sessionId, cwd: row.directory, turns: [], turnIndex: 0 };
+      session = { file: row.sessionId, cwd: row.directory, turns: [], calls: [], turnIndex: 0 };
       sessions.set(row.sessionId, session);
     }
     let part: Record<string, unknown> | undefined;
@@ -163,6 +163,7 @@ export const opencodeSessionsFromRows = (
       continue;
     const state = asRecord(part.state);
     const input = asRecord(state?.input);
+    if (input !== undefined) session.calls.push({ tool: part.tool, args: callSummary(input) });
     if (state?.status !== "completed" || input === undefined) continue;
     const payload = editPayload(row.sessionId, row.directory, part.callID, part.tool, input);
     if (payload === undefined) continue;
@@ -176,8 +177,13 @@ export const opencodeSessionsFromRows = (
     turn.edits.push({ turn: turn.index, input: parsed.data });
   }
   return [...sessions.values()]
-    .map(({ file, cwd, turns }) => ({ file, cwd, turns: turns.filter((t) => t.edits.length > 0) }))
-    .filter((s) => s.turns.length > 0);
+    .map(({ file, cwd, turns, calls }) => ({
+      file,
+      cwd,
+      turns: turns.filter((t) => t.edits.length > 0),
+      calls,
+    }))
+    .filter((s) => s.turns.length > 0 || s.calls.length > 0);
 };
 
 export const opencodeSessionsFor = (root: string, db = opencodeDbPath()): ReplaySession[] => {

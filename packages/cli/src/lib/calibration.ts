@@ -1,4 +1,11 @@
-import type { CalibrationVerdict, Thresholds } from "oh-my-plumb-schema";
+import type {
+  CalibrationVerdict,
+  CheckPhase,
+  Rule,
+  Thresholds,
+  ToolCall,
+} from "oh-my-plumb-schema";
+import type { ReplayCall } from "./replay.js";
 import { median } from "./ui.js";
 
 export const MIN_CALIBRATION_STATES = 5;
@@ -32,4 +39,49 @@ export const summarizeCalibration = (
   else if (max < CLEAR_YES && med >= CONFIDENT_NO) verdict = "weak";
   else verdict = "decisive";
   return { hunks: n, median: med, min, max, fired, verdict };
+};
+
+/** What a judge scores one rule on one state: the same numbers a hunk contributes. */
+export type RuleProbability = { ruleId: string; probability: number };
+
+export type ToolCallJudge = (
+  call: ToolCall,
+  phase: CheckPhase,
+) => Promise<readonly RuleProbability[]>;
+
+/** The phases a recorded call may be judged under: the "when" every model rule carries. */
+const CALL_PHASES: readonly CheckPhase[] = ["edit", "turn"];
+
+/**
+ * One sample per rule per recorded call, the tool-call twin of calibrate's hunk
+ * loop. The judge picks rules by phase and tool scope, so a rule only scores the
+ * calls it could actually have seen, and summarizeCalibration reads the samples
+ * unchanged.
+ */
+export const collectToolCallSamples = async (
+  calls: readonly ReplayCall[],
+  rules: readonly Rule[],
+  judge: ToolCallJudge,
+  progress: (label: string) => void,
+): Promise<Map<string, number[]>> => {
+  const samples = new Map<string, number[]>();
+  const phases = CALL_PHASES.filter((phase) => rules.some((rule) => rule.when === phase));
+  const total = calls.length * phases.length;
+  let n = 0;
+  for (const call of calls) {
+    const recorded: ToolCall = { tool: call.tool, input: call.args };
+    for (const phase of phases) {
+      progress(`call ${(n += 1)} of ${total}  ${call.tool}`);
+      try {
+        for (const verdict of await judge(recorded, phase))
+          samples.set(verdict.ruleId, [
+            ...(samples.get(verdict.ruleId) ?? []),
+            verdict.probability,
+          ]);
+      } catch {
+        // a call that could not be judged is one fewer sample, nothing more
+      }
+    }
+  }
+  return samples;
 };

@@ -14,6 +14,10 @@ export const STDIN_TIMEOUT_MS = 2_000;
 /** Largest diff sent as state. Beyond this the diff is cut and marked. */
 export const MAX_STATE_CHARS = 24_000;
 export const MAX_TASK_CHARS = 600;
+/** Past this a tool-call argument is a document, not an argument: kept as its length only. */
+export const MAX_CALL_ARG_CHARS = 200;
+/** The whole argument summary one recorded tool call may carry. */
+export const MAX_CALL_SUMMARY_CHARS = 600;
 
 /** How many times one rule may block the same file within one turn before it only flags. */
 export const MAX_BLOCKS_PER_RULE_PER_TURN = 2;
