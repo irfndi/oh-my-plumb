@@ -4,6 +4,7 @@ import type { Rule } from "oh-my-plumb-schema";
 import { Verdicts } from "../src/ui/components/Verdicts.js";
 import { RuleTable } from "../src/ui/components/RuleTable.js";
 import { ReportView } from "../src/ui/views/ReportView.js";
+import type { PiTrustState } from "../src/lib/piTrust.js";
 import { CheckView } from "../src/ui/views/CheckView.js";
 import { scopeLabel, truncate, meter } from "../src/ui/theme.js";
 
@@ -103,6 +104,7 @@ describe("views", () => {
           dead: [],
           problems: [],
           missingRoutes: [],
+          piTrust: null,
         }}
       />,
     );
@@ -128,6 +130,7 @@ describe("views", () => {
           dead: [],
           problems: [],
           missingRoutes: [{ trigger: "drizzle/**", gaps: ["scripts/v.mjs does not exist"] }],
+          piTrust: null,
         }}
       />,
     );
@@ -135,6 +138,26 @@ describe("views", () => {
     expect(frame).toContain("route points at a guard that is not here");
     expect(frame).toContain("drizzle/**");
     expect(frame).toContain("scripts/v.mjs does not exist");
+  });
+
+  it("report warns only while Pi has not approved this project", () => {
+    const base = {
+      root: "/r",
+      rules,
+      events: [],
+      stats: new Map(),
+      dead: [],
+      problems: [],
+      missingRoutes: [],
+    };
+    const frame = (piTrust: PiTrustState | null): string => {
+      const { lastFrame } = render(<ReportView data={{ ...base, piTrust }} />);
+      return lastFrame() ?? "";
+    };
+    expect(frame("trusted")).not.toContain("approved this project");
+    expect(frame(null)).not.toContain("approved this project");
+    expect(frame("untrusted")).toContain("Pi has not approved this project");
+    expect(frame("unknown")).toContain("Not sure whether Pi approved this project");
   });
 
   it("check ends with the repair count", () => {

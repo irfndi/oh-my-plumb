@@ -86,4 +86,13 @@ describe("hosts", () => {
     expect(uninstallHost("pi", root, false)).toBe(0);
     expect(existsSync(target)).toBe(true);
   });
+
+  it("tells a project Pi install that the project must be trusted first", () => {
+    const globalInstall = installHost("pi", root, false);
+    expect(globalInstall.afterwards).toBeUndefined();
+    const projectInstall = installHost("pi", root, true);
+    expect(projectInstall.target).toBe(path.join(root, ".pi", "extensions", "oh-my-plumb.ts"));
+    expect(projectInstall.afterwards).toContain("accept pi's trust prompt");
+    expect(projectInstall.afterwards).toContain("pi --approve");
+  });
 });
