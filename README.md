@@ -31,9 +31,9 @@ Then start `claude`, `codex`, `opencode` or `pi` as usual. That is the whole set
 
 Your AGENTS.md, CLAUDE.md and the rest of your project instructions are full of rules no linter can check. "Use Yup, don't validate by hand." "No helper with one caller." "Never let a raw error reach a user." "Don't add what wasn't asked for." Nothing can script those, so nothing enforces them. In 93 real sessions, the agent broke one on 1 turn in 13, from the first edit on.
 
-<a href="assets/vid/oh-my-plumb-pi-demo.mp4"><img src="assets/vid/oh-my-plumb-pi-demo-poster.jpg" alt="oh-my-plumb on pi: the agent writes a draft that breaks four AGENTS.md rules, Jev blocks the edit, and the agent repairs it" width="100%"></a>
+https://github.com/user-attachments/assets/78c91eea-5533-4262-b8c9-de1be37ef202
 
-<sub>40 seconds on pi, recreated from a real run: the scores and timings are the ones Jev logged. Click to play.</sub>
+<sub>40 seconds on pi, recreated from a real run: the scores and timings are the ones Jev logged.</sub>
 
 oh-my-plumb enforces exactly those rules. On every edit (or turn) it asks [Jev](https://typesafe.ai), TypeSafe's decision model, one question per rule and gets a probability back. Jev sees the rule and the diff, never the conversation, so edit 200 is checked like edit 1. Break a rule and the agent is told which one and fixes it in the same turn.
 

@@ -9,6 +9,6 @@ npx oh-my-plumb login    # paste your TypeSafe key once
 npx oh-my-plumb init     # hooks into every agent on this machine
 ```
 
-[Watch it catch and repair a broken edit on pi](https://github.com/irfndi/oh-my-plumb/blob/master/assets/vid/oh-my-plumb-pi-demo.mp4) (40 s).
+[Watch it catch and repair a broken edit on pi](https://github.com/user-attachments/assets/78c91eea-5533-4262-b8c9-de1be37ef202) (40 s).
 
 Everything else, including which agents are supported, what a check costs and how the rubric works, is in the [main README](https://github.com/irfndi/oh-my-plumb#readme).
