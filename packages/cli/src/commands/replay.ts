@@ -14,6 +14,7 @@ import {
   tallyRules,
   type ReplaySession,
 } from "../lib/replay.js";
+import { piSessionsDir, piSessionsFor } from "../lib/replayPi.js";
 import { codexSessionsDir, codexSessionsFor } from "../lib/replayCodex.js";
 import { opencodeDbPath, opencodeSessionsFor } from "../lib/replayOpencode.js";
 import { say, usd } from "../lib/ui.js";
@@ -55,7 +56,7 @@ export const sessionsFor = (
     case "opencode":
       return opencodeSessionsFor(root, paths[0] ?? opencodeDbPath());
     case "pi":
-      throw new PlumbError("HOST_UNSUPPORTED", "replay for pi sessions is not implemented yet");
+      return piSessionsFor(root, paths[0] ?? piSessionsDir());
     default:
       return assertNever(host);
   }
@@ -77,7 +78,7 @@ export const runReplay = async (argv: string[]): Promise<number> => {
   if (first === undefined)
     throw new PlumbError(
       "HOST_UNKNOWN",
-      "name the agent whose sessions to replay: oh-my-plumb replay claude|codex|opencode [--repo <path>]",
+      "name the agent whose sessions to replay: oh-my-plumb replay claude|codex|opencode|pi [--repo <path>]",
     );
   const named = hostSchema.safeParse(first.toLowerCase());
   // no agent name: positionals are Claude Code transcripts
