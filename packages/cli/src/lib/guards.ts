@@ -21,15 +21,9 @@ import { z } from "zod";
  * this module executes it. rubric.json stays the Tier-3 store.
  */
 
-const guardOutputSchema = z.object({
-  isError: z.boolean(),
-  content: z.union([
-    z.string(),
-    z.array(
-      z.object({ text: z.unknown() }),
-    ),
-  ]),
-});
+// content stays unknown: a guard that reports isError with an odd content shape
+// must still block, so normalization below tolerates anything.
+const guardOutputSchema = z.object({ isError: z.boolean(), content: z.unknown().optional() });
 
 export type McpRoute = { server: string; tool: string; command: string[] };
 export type SkillRoute = { name: string; entry: string };
@@ -80,8 +74,14 @@ export const parseGuardOutput = (
     if (!result.success) return undefined;
     const v = result.data;
     const content = Array.isArray(v.content)
-      ? v.content.map((p) => String(p.text)).join("\n")
-      : v.content;
+      ? v.content
+          .flatMap((p: unknown) =>
+            typeof p === "object" && p !== null && "text" in p ? [String(p.text)] : [],
+          )
+          .join("\n")
+      : typeof v.content === "string"
+        ? v.content
+        : JSON.stringify(v.content ?? "");
     return { isError: v.isError, content };
   } catch {
     return undefined;
