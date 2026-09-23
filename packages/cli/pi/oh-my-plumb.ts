@@ -1,4 +1,4 @@
-// oh-my-plumb for Pi.
+// oh-my-plumb for Pi and Oh My Pi, which share this extension API.
 //
 // Pi loads this module into its own process: it subscribes to tool events,
 // runs the same hook script every other host runs, and returns Pi-shaped
@@ -122,6 +122,7 @@ export default function ohMyPlumb(pi) {
 
   // turn_end fires after every model round in Pi; agent_before_settle fires
   // once, when the agent is about to stop, and allows one continuation.
+  // Oh My Pi has no agent_before_settle; its equivalent is session_stop below.
   pi.on("agent_before_settle", async (event, ctx) => {
     try {
       if (event.outcome !== "completed") return;
@@ -148,6 +149,23 @@ export default function ohMyPlumb(pi) {
           ],
           continue: true,
         };
+      }
+    } catch {}
+  });
+  pi.on("session_stop", async (event, ctx) => {
+    try {
+      const out = await runHook(
+        "stop",
+        {
+          session_id: event.session_id ?? ctx.sessionManager?.getSessionId?.() ?? "omp",
+          cwd: ctx.cwd ?? process.cwd(),
+          hook_event_name: "Stop",
+          stop_hook_active: event.stop_hook_active === true,
+        },
+        30_000,
+      );
+      if (out?.decision === "block" && typeof out.reason === "string") {
+        return { decision: "block", reason: out.reason };
       }
     } catch {}
   });

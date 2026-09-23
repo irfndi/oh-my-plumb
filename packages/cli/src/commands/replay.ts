@@ -57,6 +57,11 @@ export const sessionsFor = (
       return opencodeSessionsFor(root, paths[0] ?? opencodeDbPath());
     case "pi":
       return piSessionsFor(root, paths[0] ?? piSessionsDir());
+    case "omp":
+      throw new PlumbError(
+        "HOST_UNSUPPORTED",
+        `replay for ${host} sessions is not implemented yet`,
+      );
     default:
       return assertNever(host);
   }

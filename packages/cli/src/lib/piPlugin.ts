@@ -11,12 +11,13 @@ export const PI_PLUGIN_MARKER = "oh-my-plumb-pi-extension";
  */
 export const piExtensionSourcePath = (): string => path.join(packageRoot(), "pi", "oh-my-plumb.ts");
 
-export const installPiExtension = (target: string): void => {
+/** Pi and Oh My Pi load the same extension; the marker names the host it was installed for. */
+export const installPiExtension = (target: string, host: "pi" | "omp"): void => {
   mkdirSync(path.dirname(target), { recursive: true });
   writeFileSync(
     target,
     [
-      `// ${PI_PLUGIN_MARKER}: written by \`oh-my-plumb init pi\`; remove with \`oh-my-plumb uninstall pi\`.`,
+      `// ${PI_PLUGIN_MARKER}: written by \`oh-my-plumb init ${host}\`; remove with \`oh-my-plumb uninstall ${host}\`.`,
       `export { default } from ${JSON.stringify(pathToFileURL(piExtensionSourcePath()).href)};`,
       "",
     ].join("\n"),

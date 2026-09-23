@@ -18,6 +18,8 @@ export const hostLabel = (host: Host): string => {
       return "OpenCode";
     case "pi":
       return "Pi";
+    case "omp":
+      return "Oh My Pi";
     default:
       return assertNever(host);
   }
@@ -43,6 +45,8 @@ export const hostPresent = (host: Host): boolean => {
       return existsSync(path.join(homeDir(), ".config", "opencode")) || onPath("opencode");
     case "pi":
       return existsSync(path.join(homeDir(), ".pi", "agent", "extensions")) || onPath("pi");
+    case "omp":
+      return existsSync(path.join(homeDir(), ".omp", "agent")) || onPath("omp");
     default:
       return assertNever(host);
   }
@@ -73,6 +77,10 @@ export const installTarget = (host: Host, root: string, project: boolean): strin
       return project
         ? path.join(root, ".pi", "extensions", "oh-my-plumb.ts")
         : path.join(homeDir(), ".pi", "agent", "extensions", "oh-my-plumb.ts");
+    case "omp":
+      return project
+        ? path.join(root, ".omp", "extensions", "oh-my-plumb.ts")
+        : path.join(homeDir(), ".omp", "agent", "extensions", "oh-my-plumb.ts");
     default:
       return assertNever(host);
   }
@@ -103,7 +111,7 @@ export const installHost = (host: Host, root: string, project: boolean): Install
       installOpencodePlugin(target);
       return { host, target, what: "plugin written; OpenCode loads it at the next start" };
     case "pi": {
-      installPiExtension(target);
+      installPiExtension(target, host);
       const what = "extension written; Pi loads it at the next start";
       // Without project trust pi skips .pi/extensions silently, which reads as a broken install.
       if (!project) return { host, target, what };
@@ -115,6 +123,9 @@ export const installHost = (host: Host, root: string, project: boolean): Install
           "Pi only loads a project extension once the project is trusted: accept pi's trust prompt the next time you start pi here. `pi --approve` trusts it for one run without saving that.",
       };
     }
+    case "omp":
+      installPiExtension(target, host);
+      return { host, target, what: "extension written; Oh My Pi loads it at the next start" };
     default:
       return assertNever(host);
   }
@@ -129,6 +140,7 @@ export const uninstallHost = (host: Host, root: string, project: boolean): numbe
     case "opencode":
       return uninstallOpencodePlugin(target) ? 1 : 0;
     case "pi":
+    case "omp":
       return uninstallPiExtension(target) ? 1 : 0;
     default:
       return assertNever(host);

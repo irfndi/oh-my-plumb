@@ -37,6 +37,8 @@ describe("hosts", () => {
     mkdirSync(path.join(home, ".codex"));
     mkdirSync(path.join(home, ".config", "opencode"), { recursive: true });
     expect(detectHosts()).toEqual(["codex", "opencode"]);
+    mkdirSync(path.join(home, ".omp", "agent"), { recursive: true });
+    expect(detectHosts()).toEqual(["codex", "opencode", "omp"]);
   });
 
   it("writes Claude and Codex hooks into their own files and removes only its own entries", () => {
@@ -94,5 +96,20 @@ describe("hosts", () => {
     expect(projectInstall.target).toBe(path.join(root, ".pi", "extensions", "oh-my-plumb.ts"));
     expect(projectInstall.afterwards).toContain("accept pi's trust prompt");
     expect(projectInstall.afterwards).toContain("pi --approve");
+  });
+
+  it("installs Oh My Pi with the Pi extension under omp's own discovery roots", () => {
+    const target = installTarget("omp", root, false);
+    expect(target).toBe(path.join(home, ".omp", "agent", "extensions", "oh-my-plumb.ts"));
+    expect(installTarget("omp", root, true)).toBe(
+      path.join(root, ".omp", "extensions", "oh-my-plumb.ts"),
+    );
+    installHost("omp", root, false);
+    expect(readFileSync(target, "utf8")).toMatch(
+      /export \{ default \} from "file:\/\/.*pi\/oh-my-plumb\.ts"/,
+    );
+    expect(readFileSync(target, "utf8")).toContain("oh-my-plumb uninstall omp");
+    expect(uninstallHost("omp", root, false)).toBe(1);
+    expect(existsSync(target)).toBe(false);
   });
 });
