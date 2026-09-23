@@ -1,6 +1,6 @@
 {
   "name": "oh-my-plumb",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Enforce your own AGENTS.md rules on every edit a coding agent makes.",
   "license": "MIT",
   "repository": {

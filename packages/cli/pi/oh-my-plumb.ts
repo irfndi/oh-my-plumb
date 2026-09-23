@@ -138,7 +138,14 @@ export default function ohMyPlumb(pi) {
       );
       if (out?.decision === "block" && typeof out.reason === "string") {
         return {
-          entries: [{ type: "custom_message", customType: "oh-my-plumb", content: out.reason, display: true }],
+          entries: [
+            {
+              type: "custom_message",
+              customType: "oh-my-plumb",
+              content: out.reason,
+              display: true,
+            },
+          ],
           continue: true,
         };
       }
