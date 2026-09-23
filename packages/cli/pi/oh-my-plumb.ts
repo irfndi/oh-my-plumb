@@ -5,6 +5,8 @@
 // patches. Nothing here may throw into Pi. Every path catches, and the hook
 // script has its own deadline.
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HOOK = fileURLToPath(new URL("../dist/oh-my-plumb-hook.js", import.meta.url));
@@ -61,25 +63,55 @@ const textOf = (content) =>
 
 const EDIT_TOOLS = { edit: true, write: true };
 
+const readOrNull = (file) => {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+};
+
+export const postToolUsePayload = ({ filePath, original, after, sessionId, cwd, toolCallId }) => ({
+  tool_name: "Write",
+  tool_input: { file_path: filePath, content: after },
+  tool_response: { filePath, originalFile: original },
+  session_id: sessionId,
+  cwd,
+  hook_event_name: "PostToolUse",
+  tool_use_id: toolCallId,
+});
+
 export default function ohMyPlumb(pi) {
-  pi.on("tool_result", async (event, ctx) => {
+  // Pi's tool_result carries no original file, so it is read before the tool runs.
+  const originals = new Map();
+
+  pi.on("tool_call", async (event, ctx) => {
     try {
       if (!EDIT_TOOLS[event.toolName]) return;
-      const input = event.input ?? {};
-      const filePath = input.path ?? input.filePath ?? input.file_path ?? "";
+      const filePath = event.input?.path;
       if (typeof filePath !== "string" || filePath === "") return;
-      const sessionId = ctx.sessionManager?.getSessionId?.() ?? "pi";
+      const absolute = path.resolve(ctx.cwd ?? process.cwd(), filePath);
+      originals.set(event.toolCallId, { absolute, original: readOrNull(absolute) });
+    } catch {}
+  });
+
+  pi.on("tool_result", async (event, ctx) => {
+    try {
+      const before = originals.get(event.toolCallId);
+      originals.delete(event.toolCallId);
+      if (!EDIT_TOOLS[event.toolName] || before === undefined || event.isError) return;
+      const after = readOrNull(before.absolute);
+      if (after === null) return;
       const out = await runHook(
         "post-tool-use",
-        {
-          tool_name: event.toolName === "write" ? "Write" : "Edit",
-          tool_input: { file_path: filePath },
-          tool_response: { filePath: filePath },
-          session_id: sessionId,
+        postToolUsePayload({
+          filePath: before.absolute,
+          original: before.original,
+          after,
+          sessionId: ctx.sessionManager?.getSessionId?.() ?? "pi",
           cwd: ctx.cwd ?? process.cwd(),
-          hook_event_name: "PostToolUse",
-          tool_use_id: event.toolCallId,
-        },
+          toolCallId: event.toolCallId,
+        }),
         20_000,
       );
       if (out?.decision === "block" && typeof out.reason === "string") {
@@ -88,8 +120,11 @@ export default function ohMyPlumb(pi) {
     } catch {}
   });
 
-  pi.on("turn_end", async (event, ctx) => {
+  // turn_end fires after every model round in Pi; agent_before_settle fires
+  // once, when the agent is about to stop, and allows one continuation.
+  pi.on("agent_before_settle", async (event, ctx) => {
     try {
+      if (event.outcome !== "completed") return;
       const sessionId = ctx.sessionManager?.getSessionId?.() ?? "pi";
       const out = await runHook(
         "stop",
@@ -102,7 +137,10 @@ export default function ohMyPlumb(pi) {
         30_000,
       );
       if (out?.decision === "block" && typeof out.reason === "string") {
-        pi.sendUserMessage(out.reason, { deliverAs: "followUp" });
+        return {
+          entries: [{ type: "custom_message", customType: "oh-my-plumb", content: out.reason, display: true }],
+          continue: true,
+        };
       }
     } catch {}
   });

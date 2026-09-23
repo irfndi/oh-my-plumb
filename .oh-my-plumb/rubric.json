@@ -1,0 +1,1330 @@
+{
+  "version": 1,
+  "compiledAt": "2026-09-23T00:00:00.000Z",
+  "compiledBy": "claude",
+  "sources": [
+    {
+      "path": "AGENTS.md",
+      "sha": "8bc675e28634bf49c413585fde68c2102dfc6ee5246dade9a9c87db941fa55cf",
+      "scope": "**/*"
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha": "d4bbffd5374e4d5654d45971aeaddb019da577bfb64e9d1581cb2c5fa434b8cb",
+      "scope": "**/*"
+    }
+  ],
+  "rules": [
+    {
+      "id": "hook-nonzero-exit",
+      "text": "Every hook path exits 0.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 7
+      },
+      "scope": [
+        "packages/cli/src/hooks/**",
+        "packages/cli/src/bin/oh-my-plumb-hook.ts",
+        "packages/cli/pi/**"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add a hook code path that can exit with a nonzero code or let an exception escape uncaught: process.exit(1), process.exitCode = 1, a throw with no surrounding catch, a rejected promise left unhandled?",
+          "criteria": {
+            "true": "if (!payload) process.exit(1)",
+            "false": "try { ... } catch (e) { log(e) } finally { process.exit(0) }"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 3,
+        "median": 0.1,
+        "min": 0.04,
+        "max": 0.11,
+        "fired": 0,
+        "verdict": "skipped"
+      }
+    },
+    {
+      "id": "hook-unbounded-time",
+      "text": "Every hook path bounds its own time.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 7
+      },
+      "scope": [
+        "packages/cli/src/hooks/**",
+        "packages/cli/src/bin/oh-my-plumb-hook.ts",
+        "packages/cli/pi/**"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add a network call, subprocess, or wait in a hook with no timeout, AbortSignal, or deadline that bounds how long it can run?",
+          "criteria": {
+            "true": "await fetch(url, { body })",
+            "false": "await fetch(url, { body, signal: AbortSignal.timeout(4000) })"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 3,
+        "median": 0.08,
+        "min": 0.02,
+        "max": 0.66,
+        "fired": 0,
+        "verdict": "skipped"
+      }
+    },
+    {
+      "id": "hook-stdout-chatter",
+      "text": "Writes nothing to stdout but the JSON the host expects.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 7
+      },
+      "scope": [
+        "packages/cli/src/hooks/**",
+        "packages/cli/src/bin/oh-my-plumb-hook.ts",
+        "packages/cli/pi/**"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change make a hook write to stdout anything other than the final JSON response: console.log, process.stdout.write of progress text, a debug print?",
+          "criteria": {
+            "true": "console.log('checking rules...')",
+            "false": "console.error('checking rules...'); process.stdout.write(JSON.stringify(result))"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 3,
+        "median": 0.13,
+        "min": 0.05,
+        "max": 0.13,
+        "fired": 0,
+        "verdict": "skipped"
+      }
+    },
+    {
+      "id": "no-hardcoded-secret",
+      "text": "No secrets in this repo, ever.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 8
+      },
+      "check": {
+        "type": "lint",
+        "how": "secret scanner (gitleaks) or grep for key-shaped literals",
+        "pattern": "(sk|tsk|key)[-_][A-Za-z0-9]{24,}"
+      },
+      "status": "active"
+    },
+    {
+      "id": "api-key-as-flag",
+      "text": "Never accept it [the API key] as a flag — a flag lands in shell history and in CI logs.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 8
+      },
+      "scope": [
+        "packages/cli/**"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add a command-line flag or argument that takes an API key, token, or secret value?",
+          "criteria": {
+            "true": "--api-key <key>",
+            "false": "reading process.env.TYPESAFE_API_KEY"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 13,
+        "median": 0.02,
+        "min": 0.02,
+        "max": 0.03,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "api-key-logged",
+      "text": "Never log it [the API key].",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 8
+      },
+      "scope": [
+        "packages/**/*.ts"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change write an API key, token, auth header, or the env object holding them to a log, console, error message, or output?",
+          "criteria": {
+            "true": "console.error('auth failed', { apiKey })",
+            "false": "console.error('auth failed: key missing')"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 10,
+        "median": 0.02,
+        "min": 0.02,
+        "max": 0.04,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "api-key-written-elsewhere",
+      "text": "~/.oh-my-plumb/.env ... is the only file oh-my-plumb may ever write a key to.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 8
+      },
+      "scope": [
+        "packages/**/*.ts"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change write an API key or token to any file other than ~/.oh-my-plumb/.env, or write that file without owner-only permissions (mode 0o600)?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 10,
+        "median": 0.025,
+        "min": 0.02,
+        "max": 0.04,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "verify-before-done",
+      "text": "Verify before claiming done: tests green, pnpm build + typecheck clean, and the end-to-end path exercised against live Jev.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 9
+      },
+      "check": {
+        "type": "unenforceable",
+        "reason": "about the process before finishing, not the code"
+      },
+      "status": "active"
+    },
+    {
+      "id": "no-ai-attribution",
+      "text": "No AI attribution in commits or pull requests.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 10
+      },
+      "check": {
+        "type": "unenforceable",
+        "reason": "lives in commit messages and PR text, which edits do not show"
+      },
+      "status": "active"
+    },
+    {
+      "id": "humanize-user-facing-words",
+      "text": "Pass user-facing words through the humanizer before shipping them.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 11
+      },
+      "check": {
+        "type": "unenforceable",
+        "reason": "about a process step, not something visible in a diff"
+      },
+      "status": "active"
+    },
+    {
+      "id": "state-assumptions",
+      "text": "State your assumptions explicitly. If uncertain, ask.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 25
+      },
+      "check": {
+        "type": "unenforceable",
+        "reason": "about the conversation, not the code"
+      },
+      "status": "active"
+    },
+    {
+      "id": "present-interpretations",
+      "text": "If multiple interpretations exist, present them - don't pick silently.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 26
+      },
+      "check": {
+        "type": "unenforceable",
+        "reason": "about the conversation, not the code"
+      },
+      "status": "active"
+    },
+    {
+      "id": "say-simpler-approach",
+      "text": "If a simpler approach exists, say so. Push back when warranted.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 27
+      },
+      "check": {
+        "type": "unenforceable",
+        "reason": "about the conversation, not the code"
+      },
+      "status": "active"
+    },
+    {
+      "id": "stop-when-unclear",
+      "text": "If something is unclear, stop. Name what's confusing. Ask.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 28
+      },
+      "check": {
+        "type": "unenforceable",
+        "reason": "about the conversation, not the code"
+      },
+      "status": "active"
+    },
+    {
+      "id": "scope-creep",
+      "text": "No features beyond what was asked.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 34
+      },
+      "when": "turn",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add a feature, command, option, or file that is unrelated to the main purpose the rest of the change serves?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 8,
+        "median": 0.045,
+        "min": 0.03,
+        "max": 0.08,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "single-use-abstraction",
+      "text": "No abstractions for single-use code.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 35
+      },
+      "when": "turn",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add a new function, class, type, or module that has exactly one caller or one implementation and only wraps or forwards to other code?",
+          "criteria": {
+            "true": "a new makeClient() used once that just calls new Client(opts)",
+            "false": "a helper called from three places"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 8,
+        "median": 0.02,
+        "min": 0.02,
+        "max": 0.04,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "unrequested-configurability",
+      "text": "No \"flexibility\" or \"configurability\" that wasn't requested.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 36
+      },
+      "when": "turn",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add parameters, options, env vars, or config fields that every caller in the change passes the same value to, or that nothing sets?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 8,
+        "median": 0.17,
+        "min": 0.03,
+        "max": 0.34,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "impossible-error-handling",
+      "text": "No error handling for impossible scenarios.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 37
+      },
+      "scope": [
+        "**/*.ts",
+        "**/*.tsx"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add a check, try/catch, or fallback for a case the surrounding types or control flow already rule out: a null check on a non-nullable value, a catch around code that cannot throw, a default for an exhaustive switch already covered?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 11,
+        "median": 0.08,
+        "min": 0.03,
+        "max": 0.29,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "overlong-change",
+      "text": "If you write 200 lines and it could be 50, rewrite it.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 38
+      },
+      "when": "turn",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "score",
+          "instructions": "How long is this change compared with the shortest code that would do the same thing?",
+          "criteria": [
+            "as short as it can be",
+            "somewhat longer than needed",
+            "about twice as long",
+            "several times longer"
+          ],
+          "violatingFrom": 2
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 8,
+        "median": 0.04,
+        "min": 0.02,
+        "max": 0.19,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "overcomplicated",
+      "text": "Ask yourself: \"Would a senior engineer say this is overcomplicated?\" If yes, simplify.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 40
+      },
+      "when": "turn",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Would a senior engineer reviewing this change say it is overcomplicated: layers of indirection, generic machinery, or state that a direct version would not need?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 8,
+        "median": 0.10500000000000001,
+        "min": 0.04,
+        "max": 0.35,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "improve-adjacent-code",
+      "text": "Don't \"improve\" adjacent code, comments, or formatting.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 48
+      },
+      "when": "turn",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change reword comments, reformat, or rename in lines unrelated to the change's main purpose?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 8,
+        "median": 0.05,
+        "min": 0.03,
+        "max": 0.34,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "compact-blank-lines",
+      "text": "Preserve intentional blank lines between methods and logical blocks. Do not compact whitespace to reduce line count.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 49
+      },
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Among the removed lines, is there at least one blank line separating methods or logical blocks that was deleted without the surrounding code otherwise changing?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 20,
+        "median": 0.065,
+        "min": 0.03,
+        "max": 0.36,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "refactor-unbroken",
+      "text": "Don't refactor things that aren't broken.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 50
+      },
+      "when": "turn",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change restructure existing working code (move, split, merge, rewrite functions) in a way the change's main purpose does not require?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 8,
+        "median": 0.05,
+        "min": 0.02,
+        "max": 0.1,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "match-existing-style",
+      "text": "Match existing style, even if you'd do it differently.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 51
+      },
+      "check": {
+        "type": "deferred",
+        "reason": "needs the rest of the file or repository to know the existing style"
+      },
+      "status": "active"
+    },
+    {
+      "id": "delete-unrelated-dead-code",
+      "text": "If you notice unrelated dead code, mention it - don't delete it.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 52
+      },
+      "when": "turn",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change delete functions, exports, or files that the rest of the change never touched or referenced?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 8,
+        "median": 0.05,
+        "min": 0.03,
+        "max": 0.08,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "remove-own-orphans",
+      "text": "Remove imports/variables/functions that YOUR changes made unused.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 56
+      },
+      "scope": [
+        "**/*.ts",
+        "**/*.tsx"
+      ],
+      "check": {
+        "type": "lint",
+        "how": "@typescript-eslint/no-unused-vars / tsc noUnusedLocals"
+      },
+      "status": "active"
+    },
+    {
+      "id": "keep-preexisting-dead-code",
+      "text": "Don't remove pre-existing dead code unless asked.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 57
+      },
+      "check": {
+        "type": "unenforceable",
+        "reason": "'unless asked' depends on the conversation; the diff side is covered by delete-unrelated-dead-code"
+      },
+      "status": "active"
+    },
+    {
+      "id": "verifiable-goals",
+      "text": "Transform tasks into verifiable goals.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 65
+      },
+      "check": {
+        "type": "unenforceable",
+        "reason": "about how the agent plans, not the code"
+      },
+      "status": "active"
+    },
+    {
+      "id": "validation-without-tests",
+      "text": "\"Add validation\" → \"Write tests for invalid inputs, then make them pass\"",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 67
+      },
+      "when": "turn",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add input validation or parsing rules without adding or changing any test file?",
+          "criteria": {
+            "true": "a new zod refine in src/ and no *.test.ts touched",
+            "false": "a new zod refine plus a test feeding it invalid input"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 8,
+        "median": 0.02,
+        "min": 0.02,
+        "max": 0.05,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "fix-without-test",
+      "text": "\"Fix the bug\" → \"Write a test that reproduces it, then make it pass\"",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 68
+      },
+      "when": "turn",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change fix incorrect behaviour in source code without adding or changing any test file?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 8,
+        "median": 0.5800000000000001,
+        "min": 0.08,
+        "max": 0.73,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "refactor-tests-pass",
+      "text": "\"Refactor X\" → \"Ensure tests pass before and after\"",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 69
+      },
+      "check": {
+        "type": "unenforceable",
+        "reason": "about running tests, not the code"
+      },
+      "status": "active"
+    },
+    {
+      "id": "state-a-plan",
+      "text": "For multi-step tasks, state a brief plan.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 71
+      },
+      "check": {
+        "type": "unenforceable",
+        "reason": "about the conversation, not the code"
+      },
+      "status": "active"
+    },
+    {
+      "id": "comment-volume",
+      "text": "Default to no comment.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 83
+      },
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "score",
+          "instructions": "How many comments do the added lines contain?",
+          "criteria": [
+            "no comments",
+            "one or two short comments",
+            "several comments, or a multi-line block",
+            "most lines carry a comment"
+          ],
+          "violatingFrom": 2
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 20,
+        "median": 0.01,
+        "min": 0,
+        "max": 0.99,
+        "fired": 4,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "narrating-comment",
+      "text": "Don't narrate what the code does — the reader sees the map, the switch, the names.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 85
+      },
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Among the added lines, is there at least one comment whose content a reader could reconstruct from the code directly next to it?",
+          "criteria": {
+            "true": "// loop over rules and check each one\nfor (const rule of rules) check(rule)",
+            "false": "// hosts kill hooks after 5s, so stay under it\nconst DEADLINE_MS = 4000"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 20,
+        "median": 0.22,
+        "min": 0.06,
+        "max": 0.81,
+        "fired": 2,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "comment-without-why",
+      "text": "Comment only the non-obvious: a reason, a gotcha, a workaround, a constraint, a \"looks wrong but isn't.\"",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 86
+      },
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Among the added lines, is there a comment that gives no reason, gotcha, workaround, or constraint — only a label, a section header, or a description?",
+          "criteria": {
+            "true": "// Helpers",
+            "false": "// npm strips ./ from bin paths"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 20,
+        "median": 0.195,
+        "min": 0.06,
+        "max": 0.69,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "comment-instead-of-rename",
+      "text": "If code needs a comment to be understood, first make the code clearer (rename, extract).",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 87
+      },
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add a comment that explains what a variable, function, or expression means, where a clearer name or an extracted function would say the same thing?",
+          "criteria": {
+            "true": "const t = 4000 // timeout in ms",
+            "false": "const timeoutMs = 4000"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 20,
+        "median": 0.035,
+        "min": 0.01,
+        "max": 0.28,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "delete-restating-comments",
+      "text": "Delete comments that restate the adjacent line.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 88
+      },
+      "check": {
+        "type": "deferred",
+        "reason": "asks to remove comments that already exist; a diff of new lines cannot show what was left in place"
+      },
+      "status": "active"
+    },
+    {
+      "id": "comment-earns-place",
+      "text": "Every comment must earn its place: if you can't name what it tells the reader that the code doesn't, drop it.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 89
+      },
+      "check": {
+        "type": "unenforceable",
+        "reason": "a self-test for the author; the diff side is covered by comment-without-why"
+      },
+      "status": "active"
+    },
+    {
+      "id": "if-else-over-union",
+      "text": "Never use if/else-if chains for mutually-exclusive variants.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 95
+      },
+      "scope": [
+        "**/*.ts",
+        "**/*.tsx"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add an if / else-if chain that branches on the discriminant (type, kind, status, code) of a union or enum instead of a switch?",
+          "criteria": {
+            "true": "if (r.type === 'lint') ... else if (r.type === 'model') ...",
+            "false": "switch (r.type) { case 'lint': ...; default: return assertNever(r) }"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 11,
+        "median": 0.05,
+        "min": 0.02,
+        "max": 0.28,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "switch-without-assertnever",
+      "text": "Closed sets use an exhaustive switch + assertNever ... end with default: return assertNever(value).",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 95
+      },
+      "scope": [
+        "**/*.ts",
+        "**/*.tsx"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add a switch over a union or enum discriminant whose default branch is missing or does something other than call assertNever?",
+          "criteria": {
+            "true": "switch (kind) { case 'a': ...; default: return null }",
+            "false": "switch (kind) { case 'a': ...; default: return assertNever(kind) }"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 11,
+        "median": 0.05,
+        "min": 0.03,
+        "max": 0.13,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "scattered-status-checks",
+      "text": "When behavior depends on several related status checks, derive one closed decision/status type and switch over that — don't scatter conditionals through a method.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 95
+      },
+      "scope": [
+        "**/*.ts",
+        "**/*.tsx"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add three or more separate if-conditions in one function that test related status flags, instead of deriving one status value and switching on it?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 11,
+        "median": 0.03,
+        "min": 0.01,
+        "max": 0.63,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "single-assertnever",
+      "text": "Define assertNever once in the schema package's utils and import it everywhere.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 95
+      },
+      "scope": [
+        "packages/cli/**"
+      ],
+      "check": {
+        "type": "lint",
+        "how": "no-restricted-syntax on a declaration named assertNever outside packages/schema",
+        "pattern": "(const|function)\\s+assertNever\\b"
+      },
+      "status": "active"
+    },
+    {
+      "id": "no-interface",
+      "text": "Use type, not interface.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 103
+      },
+      "scope": [
+        "**/*.ts",
+        "**/*.tsx"
+      ],
+      "check": {
+        "type": "lint",
+        "how": "@typescript-eslint/consistent-type-definitions",
+        "pattern": "^\\s*(export\\s+)?(declare\\s+)?interface\\s+[A-Za-z_$]"
+      },
+      "status": "active"
+    },
+    {
+      "id": "optional-field-soup",
+      "text": "Discriminated unions for state — every multi-shape value carries a type/kind discriminant. No optional-field soup where one shape is meant.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 104
+      },
+      "scope": [
+        "**/*.ts",
+        "**/*.tsx"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add a type with two or more optional fields that are meant to be set in different situations, with no type or kind field saying which shape it is?",
+          "criteria": {
+            "true": "type Check = { pattern?: string; question?: Question; reason?: string }",
+            "false": "type Check = { type: 'lint'; pattern: string } | { type: 'model'; question: Question }"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 11,
+        "median": 0.07,
+        "min": 0.03,
+        "max": 0.31,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "no-type-cast",
+      "text": "No type casting. as is a bug until proven otherwise. (as const and zod .parse() outputs are fine.)",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 105
+      },
+      "scope": [
+        "**/*.ts",
+        "**/*.tsx"
+      ],
+      "check": {
+        "type": "lint",
+        "how": "@typescript-eslint/consistent-type-assertions (assertionStyle: never, as const allowed)",
+        "pattern": "\\bas\\s+(?!const\\b)[A-Za-z_{\\[]"
+      },
+      "status": "active"
+    },
+    {
+      "id": "untyped-expected-failure",
+      "text": "Expected failures use typed domain errors with a stable machine-readable code (SCREAMING_SNAKE_CASE) callers can switch on exhaustively.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 106
+      },
+      "scope": [
+        "**/*.ts",
+        "**/*.tsx"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Among the added lines, is there a `throw new Error(` or `new Error(` whose message describes an expected failure such as a missing file, bad input, or refused request?",
+          "criteria": {
+            "true": "throw new Error('rubric not found')",
+            "false": "throw new RubricError('RUBRIC_NOT_FOUND', 'rubric not found')"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 11,
+        "median": 0.03,
+        "min": 0.02,
+        "max": 0.04,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "error-message-punctuation",
+      "text": "Concise messages, no terminal punctuation.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 106
+      },
+      "scope": [
+        "**/*.ts",
+        "**/*.tsx"
+      ],
+      "check": {
+        "type": "lint",
+        "how": "no-restricted-syntax on Error message literals ending in . or !",
+        "pattern": "new\\s+\\w*Error\\([^)]*[.!][\"'`]\\s*[,)]"
+      },
+      "status": "active"
+    },
+    {
+      "id": "single-id-owner",
+      "text": "Deterministic ID/key formats have a single owner: one named creation function per format. Never inline-format the same ID in two places.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 107
+      },
+      "check": {
+        "type": "deferred",
+        "reason": "needs the rest of the repository to know whether the format already has an owner"
+      },
+      "status": "active"
+    },
+    {
+      "id": "unparsed-boundary",
+      "text": "Anything crossing a process/API boundary is zod-parsed at the edge.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 108
+      },
+      "scope": [
+        "**/*.ts",
+        "**/*.tsx"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change use data from JSON.parse, a fetch response, stdin, a file read, or process.env without passing it through a zod schema .parse / .safeParse first?",
+          "criteria": {
+            "true": "const payload = JSON.parse(stdin); run(payload.tool_name)",
+            "false": "const payload = HookPayload.parse(JSON.parse(stdin))"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 11,
+        "median": 0.09,
+        "min": 0.02,
+        "max": 0.96,
+        "fired": 2,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "no-adhoc-revalidation",
+      "text": "Internal code trusts parsed types, never re-validates ad hoc.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 108
+      },
+      "check": {
+        "type": "deferred",
+        "reason": "needs to know whether the value was already parsed upstream"
+      },
+      "status": "active"
+    },
+    {
+      "id": "no-coldtea",
+      "text": "Zero Coldtea dependency. Nothing here may require Coldtea to be installed, running, or reachable.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 113
+      },
+      "check": {
+        "type": "lint",
+        "how": "no-restricted-imports / grep",
+        "pattern": "(?i)coldtea"
+      },
+      "status": "active"
+    },
+    {
+      "id": "verdict-without-rule",
+      "text": "Every verdict must trace to a named rule a person can read and rewrite.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 114
+      },
+      "scope": [
+        "packages/**/*.ts"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change produce or report a verdict, finding, or violation that does not carry the id of the rule it came from?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 10,
+        "median": 0.16,
+        "min": 0.07,
+        "max": 0.5,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "built-in-rules",
+      "text": "No default rules. Rules come only from the user's own instruction files.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 115
+      },
+      "scope": [
+        "packages/**/*.ts"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add a rule, ruleset, or check that ships with the tool itself rather than coming from a user's instruction file?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 10,
+        "median": 0.5700000000000001,
+        "min": 0.04,
+        "max": 0.93,
+        "fired": 2,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "threshold-at-half",
+      "text": "Band verdicts, never threshold at 0.5. Act above a high score, flag the middle, ignore below.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 116
+      },
+      "scope": [
+        "packages/**/*.ts"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change turn a model score into a verdict with a single cut-off (such as >= 0.5) instead of separate high and low bands with a middle band for the human?",
+          "criteria": {
+            "true": "return score >= 0.5 ? 'violation' : 'ok'",
+            "false": "score >= HIGH ? 'violation' : score <= LOW ? 'ok' : 'flag'"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 10,
+        "median": 0.03,
+        "min": 0.02,
+        "max": 0.08,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "trim-rule-instructions",
+      "text": "Trim instructions for tokens as well as for readability, and use scope globs to keep out-of-scope questions out of the request entirely.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 117
+      },
+      "check": {
+        "type": "unenforceable",
+        "reason": "guidance for writing rubric text, not code"
+      },
+      "status": "active"
+    },
+    {
+      "id": "lint-rule-to-model",
+      "text": "A rule a linter can enforce exactly, for free, must never be sent to a model.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 118
+      },
+      "scope": [
+        "packages/**/*.ts"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change send rules whose check type is lint, deferred, or unenforceable into a model or judge request?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-22T23:41:21.837Z",
+        "hunks": 10,
+        "median": 0.095,
+        "min": 0.05,
+        "max": 0.27,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    }
+  ]
+}
