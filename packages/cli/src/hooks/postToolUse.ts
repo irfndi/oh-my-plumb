@@ -10,7 +10,6 @@ import {
 } from "oh-my-plumb-schema";
 import { runCheck, type CheckOutcome } from "../lib/checkRunner.js";
 import { fastCheck } from "../lib/tier1.js";
-import { tier2Check } from "../lib/tier2.js";
 import { readTier2Routes, routesForFile, runGuard, type GuardHit } from "../lib/guards.js";
 import { EDIT_CHECK_TIMEOUT_MS, MAX_BLOCKS_PER_RULE_PER_TURN } from "../lib/constants.js";
 import { hasApiKey } from "../lib/credentials.js";
@@ -73,10 +72,7 @@ export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
   if (checkable.length === 0) return { kind: "silent" };
   const files = checkable.map((c) => c.relative);
 
-  const tier2Hits = checkable.flatMap(({ edit, relative }) => {
-    const hit = tier2Check(input.tool_name, relative, edit.after);
-    return hit === undefined ? [] : [{ relative, hit }];
-  });
+  const tier2Hits: { relative: string; hit: GuardHit }[] = [];
   const routes = readTier2Routes(root);
   if (routes.length > 0) {
     const external = await Promise.all(
