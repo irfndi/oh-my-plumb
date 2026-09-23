@@ -130,7 +130,6 @@ describe("phase 3 guards", () => {
     });
     expect(guards.parseGuardOutput("not json")).toBeUndefined();
     expect(guards.parseGuardOutput('{"content":"x"}')).toBeUndefined();
-    // isError with a missing or odd content shape still blocks, never silently passes.
     expect(guards.parseGuardOutput('{"isError":true}')).toEqual({ isError: true, content: '""' });
     expect(
       guards.parseGuardOutput('{"isError":true,"content":[{"text":"a"},{"x":1},null,{"text":2}]}'),

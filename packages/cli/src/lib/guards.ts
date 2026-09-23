@@ -21,8 +21,7 @@ import { z } from "zod";
  * this module executes it. rubric.json stays the Tier-3 store.
  */
 
-// content stays unknown: a guard that reports isError with an odd content shape
-// must still block, so normalization below tolerates anything.
+// Rejecting an odd content shape would turn an isError hit into a silent pass.
 const guardOutputSchema = z.object({ isError: z.boolean(), content: z.unknown().optional() });
 
 export type McpRoute = { server: string; tool: string; command: string[] };
