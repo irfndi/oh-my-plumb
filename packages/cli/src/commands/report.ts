@@ -1,6 +1,8 @@
 import { parseArgs } from "node:util";
 import type { PlumbEvent, Rule } from "oh-my-plumb-schema";
+import { detectStack } from "../lib/detect.js";
 import { readEvents } from "../lib/events.js";
+import { readTier2Routes, routeGaps } from "../lib/guards.js";
 import { loadRules } from "../lib/loadRules.js";
 import { findRepoRoot } from "../lib/paths.js";
 import { say } from "../lib/ui.js";
@@ -47,7 +49,19 @@ export const collectReport = (root: string): ReportData | undefined => {
       s.flagged === 0
     );
   });
-  return { root, rules: loaded.rules, events, stats, dead, problems: loaded.problems };
+  const mcpServers = detectStack(root).mcpServers;
+  const missingRoutes = readTier2Routes(root)
+    .map((route) => ({ trigger: route.trigger, gaps: routeGaps(root, route, mcpServers) }))
+    .filter((route) => route.gaps.length > 0);
+  return {
+    root,
+    rules: loaded.rules,
+    events,
+    stats,
+    dead,
+    problems: loaded.problems,
+    missingRoutes,
+  };
 };
 
 /** Rules, calibration, and what has fired so far in this repository. */

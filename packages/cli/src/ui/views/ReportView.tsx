@@ -16,6 +16,7 @@ export type ReportData = {
   stats: Map<string, RuleStats>;
   dead: Rule[];
   problems: string[];
+  missingRoutes: { trigger: string; gaps: string[] }[];
 };
 
 type Check = Extract<PlumbEvent, { kind: "check" }>;
@@ -66,6 +67,26 @@ export function ReportView({ data }: { data: ReportData }) {
           <Text color={palette.mist}>{p}</Text>
         </Callout>
       ))}
+
+      {data.missingRoutes.length > 0 ? (
+        <Callout
+          tone="warn"
+          title={`${data.missingRoutes.length} ${data.missingRoutes.length === 1 ? "route points" : "routes point"} at a guard that is not here`}
+        >
+          {data.missingRoutes.map((m) => (
+            <Text key={m.trigger} color={palette.cloud}>
+              {m.trigger}
+              <Text color={palette.ash}>
+                {"  "}
+                {m.gaps.join(`  ${glyph.dotSep}  `)}
+              </Text>
+            </Text>
+          ))}
+          <Text color={palette.mist}>
+            Run oh-my-plumb init to write routes only for the guards you have.
+          </Text>
+        </Callout>
+      ) : null}
 
       <Section title="Rules">
         <Buckets rules={data.rules} />
