@@ -298,7 +298,8 @@ describe("opencode v2 plugin", () => {
     // The real turn-start ran: the prompt it recorded is on disk for stop to read.
     expect(
       readFileSync(
-        path.join(home, ".oh-my-plumb", "sessions", "v2-turn", "turn", "prompt"),
+        // Each prompt is its own turn: the first is turn-1.
+        path.join(home, ".oh-my-plumb", "sessions", "v2-turn", "turn-1", "prompt"),
         "utf8",
       ),
     ).toBe("start");
@@ -321,6 +322,15 @@ describe("opencode v2 plugin", () => {
     expect(followup?.role).toBe("user");
     expect(JSON.stringify(followup)).toContain("oh-my-plumb:");
     expect(JSON.stringify(followup)).toContain("no-loose-interfaces");
+    // A turn that fails again gets its one note too, never skipped every other turn.
+    canned.reply = JSON.stringify({ decision: "block", reason: "oh-my-plumb: again" });
+    messages.push({ role: "assistant", content: [{ type: "text", text: "done again" }] });
+    messages.push({ role: "user", content: [{ type: "text", text: "third" }] });
+    await hooks.session.get("context")?.(turnRequest("v2-turn", messages));
+    canned.reply = undefined;
+    expect(messages.filter((m) => JSON.stringify(m).includes("oh-my-plumb: again"))).toHaveLength(
+      1,
+    );
   }, 60_000);
 
   it("the real turn check runs against the turn's edits, and a miss only logs", async () => {
@@ -340,6 +350,20 @@ describe("opencode v2 plugin", () => {
 
     // Without a key the turn check logs the miss and passes: no note, no throw.
     expect(messages).toHaveLength(3);
+    // The second prompt is its own turn, so the next check reads this task, not the first.
+    expect(
+      readFileSync(
+        path.join(
+          process.env.OH_MY_PLUMB_HOME_DIR ?? "",
+          ".oh-my-plumb",
+          "sessions",
+          "v2-real",
+          "turn-2",
+          "prompt",
+        ),
+        "utf8",
+      ),
+    ).toBe("next");
     const skips = readEvents(root).filter(
       (event) => event.kind === "skip" && event.phase === "turn" && event.sessionId === "v2-real",
     );

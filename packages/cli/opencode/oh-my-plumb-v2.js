@@ -57,7 +57,7 @@ export default {
     const state = (sessionID) => {
       let s = sessions.get(sessionID);
       if (s === undefined) {
-        s = { started: false, boundary: undefined, followups: 0 };
+        s = { started: false, boundary: undefined, turn: 0, turnId: undefined };
         sessions.set(sessionID, s);
       }
       return s;
@@ -89,6 +89,7 @@ export default {
             tool_name: tool,
             tool_input: event.input ?? {},
             session_id: event.sessionID,
+            prompt_id: sessions.get(event.sessionID)?.turnId,
             cwd: directory,
             hook_event_name: "PreToolUse",
             tool_use_id: event.id,
@@ -157,6 +158,7 @@ export default {
           {
             ...payload,
             session_id: sessionID,
+            prompt_id: sessions.get(sessionID)?.turnId,
             cwd: directory,
             hook_event_name: "PostToolUse",
             tool_use_id: event.id,
@@ -204,21 +206,29 @@ export default {
               session_id: sessionID,
               cwd: directory,
               hook_event_name: "Stop",
-              stop_hook_active: s.followups > 0,
+              prompt_id: s.turnId,
+              stop_hook_active: false,
             },
             30_000,
           );
-          if (out?.decision === "block" && typeof out.reason === "string" && s.followups < 1) {
-            s.followups = 1;
+          // One repair note per turn: this hook runs once per user prompt, never for the note itself.
+          if (out?.decision === "block" && typeof out.reason === "string") {
             messages.splice(messages.length - 1, 0, note(out.reason));
-          } else {
-            s.followups = 0;
           }
         }
         s.boundary = boundary;
+        // Each prompt is its own turn, so the next Stop judges against this prompt, not the first one.
+        s.turn += 1;
+        s.turnId = `turn-${s.turn}`;
         await runHook(
           "turn-start",
-          { session_id: sessionID, cwd: directory, hook_event_name: "UserPromptSubmit", prompt },
+          {
+            session_id: sessionID,
+            prompt_id: s.turnId,
+            cwd: directory,
+            hook_event_name: "UserPromptSubmit",
+            prompt,
+          },
           10_000,
         );
       } catch {}

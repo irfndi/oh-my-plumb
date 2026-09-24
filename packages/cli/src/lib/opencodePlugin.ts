@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { packageRoot } from "./packageRoot.js";
+import { homeDir } from "./paths.js";
 
 export const OPENCODE_PLUGIN_MARKER = "oh-my-plumb-opencode-plugin";
 
@@ -13,6 +14,8 @@ export const OPENCODE_PLUGIN_MARKER = "oh-my-plumb-opencode-plugin";
  */
 export const opencodeIsV2 = (): boolean => {
   if (spawnSync("which", ["opencode2"], { encoding: "utf8" }).status === 0) return true;
+  // v2 unpacks here before a shell has it on PATH; only v2 uses this directory.
+  if (existsSync(path.join(homeDir(), ".opencode", "bin", "opencode"))) return true;
   const probe = spawnSync("opencode", ["--version"], { encoding: "utf8", timeout: 5_000 });
   if (probe.status !== 0) return false;
   const match = /(\d+)\.\d+\.\d+/.exec(probe.stdout ?? "");
