@@ -102,9 +102,19 @@ export const installHost = (host: Host, root: string, project: boolean): Install
     case "opencode":
       installOpencodePlugin(target);
       return { host, target, what: "plugin written; OpenCode loads it at the next start" };
-    case "pi":
+    case "pi": {
       installPiExtension(target);
-      return { host, target, what: "extension written; Pi loads it at the next start" };
+      const what = "extension written; Pi loads it at the next start";
+      // Without project trust pi skips .pi/extensions silently, which reads as a broken install.
+      if (!project) return { host, target, what };
+      return {
+        host,
+        target,
+        what,
+        afterwards:
+          "Pi only loads a project extension once the project is trusted: accept pi's trust prompt the next time you start pi here. `pi --approve` trusts it for one run without saving that.",
+      };
+    }
     default:
       return assertNever(host);
   }

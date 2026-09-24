@@ -7,6 +7,7 @@ import { Header } from "../components/Header.js";
 import { RuleTable, type RuleStats } from "../components/RuleTable.js";
 import { Section } from "../components/Section.js";
 import { median, ms, usd } from "../../lib/ui.js";
+import type { PiTrustState } from "../../lib/piTrust.js";
 import { glyph, palette } from "../theme.js";
 
 export type ReportData = {
@@ -17,6 +18,8 @@ export type ReportData = {
   dead: Rule[];
   problems: string[];
   missingRoutes: { trigger: string; gaps: string[] }[];
+  /** pi's verdict on this project, or null when no project-level pi extension is installed. */
+  piTrust: PiTrustState | null;
 };
 
 type Check = Extract<PlumbEvent, { kind: "check" }>;
@@ -62,6 +65,22 @@ export function ReportView({ data }: { data: ReportData }) {
   return (
     <Box flexDirection="column">
       <Header command="report" where={data.root} />
+      {data.piTrust !== null && data.piTrust !== "trusted" ? (
+        <Callout
+          tone="warn"
+          title={
+            data.piTrust === "untrusted"
+              ? "Pi has not approved this project, so the extension stays unloaded"
+              : "Not sure whether Pi approved this project"
+          }
+        >
+          <Text color={palette.cloud}>
+            Accept Pi's trust prompt the next time you start Pi here.{" "}
+            <Text color={palette.ceramic}>pi --approve</Text> trusts it for one run without saving
+            that.
+          </Text>
+        </Callout>
+      ) : null}
       {data.problems.map((p) => (
         <Callout key={p} tone="warn" title="A rubric could not be read and is being ignored">
           <Text color={palette.mist}>{p}</Text>

@@ -1,10 +1,13 @@
+import { existsSync } from "node:fs";
 import { parseArgs } from "node:util";
 import type { PlumbEvent, Rule } from "oh-my-plumb-schema";
 import { detectStack } from "../lib/detect.js";
 import { readEvents } from "../lib/events.js";
 import { guardRoutes, routeGaps } from "../lib/guards.js";
 import { loadRubric } from "../lib/loadRubric.js";
+import { installTarget } from "../lib/hosts.js";
 import { findRepoRoot } from "../lib/paths.js";
+import { readPiTrust } from "../lib/piTrust.js";
 import { say } from "../lib/ui.js";
 import type { RuleStats } from "../ui/components/RuleTable.js";
 import { showStatic } from "../ui/render.js";
@@ -61,6 +64,8 @@ export const collectReport = (root: string): ReportData | undefined => {
     dead,
     problems: loaded.problems,
     missingRoutes,
+    // Project trust gates pi's project extension; global installs need no decision.
+    piTrust: existsSync(installTarget("pi", root, true)) ? readPiTrust(root) : null,
   };
 };
 
