@@ -112,28 +112,26 @@ export type Installed = { host: Host; target: string; what: string; afterwards?:
 export const installHost = (host: Host, root: string, project: boolean): Installed => {
   const target = installTarget(host, root, project);
   switch (host) {
-    case "claude":
-      installHooks(
-        target,
-        hookSpecs(hookScriptPath(), { host, toolCallRules: hasToolCallRule(root) }),
-      );
+    case "claude": {
+      const specs = hookSpecs(hookScriptPath(), { host, toolCallRules: hasToolCallRule(root) });
+      installHooks(target, specs);
       return {
         host,
         target,
-        what: "hooks written: SessionStart, UserPromptSubmit, PostToolUse, Stop",
+        what: `hooks written: ${specs.map((spec) => spec.event).join(", ")}`,
       };
-    case "codex":
-      installHooks(
-        target,
-        hookSpecs(hookScriptPath(), { host, toolCallRules: hasToolCallRule(root) }),
-      );
+    }
+    case "codex": {
+      const specs = hookSpecs(hookScriptPath(), { host, toolCallRules: hasToolCallRule(root) });
+      installHooks(target, specs);
       return {
         host,
         target,
-        what: "hooks written: SessionStart, UserPromptSubmit, PostToolUse, Stop",
+        what: `hooks written: ${specs.map((spec) => spec.event).join(", ")}`,
         afterwards:
-          "Codex trusts new hooks once: start codex, type /hooks, accept the four oh-my-plumb entries.",
+          "Codex trusts new hooks once: start codex, type /hooks, accept the oh-my-plumb entries.",
       };
+    }
     case "opencode":
       installOpencodePlugin(target);
       return { host, target, what: "plugin written; OpenCode loads it at the next start" };

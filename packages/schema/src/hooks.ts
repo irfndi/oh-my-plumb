@@ -119,6 +119,16 @@ export const toolCallPostToolUseSchema = z.object({
 });
 export type ToolCallPostToolUseInput = z.infer<typeof toolCallPostToolUseSchema>;
 
+/** One shell or MCP call caught before it runs: the same fields the post-hook gets, without a response. */
+export const preToolUseInputSchema = z.object({
+  ...common,
+  hook_event_name: z.literal("PreToolUse"),
+  tool_use_id: z.string().optional(),
+  tool_name: z.string().min(1),
+  tool_input: z.record(z.string(), z.unknown()),
+});
+export type PreToolUseInput = z.infer<typeof preToolUseInputSchema>;
+
 export const stopInputSchema = z.object({
   ...common,
   hook_event_name: z.literal("Stop"),

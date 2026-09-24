@@ -116,17 +116,64 @@ export const toolCallPayload = ({ tool, input, sessionId, cwd, toolCallId }) => 
   tool_use_id: toolCallId,
 });
 
+export const preToolCallPayload = ({ tool, input, sessionId, cwd, toolCallId }) => ({
+  tool_name: tool,
+  tool_input: input ?? {},
+  session_id: sessionId,
+  cwd,
+  hook_event_name: "PreToolUse",
+  tool_use_id: toolCallId,
+});
+
+/** What the hook's answer means before a call runs: a deny blocks it, a note is shown to the user. */
+export const preToolCallResult = (out) => {
+  const decision = out?.hookSpecificOutput;
+  if (
+    decision?.permissionDecision === "deny" &&
+    typeof decision.permissionDecisionReason === "string" &&
+    decision.permissionDecisionReason !== ""
+  ) {
+    const note =
+      typeof out?.systemMessage === "string" && out.systemMessage !== ""
+        ? out.systemMessage
+        : undefined;
+    return { block: true, reason: decision.permissionDecisionReason, note };
+  }
+  if (typeof out?.systemMessage === "string" && out.systemMessage !== "") {
+    return { note: out.systemMessage };
+  }
+  return undefined;
+};
+
 export default function ohMyPlumb(pi) {
-  // Pi's tool_result carries no original file, so it is read before the tool runs.
   const originals = new Map();
 
   pi.on("tool_call", async (event, ctx) => {
     try {
-      if (!EDIT_TOOLS[event.toolName]) return;
-      const filePath = event.input?.path;
-      if (typeof filePath !== "string" || filePath === "") return;
-      const absolute = path.resolve(ctx.cwd ?? process.cwd(), filePath);
-      originals.set(event.toolCallId, { absolute, original: readOrNull(absolute) });
+      if (EDIT_TOOLS[event.toolName]) {
+        // Pi's tool_result carries no original file, so it is read before the tool runs.
+        const filePath = event.input?.path;
+        if (typeof filePath !== "string" || filePath === "") return;
+        const absolute = path.resolve(ctx.cwd ?? process.cwd(), filePath);
+        originals.set(event.toolCallId, { absolute, original: readOrNull(absolute) });
+        return;
+      }
+      if (typeof event.toolName !== "string" || READ_TOOLS[event.toolName]) return;
+      if (!toolCallRulesFor(ctx.cwd ?? process.cwd())) return;
+      const out = await runHook(
+        "pre-tool-use",
+        preToolCallPayload({
+          tool: event.toolName,
+          input: event.input,
+          sessionId: ctx.sessionManager?.getSessionId?.() ?? "pi",
+          cwd: ctx.cwd ?? process.cwd(),
+          toolCallId: event.toolCallId,
+        }),
+        20_000,
+      );
+      const result = preToolCallResult(out);
+      if (result?.note !== undefined) ctx.ui?.notify?.(result.note, "warning");
+      if (result?.block) return { block: true, reason: result.reason };
     } catch {}
   });
 

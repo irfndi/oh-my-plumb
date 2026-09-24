@@ -61,10 +61,12 @@ describe("hosts", () => {
   });
 
   it("registers shell and MCP matchers only when the rubric has a toolCall rule", () => {
-    // No rubric: today's matcher, nothing shell or MCP in it.
+    // No rubric: today's matcher, nothing shell or MCP in it, and no hook that
+    // could stop a call before it runs.
     installHost("claude", root, false);
     const base = JSON.parse(readFileSync(installTarget("claude", root, false), "utf8"));
     expect(base.hooks.PostToolUse[0].matcher).toBe("Edit|Write|MultiEdit|apply_patch");
+    expect(base.hooks.PreToolUse).toBeUndefined();
     expect(uninstallHost("claude", root, false)).toBe(4);
 
     mkdirSync(path.join(root, ".oh-my-plumb"), { recursive: true });
@@ -94,6 +96,13 @@ describe("hosts", () => {
       "Edit|Write|MultiEdit|apply_patch|Bash|mcp__.*",
     );
     expect(codex.hooks.PostToolUse[0].matcher).toBe("Edit|Write|MultiEdit|apply_patch|shell");
+    expect(claude.hooks.PreToolUse).toHaveLength(1);
+    expect(claude.hooks.PreToolUse[0].matcher).toBe("Bash|mcp__.*");
+    expect(claude.hooks.PreToolUse[0].hooks[0].command).toContain("pre-tool-use");
+    expect(codex.hooks.PreToolUse).toHaveLength(1);
+    expect(codex.hooks.PreToolUse[0].matcher).toBe("shell");
+    expect(codex.hooks.PreToolUse[0].hooks[0].command).toContain("pre-tool-use");
+    expect(uninstallHost("claude", root, false)).toBe(5);
   });
 
   it("keeps a project install's matchers in step with the rubric", () => {
@@ -124,9 +133,14 @@ describe("hosts", () => {
     ]);
     expect(syncToolCallMatchers(root)).toEqual(["claude"]);
     expect(matcher()).toBe("Edit|Write|MultiEdit|apply_patch|Bash|mcp__.*");
+    const events = (): string[] =>
+      Object.keys(JSON.parse(readFileSync(installTarget("claude", root, true), "utf8")).hooks);
+    expect(events()).toContain("PreToolUse");
     rubricWith([]);
     syncToolCallMatchers(root);
     expect(matcher()).toBe("Edit|Write|MultiEdit|apply_patch");
+    // With nothing left to judge, the pre-run hook goes too.
+    expect(events()).not.toContain("PreToolUse");
   });
 
   it("installs OpenCode as a plugin file it can recognise, and leaves a stranger's file alone", () => {

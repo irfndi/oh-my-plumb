@@ -64,8 +64,17 @@ const shellPayload = (cwd: string, tool_name: string, tool_input: unknown) => ({
   tool_use_id: "b1",
 });
 
+const prePayload = (cwd: string, tool_name: string, tool_input: unknown) => ({
+  session_id: "t",
+  cwd,
+  hook_event_name: "PreToolUse",
+  tool_name,
+  tool_input,
+  tool_use_id: "b1",
+});
+
 describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
-  for (const name of ["session-start", "turn-start", "post-tool-use", "stop"]) {
+  for (const name of ["session-start", "turn-start", "pre-tool-use", "post-tool-use", "stop"]) {
     it(`${name}: garbage in, exit 0 and nothing on stdout`, () => {
       for (const input of [
         "",
@@ -95,15 +104,28 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
     expect(r.stdout).toBe("");
   });
 
-  it("judges a shell call under a toolCall rule scoped to Bash", () => {
+  it("judges a shell call before it runs, and after it runs only logs it for the turn", () => {
     const root = repoWith([toolCallRule(["Bash"])]);
-    const r = run(
+    const post = run(
       "post-tool-use",
       JSON.stringify(shellPayload(root, "Bash", { command: "rm -rf /" })),
+    );
+    expect(post.status).toBe(0);
+    expect(post.stdout).toBe("");
+    // Judged once, before it ran: the post-hook writes no check event of its own.
+    expect(existsSync(path.join(root, ".oh-my-plumb", "events.jsonl"))).toBe(false);
+  });
+
+  it("pre-tool-use without a key lets the call run and logs the skip", () => {
+    const root = repoWith([toolCallRule(["Bash"])]);
+    const r = run(
+      "pre-tool-use",
+      JSON.stringify(prePayload(root, "Bash", { command: "rm -rf /" })),
     );
     expect(r.status).toBe(0);
     expect(r.stdout).toBe("");
     const events = readFileSync(path.join(root, ".oh-my-plumb", "events.jsonl"), "utf8");
+    expect(events).toContain('"kind":"skip"');
     expect(events).toContain('"reason":"no api key"');
     expect(events).toContain('"files":["Bash"]');
   });
@@ -111,9 +133,9 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
   it("judges an MCP call under a toolCall rule scoped to mcp__*", () => {
     const root = repoWith([toolCallRule(["mcp__*"])]);
     const r = run(
-      "post-tool-use",
+      "pre-tool-use",
       JSON.stringify(
-        shellPayload(root, "mcp__puppeteer__screenshot", { url: "https://example.com" }),
+        prePayload(root, "mcp__puppeteer__screenshot", { url: "https://example.com" }),
       ),
     );
     expect(r.status).toBe(0);
@@ -138,8 +160,13 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
     for (const payload of [
       shellPayload(scoped, "mcp__a__b", {}),
       shellPayload(scoped, "Grep", { pattern: "x" }),
+      prePayload(scoped, "mcp__a__b", {}),
+      prePayload(scoped, "Grep", { pattern: "x" }),
     ]) {
-      const r = run("post-tool-use", JSON.stringify(payload));
+      const r = run(
+        payload.hook_event_name === "PreToolUse" ? "pre-tool-use" : "post-tool-use",
+        JSON.stringify(payload),
+      );
       expect(r.status).toBe(0);
       expect(r.stdout).toBe("");
     }
@@ -154,12 +181,11 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
         check: { type: "model", question: { type: "boolean", instructions: "?" } },
       },
     ]);
-    const r = run(
-      "post-tool-use",
-      JSON.stringify(shellPayload(diffRoot, "Bash", { command: "ls" })),
-    );
-    expect(r.status).toBe(0);
-    expect(r.stdout).toBe("");
+    for (const name of ["pre-tool-use", "post-tool-use"]) {
+      const r = run(name, JSON.stringify(shellPayload(diffRoot, "Bash", { command: "ls" })));
+      expect(r.status).toBe(0);
+      expect(r.stdout).toBe("");
+    }
     expect(existsSync(path.join(diffRoot, ".oh-my-plumb", "events.jsonl"))).toBe(false);
   });
 
@@ -173,11 +199,19 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
         hook_event_name: "PostToolUse",
         tool_name: "Bash",
       }),
+      JSON.stringify({
+        session_id: "t",
+        cwd: root,
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+      }),
     ]) {
-      const r = run("post-tool-use", input);
-      expect(r.status).toBe(0);
-      expect(r.stdout).toBe("");
-      expect(existsSync(path.join(root, ".oh-my-plumb", "events.jsonl"))).toBe(false);
+      for (const name of ["pre-tool-use", "post-tool-use"]) {
+        const r = run(name, input);
+        expect(r.status).toBe(0);
+        expect(r.stdout).toBe("");
+        expect(existsSync(path.join(root, ".oh-my-plumb", "events.jsonl"))).toBe(false);
+      }
     }
   });
 

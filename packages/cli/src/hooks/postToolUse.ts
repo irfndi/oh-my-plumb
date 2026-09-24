@@ -7,16 +7,10 @@ import {
   turnIdOf,
   type HookOutput,
   type PostToolUseInput,
-  type Rule,
-  type ToolCallPostToolUseInput,
   type Verdict,
 } from "oh-my-plumb-schema";
-import {
-  runCheck,
-  runToolCallCheck,
-  selectToolCallRules,
-  type CheckOutcome,
-} from "../lib/checkRunner.js";
+import { runCheck, type CheckOutcome } from "../lib/checkRunner.js";
+import type { Pair } from "../lib/toolCallCheck.js";
 import { fastCheck } from "../lib/tier1.js";
 import { findMcpServer } from "../lib/detect.js";
 import {
@@ -34,7 +28,7 @@ import { appendEvent } from "../lib/events.js";
 import { loadRubric } from "../lib/loadRubric.js";
 import { debug } from "../lib/output.js";
 import { findRepoRoot, isExcludedPath, relativeToRoot } from "../lib/paths.js";
-import { flagNotice, repairReason, toolCallReason } from "../lib/reason.js";
+import { flagNotice, repairReason } from "../lib/reason.js";
 import {
   blockCount,
   incrementBlock,
@@ -47,8 +41,6 @@ import {
 } from "../lib/session.js";
 import { lastUserPrompt } from "../lib/transcript.js";
 
-type Pair = { rule: Rule; verdict: Verdict };
-
 type Checked = { edit: EditHunk; relative: string; outcome: CheckOutcome };
 
 export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
@@ -59,8 +51,9 @@ export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
   }
   const call = toolCallPostToolUseSchema.safeParse(raw);
   if (!call.success) return { kind: "silent" };
+  // The call was judged before it ran; after it ran it only joins the turn's log.
   rememberCall(call.data);
-  return handleToolCall(call.data);
+  return { kind: "silent" };
 };
 
 /** The log records what ran before anything judges whether it mattered, so the turn sees every observed call. */
@@ -302,98 +295,6 @@ const handleEdit = async (input: PostToolUseInput): Promise<HookOutput> => {
     return {
       kind: "block",
       reason: repairReason("edit", acting, actedOn),
-      ...(systemMessage === undefined ? {} : { systemMessage }),
-    };
-  }
-  return systemMessage === undefined ? { kind: "silent" } : { kind: "notice", systemMessage };
-};
-
-/** Edit tools, in every host's spelling: their calls are judged as diffs, never as tool calls. */
-const EDIT_TOOL_NAMES = new Set(["edit", "write", "multiedit", "apply_patch"]);
-
-/** One shell or MCP call a tool-call rule covers: judged on its own input, no diff involved. */
-const handleToolCall = async (input: ToolCallPostToolUseInput): Promise<HookOutput> => {
-  const started = performance.now();
-  const at = new Date().toISOString();
-  const root = findRepoRoot(input.cwd);
-  const loaded = loadRubric(root);
-  for (const problem of loaded.problems) debug(problem);
-  const call = { tool: input.tool_name, input: input.tool_input };
-  // An edit tool's payload that the edit schema rejected is malformed, not a tool call.
-  if (EDIT_TOOL_NAMES.has(call.tool.toLowerCase())) return { kind: "silent" };
-  if (selectToolCallRules(loaded.rules, "edit", call.tool).length === 0) return { kind: "silent" };
-
-  const turn = turnDir(input.session_id, turnIdOf(input));
-  if (!hasApiKey(root)) {
-    appendEvent(root, {
-      kind: "skip",
-      at,
-      phase: "edit",
-      sessionId: input.session_id,
-      reason: "no api key",
-      files: [call.tool],
-    });
-    return { kind: "silent" };
-  }
-
-  const task = lastUserPrompt(input.transcript_path ?? undefined) ?? readPrompt(turn);
-  let outcome: CheckOutcome;
-  try {
-    outcome = await runToolCallCheck({
-      phase: "edit",
-      call,
-      task,
-      rules: loaded.rules,
-      thresholds: loaded.thresholds,
-      timeoutMs: EDIT_CHECK_TIMEOUT_MS,
-    });
-  } catch (error) {
-    appendEvent(root, {
-      kind: "error",
-      at,
-      phase: "edit",
-      sessionId: input.session_id,
-      code: isPlumbError(error) ? error.code : "CHECK_FAILED",
-      message: error instanceof Error ? error.message : String(error),
-      latencyMs: Math.round(performance.now() - started),
-    });
-    return { kind: "silent" };
-  }
-
-  const byId = new Map(loaded.rules.map((r) => [r.id, r]));
-  const pairs = (band: Verdict["band"]): Pair[] =>
-    outcome.verdicts.flatMap((verdict) => {
-      const rule = byId.get(verdict.ruleId);
-      return rule !== undefined && verdict.band === band ? [{ rule, verdict }] : [];
-    });
-  const actPairs = pairs("act");
-  const acting = actPairs.filter(
-    ({ rule }) =>
-      blockCount(turn, createBlockKey(rule.id, call.tool)) < MAX_BLOCKS_PER_RULE_PER_TURN,
-  );
-  for (const { rule } of acting) incrementBlock(turn, createBlockKey(rule.id, call.tool));
-
-  appendEvent(root, {
-    kind: "check",
-    at,
-    phase: "edit",
-    sessionId: input.session_id,
-    promptId: turnIdOf(input),
-    files: [call.tool],
-    rules: outcome.modelRules.length,
-    latencyMs: Math.round(performance.now() - started),
-    modelLatencyMs: outcome.modelLatencyMs,
-    usage: outcome.usage,
-    verdicts: outcome.verdicts,
-    blocked: acting.length > 0,
-  });
-
-  const flagged = [...pairs("flag"), ...actPairs.filter((p) => !acting.includes(p))];
-  const systemMessage = flagged.length > 0 ? flagNotice("edit", flagged, [call.tool]) : undefined;
-  if (acting.length > 0) {
-    return {
-      kind: "block",
-      reason: toolCallReason(acting, call.tool),
       ...(systemMessage === undefined ? {} : { systemMessage }),
     };
   }
