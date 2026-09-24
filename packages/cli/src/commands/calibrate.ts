@@ -39,8 +39,8 @@ const statusAfter = (rule: Rule, verdict: CalibrationVerdict): RuleStatus => {
   }
 };
 
-/** The hosts whose session transcripts replay already reads. pi joins with its own replay wiring. */
-const SESSION_HOSTS: readonly Host[] = ["claude", "codex", "opencode"];
+/** The hosts whose session transcripts replay reads. */
+const SESSION_HOSTS: readonly Host[] = ["claude", "codex", "opencode", "pi"];
 
 const recordedCallsFor = (root: string): ReplayCall[] =>
   SESSION_HOSTS.flatMap((host) => {

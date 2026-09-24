@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
+import { piSessionsFor, parsePiSession } from "../src/lib/replayPi.js";
 import { codexSessionsFor, parseCodexRollout } from "../src/lib/replayCodex.js";
 import { opencodeSessionsFromRows } from "../src/lib/replayOpencode.js";
 
@@ -140,5 +141,102 @@ describe("replay from OpenCode rows", () => {
     );
     const write = s?.turns[0]?.edits[0]?.input;
     expect(write?.tool_name === "Write" && write.tool_input.file_path).toBe("/r/app/src/a.ts");
+  });
+});
+
+describe("replay from pi sessions", () => {
+  it("reads prompts and edit and write calls, skips other records and empty sessions", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-pi-"));
+    const repo = "/r/app";
+    const stamp = "2026-09-23T10:00:00.000Z";
+    const session = (id: string, cwd: string): string =>
+      line({ type: "session", version: 3, id, timestamp: stamp, cwd });
+    const msg = (id: string, role: string, content: unknown): string =>
+      line({ type: "message", id, timestamp: stamp, message: { role, content } });
+    const result = (id: string, toolCallId: string, isError: boolean): string =>
+      line({
+        type: "message",
+        id,
+        timestamp: stamp,
+        message: { role: "toolResult", toolCallId, toolName: "edit", content: [], isError },
+      });
+    const file = path.join(dir, "--r-app--", "2026-09-23T10-00-00-000Z_01api.jsonl");
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(
+      file,
+      [
+        session("s1", repo),
+        line({ type: "model_change", id: "mc1", provider: "p", modelId: "m" }),
+        msg("u1", "user", [{ type: "text", text: "add a route" }]),
+        msg("a1", "assistant", [
+          { type: "text", text: "on it" },
+          {
+            type: "toolCall",
+            id: "w1",
+            name: "write",
+            arguments: { path: "src/a.ts", content: "export const a = 1;\n" },
+          },
+        ]),
+        result("r1", "w1", false),
+        line({ type: "custom", customType: "subagents:record", data: {} }),
+        line({ type: "custom_message", customType: "oh-my-plumb", content: "repair it" }),
+        "not json, a torn line",
+        msg("u2", "user", [{ type: "text", text: "now fix b" }]),
+        msg("a2", "assistant", [
+          {
+            type: "toolCall",
+            id: "e1",
+            name: "edit",
+            arguments: { path: "/r/app/src/b.ts", edits: [{ oldText: "x", newText: "y" }] },
+          },
+          { type: "toolCall", id: "b1", name: "bash", arguments: { command: "ls" } },
+          {
+            type: "toolCall",
+            id: "e2",
+            name: "edit",
+            arguments: { path: "src/c.ts", edits: [{ oldText: "p", newText: "q" }] },
+          },
+        ]),
+        result("r2", "e1", false),
+        result("r3", "b1", false),
+        // A failed edit changed nothing, so it never reached the live hook either.
+        result("r4", "e2", true),
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      path.join(path.dirname(file), "2026-09-23T11-00-00-000Z_empty.jsonl"),
+      [session("s2", repo), msg("u3", "user", [{ type: "text", text: "no edits here" }]), ""].join(
+        "\n",
+      ),
+    );
+    const elsewhere = path.join(dir, "--other--", "2026-09-23T12-00-00-000Z_elsewhere.jsonl");
+    mkdirSync(path.dirname(elsewhere), { recursive: true });
+    writeFileSync(
+      elsewhere,
+      [
+        session("s3", "/other"),
+        msg("u4", "user", [{ type: "text", text: "elsewhere" }]),
+        msg("a4", "assistant", [
+          { type: "toolCall", id: "w2", name: "write", arguments: { path: "x.ts", content: "" } },
+        ]),
+        "",
+      ].join("\n"),
+    );
+    const parsed = parsePiSession(file);
+    expect(parsed.cwd).toBe(repo);
+    expect(
+      parsed.turns.map((t) => [t.index, t.prompt, t.edits.map((e) => e.input.tool_name)]),
+    ).toEqual([
+      [1, "add a route", ["Write"]],
+      [2, "now fix b", ["MultiEdit"]],
+    ]);
+    const write = parsed.turns[0]?.edits[0]?.input;
+    expect(write?.tool_name === "Write" && write.tool_input.file_path).toBe("/r/app/src/a.ts");
+    const edit = parsed.turns[1]?.edits[0]?.input;
+    expect(edit?.tool_name === "MultiEdit" && edit.tool_input.edits[0]?.old_string).toBe("x");
+    expect(parsed.calls.map((c) => c.tool)).toEqual(["write", "edit", "bash", "edit"]);
+    expect(piSessionsFor(repo, dir)).toHaveLength(1);
+    expect(piSessionsFor("/elsewhere", dir)).toHaveLength(0);
   });
 });
