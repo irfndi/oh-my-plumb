@@ -6,7 +6,7 @@ import { ruleSchema } from "oh-my-plumb-schema";
 import { collectReport } from "../src/commands/report.js";
 import { detectStack, routesFor, type DetectedStack } from "../src/lib/detect.js";
 import { fastCheck } from "../src/lib/tier1.js";
-import { guardRoutes, routesForFile, runGuard } from "../src/lib/guards.js";
+import { guardRoutes, routeGaps, routesForFile, runGuard } from "../src/lib/guards.js";
 import { withGuards } from "../src/commands/init.js";
 
 describe("tier1 fast path", () => {
@@ -239,6 +239,20 @@ describe("init route gating", () => {
     mkdirSync(path.join(root, "scripts"), { recursive: true });
     writeFileSync(path.join(root, "scripts", "validate-migration.mjs"), "");
     expect(tiers(stackWith([".pi/mcp.json:postgres-inspector"]))).toContain(2);
+  });
+});
+
+describe("route gaps", () => {
+  it("finds the script past node's own flags", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-gaps-"));
+    mkdirSync(path.join(root, "scripts"), { recursive: true });
+    writeFileSync(path.join(root, "scripts", "x.mjs"), "");
+    expect(
+      routeGaps(root, { command: ["node", "--env-file=.env", "./scripts/x.mjs"] }, []),
+    ).toEqual([]);
+    expect(routeGaps(root, { command: ["node", "--inspect"] }, [])).toEqual([
+      'command "node --inspect" names no script',
+    ]);
   });
 });
 

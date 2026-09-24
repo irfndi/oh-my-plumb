@@ -128,7 +128,7 @@ export const guardRoutes = (rules: readonly Rule[], root: string): GuardRoute[] 
 /** The local file a guard command runs, or undefined when the command is not a local script. */
 const commandFile = (command: readonly string[]): string | undefined => {
   const first = command[0];
-  if (first === "node") return command[1];
+  if (first === "node") return command.slice(1).find((arg) => !arg.startsWith("-"));
   // ponytail: only local script targets are checked; a bare binary would need a PATH walk
   return first !== undefined && first.includes("/") ? first : undefined;
 };
