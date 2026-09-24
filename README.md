@@ -195,6 +195,14 @@ Four hooks per agent. Session start: hash the instruction files, ask the agent t
 
 Shell and MCP calls reach the hook only while your rubric has a tool-call rule, so a repo without one never pays for a hook on every command. `oh-my-plumb rubric validate` turns the Claude Code and Codex matchers on or off for a project install; pi and OpenCode check the rubric themselves.
 
+## Updating
+
+```
+npx oh-my-plumb@latest init      # or, for a global install: npm i -g oh-my-plumb@latest && oh-my-plumb init
+```
+
+The hooks point at the copy of oh-my-plumb that ran `init`, so running `init` from the new version moves every agent onto it. It also picks up anything the new release changes about how it hooks in, such as a new hook event or the right plugin for the OpenCode version you now run. Your rubric and key are left as they are.
+
 ## Uninstall
 
 ```
