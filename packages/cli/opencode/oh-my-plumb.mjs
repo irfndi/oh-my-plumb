@@ -12,6 +12,8 @@
 // its own deadline.
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -96,6 +98,31 @@ const textOf = (parts) =>
     .filter((p) => p && p.type === "text" && typeof p.text === "string")
     .map((p) => p.text)
     .join("\n");
+
+/** Whether any rubric this session can load has a tool-call rule; without one a tool call is not worth a hook spawn. */
+const hasToolCallRule = (file) => {
+  try {
+    const rubric = JSON.parse(readFileSync(file, "utf8"));
+    return (
+      Array.isArray(rubric?.rules) &&
+      rubric.rules.some((rule) => rule?.target === "toolCall" && rule?.status !== "disabled")
+    );
+  } catch {
+    return false;
+  }
+};
+
+export const toolCallRulesFor = (cwd) => {
+  const home = process.env.OH_MY_PLUMB_HOME_DIR ?? homedir();
+  if (hasToolCallRule(path.join(home, ".oh-my-plumb", "global.json"))) return true;
+  for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
+    if (hasToolCallRule(path.join(dir, ".oh-my-plumb", "rubric.json"))) return true;
+    if (path.dirname(dir) === dir) return false;
+  }
+};
+
+// OpenCode's own read-only tools are never judged, so they never spawn a hook.
+const READ_TOOLS = new Set(["read", "grep", "glob", "list", "todoread"]);
 
 /** A shell or MCP call as the hook's schema reads it; rule scopes match on the name. */
 export const toolCallPayload = ({ tool, args, sessionID, turnId, directory, callID }) => ({
@@ -182,9 +209,16 @@ export default async ({ client, directory }) => {
         const s = sessions.get(input.sessionID);
         if (!s) return;
         let payload;
-        if (input?.tool === "bash") {
+        if (
+          typeof input?.tool === "string" &&
+          input.tool !== "edit" &&
+          input.tool !== "write" &&
+          !READ_TOOLS.has(input.tool)
+        ) {
+          // bash, MCP tools and any other tool: forwarded only while a rubric has a tool-call rule.
+          if (!toolCallRulesFor(directory)) return;
           payload = toolCallPayload({
-            tool: "bash",
+            tool: input.tool,
             args: input.args,
             sessionID: input.sessionID,
             turnId: s.turnId,

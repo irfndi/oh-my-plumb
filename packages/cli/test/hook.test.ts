@@ -114,6 +114,17 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
     expect(events).toContain('"files":["mcp__puppeteer__screenshot"]');
   });
 
+  it("keeps a malformed edit payload silent even under a tool-call rule with no scope", () => {
+    const root = repoWith([toolCallRule()]);
+    const r = run(
+      "post-tool-use",
+      JSON.stringify(shellPayload(root, "Write", { file_path: path.join(root, "a.ts") })),
+    );
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe("");
+    expect(existsSync(path.join(root, ".oh-my-plumb", "events.jsonl"))).toBe(false);
+  });
+
   it("stays silent on a call no rule's scope covers, and a diff rule never sees a call", () => {
     const scoped = repoWith([toolCallRule(["Bash"])]);
     for (const payload of [

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
@@ -7,7 +7,7 @@ import { toolCallPostToolUseSchema } from "oh-my-plumb-schema";
 
 // A computed specifier keeps tsc out of the plugin, which OpenCode loads as untyped JS.
 const opencodePlugin = "../opencode/oh-my-plumb.mjs";
-const { toolCallPayload, default: plugin } = await import(opencodePlugin);
+const { toolCallPayload, toolCallRulesFor, default: plugin } = await import(opencodePlugin);
 
 // The forwarded call runs the real hook child, so the keys are blanked: the
 // skip path must be what a machine without a key exercises.
@@ -87,5 +87,36 @@ describe("opencode plugin tool calls", () => {
     );
     expect(readFileSync(events, "utf8").trim().split("\n")).toHaveLength(1);
     expect(existsSync(path.join(root, ".oh-my-plumb"))).toBe(true);
+
+    // An MCP tool is forwarded like bash: rule scopes decide what it is judged by.
+    await api["tool.execute.after"](
+      { tool: "postgres_query", sessionID: "s1", callID: "c3", args: { sql: "select 1" } },
+      { output: "" },
+    );
+    expect(readFileSync(events, "utf8")).toContain('"files":["postgres_query"]');
   }, 20_000);
+
+  it("forwards tool calls only while a project or global rubric has an active tool-call rule", () => {
+    const root = repoWithToolCallRule();
+    const nested = path.join(root, "packages", "app");
+    mkdirSync(nested, { recursive: true });
+    expect(toolCallRulesFor(nested)).toBe(true);
+    const rubric = path.join(root, ".oh-my-plumb", "rubric.json");
+    const parsed = JSON.parse(readFileSync(rubric, "utf8"));
+    writeFileSync(
+      rubric,
+      JSON.stringify({ ...parsed, rules: [{ ...parsed.rules[0], status: "disabled" }] }),
+    );
+    expect(toolCallRulesFor(nested)).toBe(false);
+    writeFileSync(rubric, JSON.stringify({ ...parsed, rules: [] }));
+    expect(toolCallRulesFor(nested)).toBe(false);
+    const home = process.env.OH_MY_PLUMB_HOME_DIR ?? "";
+    mkdirSync(path.join(home, ".oh-my-plumb"), { recursive: true });
+    writeFileSync(path.join(home, ".oh-my-plumb", "global.json"), JSON.stringify(parsed));
+    try {
+      expect(toolCallRulesFor(nested)).toBe(true);
+    } finally {
+      rmSync(path.join(home, ".oh-my-plumb", "global.json"));
+    }
+  });
 });

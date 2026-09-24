@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import { PlumbError } from "oh-my-plumb-schema";
 import { findRepoRoot, globalRubricPath, homeDir, rubricPath } from "../lib/paths.js";
 import { fillSourceShas, readRubric, writeRubric } from "../lib/rubricFile.js";
+import { syncToolCallMatchers } from "../lib/hosts.js";
 import { discoverMcpSources } from "../lib/mcpSources.js";
 import { showStatic } from "../ui/render.js";
 import { RubricView } from "../ui/views/RubricView.js";
@@ -36,6 +37,8 @@ export const runRubric = async (argv: string[]): Promise<number> => {
         .filter((r) => !listed.has(r.source.path))
         .map((r) => `${r.id} (${r.source.path})`);
       writeRubric(file, rubric);
+      // A rubric that gained or lost its tool-call rules needs the project's hook matchers to follow.
+      if (!values.global) syncToolCallMatchers(root);
       await showStatic(
         RubricView({ data: { kind: "ok", root, file, rules: rubric.rules, missing, orphaned } }),
       );

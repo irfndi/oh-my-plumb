@@ -293,14 +293,19 @@ const handleEdit = async (input: PostToolUseInput): Promise<HookOutput> => {
   return systemMessage === undefined ? { kind: "silent" } : { kind: "notice", systemMessage };
 };
 
+/** Edit tools, in every host's spelling: their calls are judged as diffs, never as tool calls. */
+const EDIT_TOOL_NAMES = new Set(["edit", "write", "multiedit", "apply_patch"]);
+
 /** One shell or MCP call a tool-call rule covers: judged on its own input, no diff involved. */
 const handleToolCall = async (input: ToolCallPostToolUseInput): Promise<HookOutput> => {
   const started = performance.now();
   const at = new Date().toISOString();
   const root = findRepoRoot(input.cwd);
-  const loaded = loadRules(root);
+  const loaded = loadRubric(root);
   for (const problem of loaded.problems) debug(problem);
   const call = { tool: input.tool_name, input: input.tool_input };
+  // An edit tool's payload that the edit schema rejected is malformed, not a tool call.
+  if (EDIT_TOOL_NAMES.has(call.tool.toLowerCase())) return { kind: "silent" };
   if (selectToolCallRules(loaded.rules, "edit", call.tool).length === 0) return { kind: "silent" };
 
   const turn = turnDir(input.session_id, turnIdOf(input));

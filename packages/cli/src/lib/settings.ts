@@ -47,6 +47,12 @@ export const hookSpecs = (
 const isOurs = (entry: HookEntry): boolean =>
   entry.command?.includes(OH_MY_PLUMB_HOOK_MARKER) ?? false;
 
+/** Whether oh-my-plumb's hooks are installed in this settings file. */
+export const hasOurHooks = (file: string): boolean =>
+  Object.values(readSettings(file).hooks ?? {}).some((groups) =>
+    (groups ?? []).some((group) => group.hooks.some(isOurs)),
+  );
+
 /** A group shared with someone else's hook keeps theirs. */
 const withoutOurs = (groups: readonly HookGroup[]): { kept: HookGroup[]; removed: number } => {
   const kept: HookGroup[] = [];

@@ -6,6 +6,7 @@
 // script has its own deadline.
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -60,6 +61,28 @@ const textOf = (content) =>
     .filter((p) => p && p.type === "text" && typeof p.text === "string")
     .map((p) => p.text)
     .join("\n");
+
+/** Whether any rubric this session can load has a tool-call rule; without one a tool call is not worth a hook spawn. */
+const hasToolCallRule = (file) => {
+  try {
+    const rubric = JSON.parse(readFileSync(file, "utf8"));
+    return (
+      Array.isArray(rubric?.rules) &&
+      rubric.rules.some((rule) => rule?.target === "toolCall" && rule?.status !== "disabled")
+    );
+  } catch {
+    return false;
+  }
+};
+
+const toolCallRulesFor = (cwd) => {
+  const home = process.env.OH_MY_PLUMB_HOME_DIR ?? homedir();
+  if (hasToolCallRule(path.join(home, ".oh-my-plumb", "global.json"))) return true;
+  for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
+    if (hasToolCallRule(path.join(dir, ".oh-my-plumb", "rubric.json"))) return true;
+    if (path.dirname(dir) === dir) return false;
+  }
+};
 
 const EDIT_TOOLS = { edit: true, write: true };
 // Pi's own read-only tools are never judged, so they must not spawn a hook. Every
@@ -135,6 +158,7 @@ export default function ohMyPlumb(pi) {
         return;
       }
       if (typeof event.toolName !== "string" || READ_TOOLS[event.toolName]) return;
+      if (!toolCallRulesFor(cwd)) return;
       // A failed attempt still counts: the call was made, and a rule may forbid it.
       const out = await runHook(
         "post-tool-use",

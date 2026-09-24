@@ -118,6 +118,11 @@ describe("rubricSchema", () => {
     expect(
       rubricSchema.safeParse({ ...base, rules: [{ ...toolRule, target: "callLog" }] }).success,
     ).toBe(false);
+    // Edits are judged as diffs, so a tool-call rule may not claim an edit tool.
+    expect(
+      rubricSchema.safeParse({ ...base, rules: [{ ...toolRule, scope: ["Bash", "write"] }] })
+        .success,
+    ).toBe(false);
     // Only a model check can judge a call; any other check would sit in the rubric and never run.
     expect(
       rubricSchema.safeParse({
