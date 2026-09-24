@@ -60,7 +60,6 @@ The judge is a small, fast model that answers typed questions with a probability
 - A rule about volume or restraint ("comment sparingly", "keep it short", "minimal code") needs two questions: an existence question for the concrete offence, and a `score` question for the amount, with levels the judge can point at ("no such comments", "one or two", "several, or a multi-line block", "most lines"). Do not collapse "sparingly" into a single narrow case and lose the volume.
 - A rule that requires a tool or skill ("use context7 for library docs", "use the brainstorming skill before building a feature") is answered from what the turn ran, not what it changed. Write it as a tool-call rule with `when: "turn"` and no scope; the judge gets the turn's tool-call log (`order`, `name`, `summary` in call order) and nothing else. In Claude Code a skill appears as a call named `Skill` whose summary names the skill. Ask only about what the log shows: a call's name, its position, the shape in its summary. Never ask about the agent's intent or the conversation; the judge cannot see them and such a question scores about 0.4 on everything. Say where the answer comes from ("Answer only from the turn's tool-call log"). These rules are easy to misjudge, so keep them in the flag band: only a clear miss under the user's absolute wording ("always", "never") should reach act.
 - Use `criteria` for a worked example: `"criteria": { "true": "a `retry`loop written by hand when Radash`retry` is installed", "false": "calling an installed utility" }`. Put the user's own code block here when they gave one.
-
 - Question types:
   - `boolean` for almost everything. The answer is a probability that the rule is broken.
   - `choice` when the rule names a closed set of shapes and only some are wrong: `criteria` maps each option to a description, `violating` lists the wrong ones. Example: a service must be a class with static methods, so options are `class-static`, `loose-functions`, `eager-init` and `violating` is the last two.
@@ -68,7 +67,7 @@ The judge is a small, fast model that answers typed questions with a probability
 
 ### A rule about a tool call, not a change
 
-Some rules judge what a call does rather than what a diff looks like: "never `DROP` or `TRUNCATE` through the postgres MCP", "read-only queries in production", "don't post to Slack without asking". For those set `"target": "toolCall"`, put tool names in `scope` instead of file globs, and always use `"when": "edit"` — the judge runs the moment the call arrives, before it runs, and stops it only in the act band.
+Some rules judge what a call does rather than what a diff looks like: "never `DROP` or `TRUNCATE` through the postgres MCP", "read-only queries in production", "don't post to Slack without asking". For those set `"target": "toolCall"`, put tool names in `scope` instead of file globs, and use `"when": "edit"`: the judge sees the call before it runs, and stops it only in the act band. (A rule about which tools a whole turn used is the `"turn"` kind described above.)
 
 ```json
 {
@@ -92,9 +91,9 @@ Some rules judge what a call does rather than what a diff looks like: "never `DR
 }
 ```
 
-- Scope matches the tool's name the way the host writes it: `["mcp__postgres__*"]` covers that one server's tools (`mcp__postgres__query`); a server boundary is exact, so it does not cover `mcp__postgres-inspector__query`. `["Bash"]` covers the shell.
+- Scope matches the tool's name, ignoring case: `["mcp__postgres__*"]` covers that one server's tools (`mcp__postgres__query`), and a server boundary is exact, so it does not cover `mcp__postgres-inspector__query`. `["Bash"]` covers the shell. OpenCode names MCP tools `<server>_<tool>` (`postgres_query`), so add that spelling when the repo uses OpenCode.
 - Ask about the command and the arguments, never the output or the conversation. The judge sees only what the call is about to do: "Does this call's SQL text contain an INSERT, UPDATE, DELETE, DROP or TRUNCATE statement?" A question that needs the result or the chat to answer can only land midrange, and midrange never fires.
-- Flag by default, act only for absolute wording. "Read-only queries in production" is absolute, so a question on the statement text may stop the call outright. "Don't post to Slack without asking" hinges on what happened outside the arguments — write it to flag ("Does this call's arguments contain a new message post?") and let the note reach the person.
+- Flag by default, act only for absolute wording. "Read-only queries in production" is absolute, so a question on the statement text may stop the call outright. "Don't post to Slack without asking" hinges on what happened outside the arguments — write it to flag ("Do this call's arguments post a new message?") and let the note reach the person.
 
 ## Step 5. Decide when each model rule runs
 
