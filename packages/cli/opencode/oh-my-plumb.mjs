@@ -106,7 +106,11 @@ const hasToolCallRule = (file) => {
     const rubric = JSON.parse(readFileSync(file, "utf8"));
     return (
       Array.isArray(rubric?.rules) &&
-      rubric.rules.some((rule) => rule?.target === "toolCall" && rule?.status !== "disabled")
+      rubric.rules.some(
+        (rule) =>
+          rule?.status !== "disabled" &&
+          (rule?.target === "toolCall" || String(rule?.source?.path ?? "").endsWith("/SKILL.md")),
+      )
     );
   } catch {
     return false;

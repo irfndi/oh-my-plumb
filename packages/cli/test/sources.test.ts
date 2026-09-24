@@ -381,6 +381,9 @@ describe("skill sources", () => {
     writeFileSync(path.join(root, ".claude", "skills", "archive", "SKILL.md"), "# archive\n");
     mkdirSync(path.join(root, "skills", "node_modules", "sneaky"), { recursive: true });
     writeFileSync(path.join(root, "skills", "node_modules", "sneaky", "SKILL.md"), "ignored\n");
+    // A SKILL.md inside a skill's own folder belongs to that skill, not a second one.
+    mkdirSync(path.join(root, "skills", "deploy", "scripts"), { recursive: true });
+    writeFileSync(path.join(root, "skills", "deploy", "scripts", "SKILL.md"), "nested\n");
     return root;
   };
 

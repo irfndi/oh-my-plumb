@@ -267,7 +267,9 @@ const walkSkills = (
     return;
   }
   for (const entry of entries) {
-    if (!entry.isDirectory() || SKIP_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
+    // Installed skills are often symlinked folders, which a Dirent does not call directories.
+    if (!(entry.isDirectory() || entry.isSymbolicLink())) continue;
+    if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
     const sub = path.join(dir, entry.name);
     const file = path.join(sub, "SKILL.md");
     if (existsSync(file)) {
@@ -278,6 +280,8 @@ const walkSkills = (
         required: false,
         origin: "skill",
       });
+      // Everything under a skill's folder belongs to that skill, not to a skill of its own.
+      continue;
     }
     walkSkills(sub, depth + 1, spell, out);
   }
@@ -339,7 +343,8 @@ const pluginSkillRoots = (): string[] => {
         typeof entry === "object" &&
         entry !== null &&
         "installPath" in entry &&
-        typeof entry.installPath === "string"
+        typeof entry.installPath === "string" &&
+        path.isAbsolute(entry.installPath)
       ) {
         roots.push(entry.installPath);
       }
@@ -358,6 +363,7 @@ export const discoverGlobalSources = (): SourceCandidate[] => {
   for (const dir of GLOBAL_SKILL_DIRS) {
     walkSkills(path.join(homeDir(), dir.slice(2)), 1, (f) => toSourcePath(homeDir(), f), found);
   }
+  // An installed plugin is the user's opt-in to its skills, as an installed MCP server is to its instructions.
   for (const rootDir of pluginSkillRoots()) {
     walkSkills(path.join(rootDir, "skills"), 1, (f) => toSourcePath(homeDir(), f), found);
   }

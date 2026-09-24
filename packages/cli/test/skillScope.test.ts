@@ -44,4 +44,21 @@ describe("skill scoping", () => {
       ]).map((r) => r.id),
     ).toEqual(["deploy-checksum", "plain-agents"]);
   });
+
+  it("matches a skill name as a whole word, and knows a pi skill load and a namespaced one", () => {
+    const short: Rule = { ...skillRule, id: "short", source: { path: "skills/e/SKILL.md" } };
+    expect(
+      filterToLoadedSkills([short], [{ order: 1, name: "Bash", summary: "{command=echo test}" }]),
+    ).toEqual([]);
+    expect(
+      filterToLoadedSkills(rules, [
+        { order: 1, name: "read", summary: "{path=.pi/skills/deploy/SKILL.md}" },
+      ]).map((r) => r.id),
+    ).toContain("deploy-checksum");
+    expect(
+      filterToLoadedSkills(rules, [{ order: 1, name: "Skill", summary: "{skill=ops:deploy}" }]).map(
+        (r) => r.id,
+      ),
+    ).toContain("deploy-checksum");
+  });
 });

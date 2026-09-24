@@ -93,7 +93,7 @@ describe("hosts", () => {
     const claude = JSON.parse(readFileSync(installTarget("claude", root, false), "utf8"));
     const codex = JSON.parse(readFileSync(installTarget("codex", root, false), "utf8"));
     expect(claude.hooks.PostToolUse[0].matcher).toBe(
-      "Edit|Write|MultiEdit|apply_patch|Bash|mcp__.*",
+      "Edit|Write|MultiEdit|apply_patch|Bash|mcp__.*|Skill",
     );
     expect(codex.hooks.PostToolUse[0].matcher).toBe("Edit|Write|MultiEdit|apply_patch|shell");
     expect(claude.hooks.PreToolUse).toHaveLength(1);
@@ -103,6 +103,30 @@ describe("hosts", () => {
     expect(codex.hooks.PreToolUse[0].matcher).toBe("shell");
     expect(codex.hooks.PreToolUse[0].hooks[0].command).toContain("pre-tool-use");
     expect(uninstallHost("claude", root, false)).toBe(5);
+  });
+
+  it("delivers skill loads while the rubric carries a skill's rules", () => {
+    mkdirSync(path.join(root, ".oh-my-plumb"), { recursive: true });
+    writeFileSync(
+      path.join(root, ".oh-my-plumb", "rubric.json"),
+      JSON.stringify({
+        version: 1,
+        compiledAt: "x",
+        sources: [{ path: "skills/deploy/SKILL.md" }],
+        rules: [
+          {
+            id: "checksum-first",
+            text: "Run the checksum before installing",
+            source: { path: "skills/deploy/SKILL.md" },
+            when: "turn",
+            check: { type: "model", question: { type: "boolean", instructions: "?" } },
+          },
+        ],
+      }),
+    );
+    installHost("claude", root, true);
+    const settings = JSON.parse(readFileSync(installTarget("claude", root, true), "utf8"));
+    expect(settings.hooks.PostToolUse[0].matcher).toContain("|Skill");
   });
 
   it("keeps a project install's matchers in step with the rubric", () => {
@@ -132,7 +156,7 @@ describe("hosts", () => {
       },
     ]);
     expect(syncToolCallMatchers(root)).toEqual(["claude"]);
-    expect(matcher()).toBe("Edit|Write|MultiEdit|apply_patch|Bash|mcp__.*");
+    expect(matcher()).toBe("Edit|Write|MultiEdit|apply_patch|Bash|mcp__.*|Skill");
     const events = (): string[] =>
       Object.keys(JSON.parse(readFileSync(installTarget("claude", root, true), "utf8")).hooks);
     expect(events()).toContain("PreToolUse");

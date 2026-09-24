@@ -87,9 +87,15 @@ export const installTarget = (host: Host, root: string, project: boolean): strin
   }
 };
 
-/** The shell and MCP matchers are registered only while the rubric has a tool-call rule to judge them with. */
+/**
+ * The shell, MCP and skill matchers are registered only while the rubric needs
+ * the turn's tool calls: a tool-call rule judges them, and a skill's rules need
+ * to see that the skill was loaded.
+ */
 const hasToolCallRule = (root: string): boolean =>
-  loadRubric(root).rules.some((rule) => rule.target === "toolCall");
+  loadRubric(root).rules.some(
+    (rule) => rule.target === "toolCall" || rule.source.path.endsWith("/SKILL.md"),
+  );
 
 /**
  * Keep a project's installed Claude Code and Codex hooks in step with its rubric:
