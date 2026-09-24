@@ -97,6 +97,17 @@ const textOf = (parts) =>
     .map((p) => p.text)
     .join("\n");
 
+/** A shell or MCP call as the hook's schema reads it; rule scopes match on the name. */
+export const toolCallPayload = ({ tool, args, sessionID, turnId, directory, callID }) => ({
+  tool_name: tool,
+  tool_input: args ?? {},
+  session_id: sessionID,
+  prompt_id: turnId,
+  cwd: directory,
+  hook_event_name: "PostToolUse",
+  tool_use_id: callID,
+});
+
 export default async ({ client, directory }) => {
   const log = (message) => {
     try {
@@ -168,33 +179,46 @@ export default async ({ client, directory }) => {
 
     "tool.execute.after": async (input, output) => {
       try {
-        if (input?.tool !== "edit" && input?.tool !== "write") return;
         const s = sessions.get(input.sessionID);
         if (!s) return;
-        const args = input.args ?? {};
-        const file_path = absolute(args.filePath);
-        if (file_path === "") return;
-        const hunks = hunksFrom(output?.metadata?.diff);
-        const payload =
-          input.tool === "edit"
-            ? {
-                tool_name: "Edit",
-                tool_input: {
-                  file_path,
-                  old_string: String(args.oldString ?? ""),
-                  new_string: String(args.newString ?? ""),
-                  replace_all: Boolean(args.replaceAll),
-                },
-                tool_response: hunks ? { filePath: file_path, structuredPatch: hunks } : {},
-              }
-            : {
-                tool_name: "Write",
-                tool_input: { file_path, content: String(args.content ?? "") },
-                // A diff from the host means the file existed; without one it is treated as new.
-                tool_response: hunks
-                  ? { filePath: file_path, originalFile: "", structuredPatch: hunks }
-                  : { filePath: file_path, originalFile: null },
-              };
+        let payload;
+        if (input?.tool === "bash") {
+          payload = toolCallPayload({
+            tool: "bash",
+            args: input.args,
+            sessionID: input.sessionID,
+            turnId: s.turnId,
+            directory,
+            callID: input.callID,
+          });
+        } else if (input?.tool === "edit" || input?.tool === "write") {
+          const args = input.args ?? {};
+          const file_path = absolute(args.filePath);
+          if (file_path === "") return;
+          const hunks = hunksFrom(output?.metadata?.diff);
+          payload =
+            input.tool === "edit"
+              ? {
+                  tool_name: "Edit",
+                  tool_input: {
+                    file_path,
+                    old_string: String(args.oldString ?? ""),
+                    new_string: String(args.newString ?? ""),
+                    replace_all: Boolean(args.replaceAll),
+                  },
+                  tool_response: hunks ? { filePath: file_path, structuredPatch: hunks } : {},
+                }
+              : {
+                  tool_name: "Write",
+                  tool_input: { file_path, content: String(args.content ?? "") },
+                  // A diff from the host means the file existed; without one it is treated as new.
+                  tool_response: hunks
+                    ? { filePath: file_path, originalFile: "", structuredPatch: hunks }
+                    : { filePath: file_path, originalFile: null },
+                };
+        } else {
+          return;
+        }
         const out = await runHook(
           "post-tool-use",
           {

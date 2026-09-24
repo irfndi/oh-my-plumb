@@ -59,6 +59,42 @@ describe("hosts", () => {
     expect(installTarget("codex", root, true)).toBe(path.join(root, ".codex", "hooks.json"));
   });
 
+  it("registers shell and MCP matchers only when the rubric has a toolCall rule", () => {
+    // No rubric: today's matcher, nothing shell or MCP in it.
+    installHost("claude", root, false);
+    const base = JSON.parse(readFileSync(installTarget("claude", root, false), "utf8"));
+    expect(base.hooks.PostToolUse[0].matcher).toBe("Edit|Write|MultiEdit|apply_patch");
+    expect(uninstallHost("claude", root, false)).toBe(4);
+
+    mkdirSync(path.join(root, ".oh-my-plumb"), { recursive: true });
+    writeFileSync(
+      path.join(root, ".oh-my-plumb", "rubric.json"),
+      JSON.stringify({
+        version: 1,
+        compiledAt: "x",
+        sources: [{ path: "AGENTS.md" }],
+        rules: [
+          {
+            id: "no-blind-shell",
+            text: "Never run a destructive shell command",
+            source: { path: "AGENTS.md" },
+            target: "toolCall",
+            when: "edit",
+            check: { type: "model", question: { type: "boolean", instructions: "?" } },
+          },
+        ],
+      }),
+    );
+    installHost("claude", root, false);
+    installHost("codex", root, false);
+    const claude = JSON.parse(readFileSync(installTarget("claude", root, false), "utf8"));
+    const codex = JSON.parse(readFileSync(installTarget("codex", root, false), "utf8"));
+    expect(claude.hooks.PostToolUse[0].matcher).toBe(
+      "Edit|Write|MultiEdit|apply_patch|Bash|mcp__.*",
+    );
+    expect(codex.hooks.PostToolUse[0].matcher).toBe("Edit|Write|MultiEdit|apply_patch|shell");
+  });
+
   it("installs OpenCode as a plugin file it can recognise, and leaves a stranger's file alone", () => {
     const target = installTarget("opencode", root, false);
     expect(target).toBe(path.join(home, ".config", "opencode", "plugins", "oh-my-plumb.js"));

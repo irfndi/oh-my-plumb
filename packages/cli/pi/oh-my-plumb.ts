@@ -62,6 +62,9 @@ const textOf = (content) =>
     .join("\n");
 
 const EDIT_TOOLS = { edit: true, write: true };
+// Pi's own read-only tools are never judged, so they must not spawn a hook. Every
+// other tool — bash, MCP, an extension's own — is forwarded; rule scopes decide.
+const READ_TOOLS: Record<string, true> = { read: true, grep: true, glob: true };
 
 const readOrNull = (file) => {
   try {
@@ -75,6 +78,15 @@ export const postToolUsePayload = ({ filePath, original, after, sessionId, cwd, 
   tool_name: "Write",
   tool_input: { file_path: filePath, content: after },
   tool_response: { filePath, originalFile: original },
+  session_id: sessionId,
+  cwd,
+  hook_event_name: "PostToolUse",
+  tool_use_id: toolCallId,
+});
+
+export const toolCallPayload = ({ tool, input, sessionId, cwd, toolCallId }) => ({
+  tool_name: tool,
+  tool_input: input ?? {},
   session_id: sessionId,
   cwd,
   hook_event_name: "PostToolUse",
@@ -97,19 +109,40 @@ export default function ohMyPlumb(pi) {
 
   pi.on("tool_result", async (event, ctx) => {
     try {
+      const sessionId = ctx.sessionManager?.getSessionId?.() ?? "pi";
+      const cwd = ctx.cwd ?? process.cwd();
       const before = originals.get(event.toolCallId);
       originals.delete(event.toolCallId);
-      if (!EDIT_TOOLS[event.toolName] || before === undefined || event.isError) return;
-      const after = readOrNull(before.absolute);
-      if (after === null) return;
+      if (EDIT_TOOLS[event.toolName]) {
+        if (before === undefined || event.isError) return;
+        const after = readOrNull(before.absolute);
+        if (after === null) return;
+        const out = await runHook(
+          "post-tool-use",
+          postToolUsePayload({
+            filePath: before.absolute,
+            original: before.original,
+            after,
+            sessionId,
+            cwd,
+            toolCallId: event.toolCallId,
+          }),
+          20_000,
+        );
+        if (out?.decision === "block" && typeof out.reason === "string") {
+          return { content: [{ type: "text", text: `${textOf(event.content)}\n\n${out.reason}` }] };
+        }
+        return;
+      }
+      if (typeof event.toolName !== "string" || READ_TOOLS[event.toolName]) return;
+      // A failed attempt still counts: the call was made, and a rule may forbid it.
       const out = await runHook(
         "post-tool-use",
-        postToolUsePayload({
-          filePath: before.absolute,
-          original: before.original,
-          after,
-          sessionId: ctx.sessionManager?.getSessionId?.() ?? "pi",
-          cwd: ctx.cwd ?? process.cwd(),
+        toolCallPayload({
+          tool: event.toolName,
+          input: event.input,
+          sessionId,
+          cwd,
           toolCallId: event.toolCallId,
         }),
         20_000,

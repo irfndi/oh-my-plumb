@@ -108,6 +108,17 @@ export const postToolUseInputSchema = z.discriminatedUnion("tool_name", [
 ]);
 export type PostToolUseInput = z.infer<typeof postToolUseInputSchema>;
 
+/** One recorded shell or MCP call, the same shape whichever host sent it. The input is the host's business; only the tool's name is fixed, because rule scopes match on it. */
+export const toolCallPostToolUseSchema = z.object({
+  ...common,
+  hook_event_name: z.literal("PostToolUse"),
+  tool_use_id: z.string().optional(),
+  tool_name: z.string().min(1),
+  tool_input: z.record(z.string(), z.unknown()),
+  tool_response: z.unknown().optional(),
+});
+export type ToolCallPostToolUseInput = z.infer<typeof toolCallPostToolUseSchema>;
+
 export const stopInputSchema = z.object({
   ...common,
   hook_event_name: z.literal("Stop"),

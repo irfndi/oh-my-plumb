@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { PlumbError } from "oh-my-plumb-schema";
+import { PlumbError, type Host } from "oh-my-plumb-schema";
 
 const hookEntrySchema = z
   .object({ type: z.string(), command: z.string().optional() })
@@ -22,17 +22,24 @@ export type HookEvent = "SessionStart" | "UserPromptSubmit" | "PostToolUse" | "S
 
 export type HookSpec = { event: HookEvent; matcher?: string; command: string; timeout: number };
 
-export const hookSpecs = (hookScript: string): HookSpec[] => {
+export const hookSpecs = (
+  hookScript: string,
+  opts?: { host: Host; toolCallRules: boolean },
+): HookSpec[] => {
   const cmd = (name: string): string => `node "${hookScript}" ${name}`;
+  const editMatcher = "Edit|Write|MultiEdit|apply_patch";
+  // A rubric with a tool-call rule needs shell and MCP calls delivered too:
+  // Claude names them Bash and mcp__server__tool, Codex shell.
+  const matcher =
+    opts === undefined || !opts.toolCallRules
+      ? editMatcher
+      : opts.host === "claude"
+        ? `${editMatcher}|Bash|mcp__.*`
+        : `${editMatcher}|shell`;
   return [
     { event: "SessionStart", command: cmd("session-start"), timeout: 10 },
     { event: "UserPromptSubmit", command: cmd("turn-start"), timeout: 10 },
-    {
-      event: "PostToolUse",
-      matcher: "Edit|Write|MultiEdit|apply_patch",
-      command: cmd("post-tool-use"),
-      timeout: 20,
-    },
+    { event: "PostToolUse", matcher, command: cmd("post-tool-use"), timeout: 20 },
     { event: "Stop", command: cmd("stop"), timeout: 30 },
   ];
 };

@@ -1,5 +1,5 @@
 import { execSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,6 +37,25 @@ const repoWith = (rules: unknown[]): string => {
   return root;
 };
 
+const toolCallRule = (scope?: string[]) => ({
+  id: "no-blind-shell",
+  text: "Never run a destructive shell command",
+  source: { path: "AGENTS.md" },
+  target: "toolCall",
+  when: "edit",
+  ...(scope === undefined ? {} : { scope }),
+  check: { type: "model", question: { type: "boolean", instructions: "?" } },
+});
+
+const shellPayload = (cwd: string, tool_name: string, tool_input: unknown) => ({
+  session_id: "t",
+  cwd,
+  hook_event_name: "PostToolUse",
+  tool_name,
+  tool_input,
+  tool_use_id: "b1",
+});
+
 describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
   for (const name of ["session-start", "turn-start", "post-tool-use", "stop"]) {
     it(`${name}: garbage in, exit 0 and nothing on stdout`, () => {
@@ -66,6 +85,81 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
     const r = run("post-tool-use", JSON.stringify(payload));
     expect(r.status).toBe(0);
     expect(r.stdout).toBe("");
+  });
+
+  it("judges a shell call under a toolCall rule scoped to Bash", () => {
+    const root = repoWith([toolCallRule(["Bash"])]);
+    const r = run(
+      "post-tool-use",
+      JSON.stringify(shellPayload(root, "Bash", { command: "rm -rf /" })),
+    );
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe("");
+    const events = readFileSync(path.join(root, ".oh-my-plumb", "events.jsonl"), "utf8");
+    expect(events).toContain('"reason":"no api key"');
+    expect(events).toContain('"files":["Bash"]');
+  });
+
+  it("judges an MCP call under a toolCall rule scoped to mcp__*", () => {
+    const root = repoWith([toolCallRule(["mcp__*"])]);
+    const r = run(
+      "post-tool-use",
+      JSON.stringify(
+        shellPayload(root, "mcp__puppeteer__screenshot", { url: "https://example.com" }),
+      ),
+    );
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe("");
+    const events = readFileSync(path.join(root, ".oh-my-plumb", "events.jsonl"), "utf8");
+    expect(events).toContain('"files":["mcp__puppeteer__screenshot"]');
+  });
+
+  it("stays silent on a call no rule's scope covers, and a diff rule never sees a call", () => {
+    const scoped = repoWith([toolCallRule(["Bash"])]);
+    for (const payload of [
+      shellPayload(scoped, "mcp__a__b", {}),
+      shellPayload(scoped, "Grep", { pattern: "x" }),
+    ]) {
+      const r = run("post-tool-use", JSON.stringify(payload));
+      expect(r.status).toBe(0);
+      expect(r.stdout).toBe("");
+    }
+    expect(existsSync(path.join(scoped, ".oh-my-plumb", "events.jsonl"))).toBe(false);
+
+    const diffRoot = repoWith([
+      {
+        id: "diff-rule",
+        text: "t",
+        source: { path: "AGENTS.md" },
+        when: "edit",
+        check: { type: "model", question: { type: "boolean", instructions: "?" } },
+      },
+    ]);
+    const r = run(
+      "post-tool-use",
+      JSON.stringify(shellPayload(diffRoot, "Bash", { command: "ls" })),
+    );
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe("");
+    expect(existsSync(path.join(diffRoot, ".oh-my-plumb", "events.jsonl"))).toBe(false);
+  });
+
+  it("rejects malformed and schema-invalid payloads: exit 0, empty stdout, no event", () => {
+    const root = repoWith([toolCallRule(["Bash"])]);
+    for (const input of [
+      "not json",
+      JSON.stringify({
+        session_id: "t",
+        cwd: root,
+        hook_event_name: "PostToolUse",
+        tool_name: "Bash",
+      }),
+    ]) {
+      const r = run("post-tool-use", input);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toBe("");
+      expect(existsSync(path.join(root, ".oh-my-plumb", "events.jsonl"))).toBe(false);
+    }
   });
 
   it("a diff that cannot be computed in time is skipped, logged, and never holds the hook", () => {
