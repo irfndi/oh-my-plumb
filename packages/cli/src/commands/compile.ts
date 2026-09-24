@@ -51,7 +51,7 @@ export const runCompile = async (argv: string[], tune: boolean): Promise<number>
     },
   });
   const root = findRepoRoot(process.cwd());
-  const plan = await planCompile(root);
+  const plan = await planCompile(root, "always");
   if (plan.invalid.length > 0) {
     await showStatic(
       Callout({

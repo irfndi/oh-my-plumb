@@ -27,14 +27,11 @@ export type SourceCandidate = {
 /** An MCP source always carries the instructions it was captured from. */
 export type McpSourceCandidate = SourceCandidate & { origin: "mcp"; text: string };
 
-const MCP_SCOPE_PREFIX = "mcp__";
-
 /** The scope glob tying a rule source to one MCP server's tool calls. */
-export const mcpSourceScope = (server: string): string => `${MCP_SCOPE_PREFIX}${server}__*`;
+export const mcpSourceScope = (server: string): string => `mcp__${server}__*`;
 
 /** A rubric source backed by MCP server instructions instead of a file. */
-export const isMcpSource = (source: { scope?: string | undefined }): boolean =>
-  source.scope !== undefined && source.scope.startsWith(MCP_SCOPE_PREFIX);
+export const isMcpSource = (source: { kind?: "mcp" | undefined }): boolean => source.kind === "mcp";
 
 /** sha256 of each captured MCP source's instructions, keyed by canonical source path. */
 export const capturedMcpShas = (
@@ -317,8 +314,13 @@ export const checkStaleness = (
   const unhashed: string[] = [];
   for (const source of rubric.sources) {
     if (isMcpSource(source)) {
-      // Instructions are captured only at compile time; with nothing captured
-      // there is no hash to compare against, and silence beats a false alarm.
+      // A server taken off the opt-in list leaves a dead source behind.
+      if (!(rubric.mcpInstructions ?? []).includes(source.path)) {
+        removed.push(source.path);
+        continue;
+      }
+      // Instructions are captured only when a compile may be due; with nothing
+      // captured there is no hash to compare against, and silence beats a false alarm.
       const now = captured.get(canonicalSourcePath(root, source.path));
       if (now === undefined) continue;
       if (source.sha === undefined) unhashed.push(source.path);

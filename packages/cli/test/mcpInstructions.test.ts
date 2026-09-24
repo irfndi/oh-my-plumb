@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
@@ -58,7 +58,7 @@ describe("MCP instructions as rule sources", () => {
         path: "fakeGuard",
         scope: "mcp__fakeGuard__*",
         origin: "mcp",
-        required: false,
+        required: true,
         text: INSTRUCTIONS,
       });
       const project = plan.targets.find((t) => t.which === "project");
@@ -109,12 +109,58 @@ describe("MCP instructions as rule sources", () => {
         version: 1,
         compiledAt: "x",
         sources: [{ path: "fakeGuard", scope: "mcp__fakeGuard__*" }],
+        mcpInstructions: ["fakeGuard"],
         rules: [],
       };
       const { rubric: filled, missing } = fillSourceShas(rubric, f.root, plan.mcp);
       expect(missing).toEqual([]);
       expect(filled.sources[0]?.sha).toBe(createSourceSha(INSTRUCTIONS));
+      // validate marks a source named for an opted-in server as MCP.
+      expect(filled.sources[0]?.kind).toBe("mcp");
       expect(JSON.stringify(filled)).not.toContain(INSTRUCTIONS);
+    } finally {
+      cleanup(f);
+    }
+  });
+
+  it("starts no server on a fresh rubric, and one when a listed server has no source yet", async () => {
+    const f = fixture("instructions", true);
+    try {
+      const listedRubric = (sources: Rubric["sources"]): void =>
+        writeFileSync(
+          rubricPath(f.root),
+          JSON.stringify({
+            version: RUBRIC_VERSION,
+            compiledAt: "x",
+            sources,
+            mcpInstructions: ["fakeGuard"],
+            rules: [],
+          }),
+        );
+      const agents = { path: "AGENTS.md", sha: createSourceSha("# rules\n- Use type\n") };
+      // Opted in but never compiled: the plan starts the server and asks for a compile.
+      listedRubric([agents]);
+      const due = await planCompile(f.root);
+      expect(due.mcp).toHaveLength(1);
+      expect(due.targets.find((t) => t.which === "project")?.staleness).toMatchObject({
+        status: "stale",
+        added: ["fakeGuard"],
+      });
+      // Fresh and covered: no server is started, so no log is written.
+      rmSync(path.join(f.root, "fake-mcp.log"), { force: true });
+      listedRubric([
+        agents,
+        {
+          path: "fakeGuard",
+          kind: "mcp",
+          scope: "mcp__fakeGuard__*",
+          sha: createSourceSha(INSTRUCTIONS),
+        },
+      ]);
+      const fresh = await planCompile(f.root);
+      expect(fresh.mcp).toHaveLength(0);
+      expect(fresh.targets.find((t) => t.which === "project")).toBeUndefined();
+      expect(existsSync(path.join(f.root, "fake-mcp.log"))).toBe(false);
     } finally {
       cleanup(f);
     }

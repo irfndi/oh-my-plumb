@@ -216,6 +216,8 @@ export const rubricSourceSchema = z.object({
     .optional(),
   /** Glob the file's rules apply to. Defaults to the file's directory. */
   scope: z.string().optional(),
+  /** "mcp" when the source is an opted-in MCP server's instructions, named by `path`; absent for a file. */
+  kind: z.literal("mcp").optional(),
 });
 export type RubricSource = z.infer<typeof rubricSourceSchema>;
 

@@ -86,9 +86,15 @@ describe("MCP source staleness", () => {
     const base = rubricFor(root);
     const rubric: Rubric = {
       ...base,
+      mcpInstructions: ["fakeGuard"],
       sources: [
         ...base.sources,
-        { path: "fakeGuard", scope: "mcp__fakeGuard__*", sha: createSourceSha("first words") },
+        {
+          path: "fakeGuard",
+          kind: "mcp",
+          scope: "mcp__fakeGuard__*",
+          sha: createSourceSha("first words"),
+        },
       ],
     };
     // No capture means nothing to compare against: the check stays quiet.
@@ -110,11 +116,26 @@ describe("MCP source staleness", () => {
       ),
     ).toMatchObject({ status: "stale", changed: ["fakeGuard"] });
     const neverHashed = checkStaleness(
-      { ...rubric, sources: [...base.sources, { path: "fakeGuard", scope: "mcp__fakeGuard__*" }] },
+      {
+        ...rubric,
+        sources: [...base.sources, { path: "fakeGuard", kind: "mcp", scope: "mcp__fakeGuard__*" }],
+      },
       [...discoverProjectSources(root), captured(root, "first words")],
       root,
     );
     expect(neverHashed).toMatchObject({ status: "stale", unhashed: ["fakeGuard"] });
+    // Taking the server off the opt-in list leaves its source dead, and that is stale.
+    expect(
+      checkStaleness({ ...rubric, mcpInstructions: [] }, discoverProjectSources(root), root),
+    ).toMatchObject({ status: "stale", removed: ["fakeGuard"] });
+    // A file source whose scope merely starts with mcp__ is still a file.
+    expect(
+      checkStaleness(
+        { ...base, sources: [...base.sources, { path: "gone.md", scope: "mcp__x__*" }] },
+        discoverProjectSources(root),
+        root,
+      ),
+    ).toMatchObject({ status: "stale", removed: ["gone.md"] });
   });
 });
 

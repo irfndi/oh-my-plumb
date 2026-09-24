@@ -50,7 +50,10 @@ export const fillSourceShas = (
 ): { rubric: Rubric; missing: string[] } => {
   const missing: string[] = [];
   const captured = capturedMcpShas(root, mcp);
-  const sources = rubric.sources.map((source) => {
+  const optedIn = new Set(rubric.mcpInstructions ?? []);
+  const sources = rubric.sources.map((listed) => {
+    // A source named for an opted-in server is that server's instructions, not a file.
+    const source = optedIn.has(listed.path) ? { ...listed, kind: "mcp" as const } : listed;
     const canonical = canonicalSourcePath(root, source.path);
     if (isMcpSource(source)) {
       // MCP sources hash the instructions captured this run; without a capture the stored sha stays.
