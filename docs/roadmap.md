@@ -1,4 +1,4 @@
-# oh-my-plumb — Roadmap (2026-09-23, statuses as of 2026-09-24)
+# oh-my-plumb — Roadmap (2026-09-23, every item shipped by 2026-09-24)
 
 Tracked by issue [#24](https://github.com/irfndi/oh-my-plumb/issues/24).
 
@@ -11,18 +11,18 @@ Status is per issue: `open` until merged, `shipped` once the fix is in.
 | Issue                                                                                                             | Status                                                                      |
 | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | [#1 Rules that check a tool call, not a diff](https://github.com/irfndi/oh-my-plumb/issues/1)                     | shipped (merged as [PR #38](https://github.com/irfndi/oh-my-plumb/pull/38)) |
-| [#3 Hook shell and MCP tools](https://github.com/irfndi/oh-my-plumb/issues/3)                                     | open                                                                        |
-| [#2 Block a rule-breaking tool call before it runs](https://github.com/irfndi/oh-my-plumb/issues/2)               | open                                                                        |
+| [#3 Hook shell and MCP tools](https://github.com/irfndi/oh-my-plumb/issues/3)                                     | shipped (merged as [PR #45](https://github.com/irfndi/oh-my-plumb/pull/45)) |
+| [#2 Block a rule-breaking tool call before it runs](https://github.com/irfndi/oh-my-plumb/issues/2)               | shipped (merged as [PR #48](https://github.com/irfndi/oh-my-plumb/pull/48)) |
 | [#4 Compile tool-use rules instead of marking them unenforceable](https://github.com/irfndi/oh-my-plumb/issues/4) | shipped (merged as [PR #41](https://github.com/irfndi/oh-my-plumb/pull/41)) |
-| [#5 Give the turn check the list of tools the agent called](https://github.com/irfndi/oh-my-plumb/issues/5)       | open                                                                        |
+| [#5 Give the turn check the list of tools the agent called](https://github.com/irfndi/oh-my-plumb/issues/5)       | shipped (merged as [PR #46](https://github.com/irfndi/oh-my-plumb/pull/46)) |
 | [#6 Calibrate tool-call rules from past sessions](https://github.com/irfndi/oh-my-plumb/issues/6)                 | shipped (merged as [PR #42](https://github.com/irfndi/oh-my-plumb/pull/42)) |
 
 ## Skills
 
 | Issue                                                                                                  | Status                                                                      |
 | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| [#7 Read SKILL.md files as rule sources](https://github.com/irfndi/oh-my-plumb/issues/7)               | open                                                                        |
-| [#8 Rules that require a skill or tool to be used](https://github.com/irfndi/oh-my-plumb/issues/8)     | open                                                                        |
+| [#7 Read SKILL.md files as rule sources](https://github.com/irfndi/oh-my-plumb/issues/7)               | shipped (merged as [PR #49](https://github.com/irfndi/oh-my-plumb/pull/49)) |
+| [#8 Rules that require a skill or tool to be used](https://github.com/irfndi/oh-my-plumb/issues/8)     | shipped (merged as [PR #47](https://github.com/irfndi/oh-my-plumb/pull/47)) |
 | [#9 Document and test the skill guard script contract](https://github.com/irfndi/oh-my-plumb/issues/9) | shipped (merged as [PR #43](https://github.com/irfndi/oh-my-plumb/pull/43)) |
 
 ## MCP
@@ -30,9 +30,9 @@ Status is per issue: `open` until merged, `shipped` once the fix is in.
 | Issue                                                                                                   | Status                                                                      |
 | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | [#10 Detect MCP servers from the files each host uses](https://github.com/irfndi/oh-my-plumb/issues/10) | shipped (merged as [PR #31](https://github.com/irfndi/oh-my-plumb/pull/31)) |
-| [#11 Rules on MCP tool calls](https://github.com/irfndi/oh-my-plumb/issues/11)                          | open                                                                        |
+| [#11 Rules on MCP tool calls](https://github.com/irfndi/oh-my-plumb/issues/11)                          | shipped (merged as [PR #50](https://github.com/irfndi/oh-my-plumb/pull/50)) |
 | [#12 Talk to MCP guard servers over real JSON-RPC](https://github.com/irfndi/oh-my-plumb/issues/12)     | shipped (merged as [PR #39](https://github.com/irfndi/oh-my-plumb/pull/39)) |
-| [#13 Read MCP server instructions as rule sources](https://github.com/irfndi/oh-my-plumb/issues/13)     | open                                                                        |
+| [#13 Read MCP server instructions as rule sources](https://github.com/irfndi/oh-my-plumb/issues/13)     | shipped (merged as [PR #44](https://github.com/irfndi/oh-my-plumb/pull/44)) |
 
 ## Clean up the Tier 2 prototype first
 
@@ -62,4 +62,4 @@ Land the PRs in this order:
 2. Then the tool-call foundation (#1 through #6).
 3. Then skills (#7 through #9) and MCP (#10 through #13) on top of it.
 
-The remaining issues (#18, #20, #21, #22, #23) are independent and land whenever they are ready. Issue #24 tracks this roadmap and closes once the last item ships.
+The remaining issues (#18, #20, #21, #22, #23) are independent and land whenever they are ready. Every item has shipped, so #24, which tracked this roadmap, is closed.
