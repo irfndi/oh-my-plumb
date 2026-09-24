@@ -172,11 +172,31 @@ const moreSources = (): string => {
   mkdirSync(path.join(root, "node_modules", "dep", ".cursor", "rules"), { recursive: true });
   writeFileSync(path.join(root, "node_modules", "dep", ".cursor", "rules", "ignored.mdc"), "x\n");
   writeFileSync(
+    path.join(root, ".cursor", "rules", "crlf.mdc"),
+    '---\r\nglobs: "lib/**/*.ts"\r\n---\r\n- windows rule\r\n',
+  );
+  writeFileSync(
+    path.join(root, ".cursor", "rules", "unterminated.mdc"),
+    "---\nglobs: src/**/*.ts\n- never closed\n",
+  );
+  writeFileSync(
+    path.join(root, ".cursor", "rules", "list.mdc"),
+    "---\nglobs: src/**/*.ts, tests/**/*.ts # both\n---\n- two globs\n",
+  );
+  writeFileSync(
+    path.join(root, ".cursor", "rules", "block.mdc"),
+    '---\nglobs:\n  - "a/**"\n  - b/**\n---\n- block list\n',
+  );
+  writeFileSync(path.join(root, ".env"), "SECRET=1\n");
+  writeFileSync(path.join(path.dirname(root), "outside-rules.md"), "- outside\n");
+  writeFileSync(
     path.join(root, "CLAUDE.md"),
-    "Rules live in @docs/more-rules.md and @missing.md\n",
+    "Rules live in @docs/more-rules.md and @missing.md. Keys live in @.env, " +
+      "shared rules in @../outside-rules.md. See @docs/period.md.\n",
   );
   mkdirSync(path.join(root, "docs"), { recursive: true });
   writeFileSync(path.join(root, "docs", "more-rules.md"), "Back to @../CLAUDE.md\n");
+  writeFileSync(path.join(root, "docs", "period.md"), "- ends a sentence\n");
   let deep = root;
   for (let i = 0; i < 7; i += 1) {
     deep = path.join(deep, `d${i}`);
@@ -197,15 +217,17 @@ describe("more instruction files", () => {
       return hit;
     };
 
-    for (const name of [
-      "GEMINI.md",
-      "CLAUDE.local.md",
-      "AGENTS.override.md",
-      ".windsurfrules",
-      ".github/copilot-instructions.md",
-    ]) {
+    for (const name of ["GEMINI.md", ".windsurfrules", ".github/copilot-instructions.md"]) {
       expect(mustFind(name)).toMatchObject({ scope: "**/*", required: true, origin: "root" });
     }
+    // Per-developer files are offered to compile, but a teammate without one is not stale.
+    for (const name of ["CLAUDE.local.md", "AGENTS.override.md"]) {
+      expect(mustFind(name)).toMatchObject({ scope: "**/*", required: false, origin: "root" });
+    }
+    expect(mustFind(".cursor/rules/crlf.mdc").scope).toBe("lib/**/*.ts");
+    expect(mustFind(".cursor/rules/unterminated.mdc").scope).toBe("**/*");
+    expect(mustFind(".cursor/rules/list.mdc").scope).toBe("{src/**/*.ts,tests/**/*.ts}");
+    expect(mustFind(".cursor/rules/block.mdc").scope).toBe("{a/**,b/**}");
 
     expect(mustFind(".cursor/rules/scoped.mdc")).toMatchObject({
       scope: "src/**/*.ts",
@@ -231,11 +253,16 @@ describe("more instruction files", () => {
     expect(found.some((f) => f.path.endsWith("ignored.mdc"))).toBe(false);
     expect(found.some((f) => f.path.endsWith("too-deep.mdc"))).toBe(false);
 
+    // An import is inlined into the file that imports it, so it takes that file's scope.
     expect(mustFind("docs/more-rules.md")).toMatchObject({
-      scope: "docs/**/*",
+      scope: "**/*",
       required: true,
-      origin: "nested",
+      origin: "root",
     });
+    expect(mustFind("docs/period.md").scope).toBe("**/*");
+    // Secrets and files outside the repo never become sources.
+    expect(found.some((f) => f.path === ".env")).toBe(false);
+    expect(found.some((f) => f.path.includes("outside-rules"))).toBe(false);
     expect(found.filter((f) => f.path === "CLAUDE.md")).toHaveLength(1);
     expect(found.some((f) => f.path === "missing.md")).toBe(false);
   });

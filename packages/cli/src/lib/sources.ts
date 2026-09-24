@@ -1,7 +1,7 @@
 import { readdirSync, existsSync, type Dirent } from "node:fs";
 import path from "node:path";
 import { createSourceSha, type Rubric } from "oh-my-plumb-schema";
-import { expandHome, homeDir, resolveSourcePath, toSourcePath } from "./paths.js";
+import { expandHome, homeDir, isExcludedPath, resolveSourcePath, toSourcePath } from "./paths.js";
 import { readRegularFile, readRegularText } from "./regularFile.js";
 
 export type SourceCandidate = {
@@ -20,11 +20,11 @@ const ROOT_NAMES = [
   "CLAUDE.md",
   ".cursorrules",
   "GEMINI.md",
-  "CLAUDE.local.md",
-  "AGENTS.override.md",
   ".github/copilot-instructions.md",
   ".windsurfrules",
 ];
+/** Per-developer overrides, usually gitignored: listed, but a teammate without one is not stale. */
+const PERSONAL_NAMES = ["CLAUDE.local.md", "AGENTS.override.md"];
 const NESTED_NAMES = ["AGENTS.md", "CLAUDE.md"];
 const GLOBAL_NAMES = [
   "~/.claude/CLAUDE.md",
@@ -51,24 +51,43 @@ const SKIP_DIRS = new Set([
 ]);
 const MAX_DEPTH = 6;
 
-/** Cursor's `globs:` front matter. Absent or malformed falls back to the file's default scope. */
+const unquote = (value: string): string | undefined => {
+  const quote = value[0];
+  if (quote !== '"' && quote !== "'") return value;
+  return value.length >= 2 && value.endsWith(quote) ? value.slice(1, -1).trim() : undefined;
+};
+
+/**
+ * Cursor's `globs:` front matter as one scope glob: a comma list, a `[...]` list
+ * or a YAML block list becomes a brace list. Absent, unterminated or malformed
+ * front matter falls back to the file's default scope.
+ */
 const cursorScope = (text: string | undefined): string | undefined => {
   if (text === undefined) return undefined;
-  const lines = text.split("\n");
+  const lines = text.split(/\r?\n/);
   if (lines[0]?.trim() !== "---") return undefined;
-  for (const line of lines.slice(1)) {
-    if (line.trim() === "---") return undefined;
-    const match = /^\s*globs:\s*(.*)$/.exec(line);
-    if (match === null) continue;
-    let value = (match[1] ?? "").trim();
-    const quote = value[0];
-    if (quote === '"' || quote === "'") {
-      if (value.length < 2 || !value.endsWith(quote)) return undefined;
-      value = value.slice(1, -1).trim();
+  const end = lines.findIndex((line, i) => i > 0 && line.trim() === "---");
+  if (end === -1) return undefined;
+  const front = lines.slice(1, end);
+  const at = front.findIndex((line) => /^\s*globs:/.test(line));
+  if (at === -1) return undefined;
+  const inline = (/^\s*globs:\s*(.*)$/.exec(front[at] ?? "")?.[1] ?? "")
+    .replace(/\s+#.*$/, "")
+    .trim();
+  const raw: string[] = [];
+  if (inline !== "") raw.push(...inline.replace(/^\[(.*)\]$/, "$1").split(","));
+  else {
+    for (const line of front.slice(at + 1)) {
+      const item = /^\s*-\s+(.*)$/.exec(line)?.[1];
+      if (item === undefined) break;
+      raw.push(item.replace(/\s+#.*$/, ""));
     }
-    return value.length > 0 ? value : undefined;
   }
-  return undefined;
+  const globs = raw.map((g) => unquote(g.trim()));
+  if (globs.some((g) => g === undefined)) return undefined;
+  const kept = globs.filter((g): g is string => g !== undefined && g !== "");
+  if (kept.length === 0) return undefined;
+  return kept.length === 1 ? kept[0] : `{${kept.join(",")}}`;
 };
 
 /** Every `.cursor/rules/*.mdc` directly under `dir`, inside the walk's depth and skip limits. */
@@ -116,43 +135,42 @@ const resolveImport = (fromFile: string, spec: string): string =>
       ? spec
       : path.resolve(path.dirname(fromFile), spec);
 
-const scopeOf = (spelling: string): string => {
-  const dir = spelling.split("/").slice(0, -1).join("/");
-  return dir === "" || dir.startsWith("~") ? "**/*" : `${dir}/**/*`;
-};
-
-const originOf = (spelling: string): SourceCandidate["origin"] =>
-  spelling.startsWith("~") ? "global" : spelling.includes("/") ? "nested" : "root";
-
 /**
- * Follow `@path` imports in CLAUDE.md files the way the compile skill follows
- * pointers: the target is a source in its own right, with the scope of where it lives.
+ * Follow `@path` imports in CLAUDE.md files the way Claude Code does: the
+ * target is inlined into the importing file, so it is a source with the
+ * importer's scope. Only files inside `root` are adopted, so a committed
+ * project rubric never names a file another machine lacks, and the paths no
+ * check may see (secrets, oh-my-plumb's own files) are never sources.
  */
 const followImports = (root: string, found: SourceCandidate[]): void => {
   const seen = new Set(found.map((c) => path.resolve(c.absolute)));
   const queue = found
     .filter((c) => path.basename(c.path) === "CLAUDE.md")
-    .map((c) => ({ file: c.absolute, depth: 0 }));
+    .map((c) => ({ file: c.absolute, scope: c.scope, origin: c.origin, depth: 0 }));
   while (queue.length > 0) {
     const next = queue.shift();
     if (next === undefined) break;
     if (next.depth >= MAX_DEPTH) continue;
     const text = readRegularText(next.file);
     if (text === undefined) continue;
-    for (const spec of importTokens(text)) {
-      const target = path.resolve(resolveImport(next.file, spec));
-      if (seen.has(target)) continue;
-      const spelling = toSourcePath(root, target);
-      if (path.isAbsolute(spelling) || readRegularFile(target) === undefined) continue;
+    for (const token of importTokens(text)) {
+      // A sentence can end right after the path: "See @docs/rules.md."
+      const target = [token, token.replace(/\.+$/, "")]
+        .map((spec) => path.resolve(resolveImport(next.file, spec)))
+        .find((candidate) => readRegularFile(candidate) !== undefined);
+      if (target === undefined || seen.has(target)) continue;
+      const rel = path.relative(root, target);
+      if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) continue;
+      if (isExcludedPath(rel.split(path.sep).join("/"))) continue;
       seen.add(target);
       found.push({
-        path: spelling,
+        path: toSourcePath(root, target),
         absolute: target,
-        scope: scopeOf(spelling),
+        scope: next.scope,
         required: true,
-        origin: originOf(spelling),
+        origin: next.origin,
       });
-      queue.push({ file: target, depth: next.depth + 1 });
+      queue.push({ file: target, scope: next.scope, origin: next.origin, depth: next.depth + 1 });
     }
   }
 };
@@ -192,6 +210,12 @@ export const discoverProjectSources = (root: string): SourceCandidate[] => {
     const file = path.join(root, name);
     if (existsSync(file)) {
       found.push({ path: name, absolute: file, scope: "**/*", required: true, origin: "root" });
+    }
+  }
+  for (const name of PERSONAL_NAMES) {
+    const file = path.join(root, name);
+    if (existsSync(file)) {
+      found.push({ path: name, absolute: file, scope: "**/*", required: false, origin: "root" });
     }
   }
   scanCursorRules(root, root, found);
