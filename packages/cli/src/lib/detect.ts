@@ -6,6 +6,7 @@ import { z } from "zod";
 import { findLintConfigs } from "./lintConfig.js";
 import { homeDir } from "./paths.js";
 import { routeGaps, type McpRoute } from "./guards.js";
+import type { McpLaunch } from "./mcp.js";
 
 /**
  * Phase 2: zero-config project auto-detection. Inspects the repo and emits
@@ -59,28 +60,64 @@ const namesIn = (pkgJson: string): string[] => {
   }
 };
 
-const serverNameMap = z.record(z.string(), z.unknown()).transform((rec) => Object.keys(rec));
+/** How a stdio MCP server is started, from the host's own config; undefined for a remote server. */
+type McpServerDef = { name: string; launch: McpLaunch | undefined };
+
+const stringMap = z.record(z.string(), z.string()).optional().catch(undefined);
+
+// Claude Code, Codex and pi spell a stdio server as command plus args; OpenCode gives the whole argv as one array.
+const launchSchema = z
+  .object({
+    command: z.union([
+      z
+        .string()
+        .min(1)
+        .transform((c) => [c]),
+      z.array(z.string()).min(1),
+    ]),
+    args: z
+      .array(z.union([z.string(), z.number()]))
+      .optional()
+      .catch(undefined),
+    env: stringMap,
+    environment: stringMap,
+  })
+  .transform((s): McpLaunch => ({
+    command: [...s.command, ...(s.args ?? []).map(String)],
+    env: { ...s.environment, ...s.env },
+  }));
+
+const launchOf = (value: unknown): McpLaunch | undefined => {
+  const parsed = launchSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+};
+
+const serverMap = z
+  .record(z.string(), z.unknown())
+  .transform((rec) =>
+    Object.entries(rec).map(([name, value]): McpServerDef => ({ name, launch: launchOf(value) })),
+  );
 
 const namedServer = z.object({ name: z.string() });
 
-const serverNameList = z.array(z.unknown()).transform((list) =>
-  list.flatMap((s) => {
+const serverList = z.array(z.unknown()).transform((list) =>
+  list.flatMap((s): McpServerDef[] => {
     const parsed = namedServer.safeParse(s);
-    return parsed.success ? [parsed.data.name] : [];
+    return parsed.success ? [{ name: parsed.data.name, launch: launchOf(s) }] : [];
   }),
 );
 
 // A wrong-typed key skips only that shape, matching the old key-by-key tolerance.
 const jsonMcpDoc = z
   .object({
-    mcpServers: serverNameMap.optional().catch(undefined),
-    servers: z.union([serverNameList, serverNameMap]).optional().catch(undefined),
-    mcp: serverNameMap.optional().catch(undefined),
+    mcpServers: serverMap.optional().catch(undefined),
+    servers: z.union([serverList, serverMap]).optional().catch(undefined),
+    mcp: serverMap.optional().catch(undefined),
   })
   .transform((doc) => doc.mcpServers ?? doc.servers ?? doc.mcp ?? []);
 
 const codexMcpDoc = z
-  .object({ mcp_servers: serverNameMap.optional().catch(undefined) })
+  .object({ mcp_servers: serverMap.optional().catch(undefined) })
   .transform((doc) => doc.mcp_servers ?? []);
 
 /** `claude mcp add` defaults to the local scope, which Claude Code keeps per project in ~/.claude.json. */
@@ -88,14 +125,14 @@ const claudeLocalDoc = (root: string) =>
   z
     .object({
       projects: z
-        .record(z.string(), z.object({ mcpServers: serverNameMap.optional().catch(undefined) }))
+        .record(z.string(), z.object({ mcpServers: serverMap.optional().catch(undefined) }))
         .optional()
         .catch(undefined),
     })
     .transform((doc) => doc.projects?.[path.resolve(root)]?.mcpServers ?? []);
 
-/** MCP server names from a host config file, tolerating the common shapes. */
-const serversIn = (file: string, root: string): string[] => {
+/** MCP servers from a host config file, tolerating the common shapes. */
+const serversIn = (file: string, root: string): McpServerDef[] => {
   try {
     const text = readFileSync(file, "utf8");
     if (file.endsWith(".toml")) {
@@ -113,25 +150,41 @@ const serversIn = (file: string, root: string): string[] => {
   }
 };
 
+const GLOBAL_MCP_PATHS = [
+  "~/.pi/mcp.json",
+  "~/.claude/mcp.json",
+  "~/.claude.json",
+  "~/.codex/config.toml",
+  "~/.config/opencode/opencode.json",
+  "~/.config/opencode/opencode.jsonc",
+];
+
+const inHome = (spelling: string): string => path.join(homeDir(), spelling.slice(2));
+
+/** How to start the named MCP server, from the project's host configs first, then the global ones. */
+export const findMcpServer = (root: string, name: string): McpLaunch | undefined => {
+  const files = [
+    ...MCP_PATHS.map((m) => path.join(root, m)),
+    ...GLOBAL_MCP_PATHS.map(inHome),
+  ].filter((f) => existsSync(f));
+  for (const file of files)
+    for (const server of serversIn(file, root))
+      if (server.name === name && server.launch !== undefined) return server.launch;
+  return undefined;
+};
+
 export const detectStack = (root: string): DetectedStack => {
   const at = (rel: string): string => path.join(root, rel);
   const manifests = MANIFESTS.filter((m) => existsSync(at(m)));
   const lintConfigs = findLintConfigs(root);
   const mcpServers = MCP_PATHS.filter((m) => existsSync(at(m))).flatMap((m) =>
-    serversIn(at(m), root).map((s) => `${m}:${s}`),
+    serversIn(at(m), root).map((s) => `${m}:${s.name}`),
   );
   const skills = SKILL_DIRS.filter((d) => existsSync(at(d)));
-  const globalMcp = [
-    "~/.pi/mcp.json",
-    "~/.claude/mcp.json",
-    "~/.claude.json",
-    "~/.codex/config.toml",
-    "~/.config/opencode/opencode.json",
-    "~/.config/opencode/opencode.jsonc",
-  ].flatMap((m) => {
-    const file = path.join(homeDir(), m.slice(2));
+  const globalMcp = GLOBAL_MCP_PATHS.flatMap((m) => {
+    const file = inHome(m);
     // The "~/" spelling stays in the entry so it can be listed as a rubric source.
-    return existsSync(file) ? serversIn(file, root).map((s) => `${m}:${s}`) : [];
+    return existsSync(file) ? serversIn(file, root).map((s) => `${m}:${s.name}`) : [];
   });
   const pkgScripts = existsSync(at("package.json")) ? namesIn(at("package.json")) : [];
   const scriptSkills = pkgScripts.filter((s) =>
@@ -149,14 +202,10 @@ export type TierRoute =
   | { tier: 1 | 3; trigger: string; action: string }
   | { tier: 2; trigger: string; action: string; mcp: McpRoute };
 
-/** The migration guard init looks for: a named MCP server running a local script. */
+/** The migration guard init looks for: a named MCP server's validate tool. */
 const MIGRATION_GUARD = {
   trigger: "{prisma/migrations,drizzle}/**",
-  mcp: {
-    server: "postgres-inspector",
-    tool: "validate_migration",
-    command: ["node", "./scripts/validate-migration.mjs"],
-  },
+  mcp: { server: "postgres-inspector", tool: "validate_migration" },
 } satisfies { trigger: string; mcp: McpRoute };
 
 /** Thin adapter: detected stack → tier routes; init records the tier-2 guard in the rubric. */
@@ -172,14 +221,8 @@ export const routesFor = (stack: DetectedStack, root: string): TierRoute[] => {
       action: "overlaps-pattern fast path (Tier 1); full linter in audit/check",
     });
   }
-  // Only a route whose guard is really here: detected server plus existing script.
-  if (
-    routeGaps(
-      root,
-      { server: MIGRATION_GUARD.mcp.server, command: MIGRATION_GUARD.mcp.command },
-      stack.mcpServers,
-    ).length === 0
-  ) {
+  // Only a route whose guard is really here: the server is configured in a host MCP config.
+  if (routeGaps(root, { server: MIGRATION_GUARD.mcp.server }, stack.mcpServers).length === 0) {
     routes.push({
       tier: 2,
       trigger: MIGRATION_GUARD.trigger,

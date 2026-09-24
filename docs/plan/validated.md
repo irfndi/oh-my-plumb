@@ -80,7 +80,7 @@ validate_migration` via MCP JSON-RPC is Phase 3, not MVP.
 4. Phase 2 DONE: `oh-my-plumb init` scanners → `.oh-my-plumb/rules.yaml` synthesizer
    (`lib/detect.ts`: manifests incl. `vite.config.ts`, `.pi/.claude` MCP scan,
    skill dirs + guard-like `package.json` scripts; `routesFor` tier adapter).
-5. Phase 3 DONE (local + spawned guards; MCP JSON-RPC client deferred): `lib/guards.ts`
+5. Phase 3 DONE (spawned guards, plus the MCP JSON-RPC client in `lib/mcp.ts`): `lib/guards.ts`
    (`routesForFile` trigger routing, `parseGuardOutput`, `resolveSkillGuard`,
    `runGuard` 2s deadline silent-pass), external MCP/skill dispatch in `postToolUse.ts`, Tier-2 route lines in `init` rules.yaml.
 6. Phase 4 DONE (docs + help; OMP layout validation deferred to installed-OMP check):

@@ -142,6 +142,8 @@ A guard is an executable script committed with your repo. The hook finds it at `
 
 `scope` is the glob of files the guard watches. A check may carry a `command` (`["node", "./scripts/check.mjs"]`) instead of a `skill` when the script lives outside a skill. The command runs from the repo root, so a relative path resolves there.
 
+A guard can also be a tool on an MCP server your agent already has configured: give the check a `server` and a `tool` instead (`"server": "postgres-inspector", "tool": "validate_migration"`). The hook starts the server the way your agent's MCP config does, calls the tool with `file_path` and `content`, and blocks when the result has `isError: true`. The same 2-second deadline and silent pass apply.
+
 ### The contract
 
 On every in-scope edit the hook spawns the script once:
