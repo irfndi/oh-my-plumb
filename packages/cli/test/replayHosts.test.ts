@@ -153,6 +153,13 @@ describe("replay from pi sessions", () => {
       line({ type: "session", version: 3, id, timestamp: stamp, cwd });
     const msg = (id: string, role: string, content: unknown): string =>
       line({ type: "message", id, timestamp: stamp, message: { role, content } });
+    const result = (id: string, toolCallId: string, isError: boolean): string =>
+      line({
+        type: "message",
+        id,
+        timestamp: stamp,
+        message: { role: "toolResult", toolCallId, toolName: "edit", content: [], isError },
+      });
     const file = path.join(dir, "--r-app--", "2026-09-23T10-00-00-000Z_01api.jsonl");
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(
@@ -170,6 +177,7 @@ describe("replay from pi sessions", () => {
             arguments: { path: "src/a.ts", content: "export const a = 1;\n" },
           },
         ]),
+        result("r1", "w1", false),
         line({ type: "custom", customType: "subagents:record", data: {} }),
         line({ type: "custom_message", customType: "oh-my-plumb", content: "repair it" }),
         "not json, a torn line",
@@ -182,7 +190,17 @@ describe("replay from pi sessions", () => {
             arguments: { path: "/r/app/src/b.ts", edits: [{ oldText: "x", newText: "y" }] },
           },
           { type: "toolCall", id: "b1", name: "bash", arguments: { command: "ls" } },
+          {
+            type: "toolCall",
+            id: "e2",
+            name: "edit",
+            arguments: { path: "src/c.ts", edits: [{ oldText: "p", newText: "q" }] },
+          },
         ]),
+        result("r2", "e1", false),
+        result("r3", "b1", false),
+        // A failed edit changed nothing, so it never reached the live hook either.
+        result("r4", "e2", true),
         "",
       ].join("\n"),
     );
@@ -217,6 +235,7 @@ describe("replay from pi sessions", () => {
     expect(write?.tool_name === "Write" && write.tool_input.file_path).toBe("/r/app/src/a.ts");
     const edit = parsed.turns[1]?.edits[0]?.input;
     expect(edit?.tool_name === "MultiEdit" && edit.tool_input.edits[0]?.old_string).toBe("x");
+    expect(parsed.calls.map((c) => c.tool)).toEqual(["write", "edit", "bash", "edit"]);
     expect(piSessionsFor(repo, dir)).toHaveLength(1);
     expect(piSessionsFor("/elsewhere", dir)).toHaveLength(0);
   });

@@ -3,9 +3,15 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { postToolUseInputSchema } from "oh-my-plumb-schema";
 import { MAX_TASK_CHARS } from "./constants.js";
-import type { ReplaySession, ReplayTurn } from "./replay.js";
+import {
+  callInput,
+  type ReplayCall,
+  type ReplayEdit,
+  type ReplaySession,
+  type ReplayTurn,
+} from "./replay.js";
 
-/** One JSONL file per session, in a directory named for the session's cwd. Pi persists no tool results, so the tool call's own arguments are all a replay gets. */
+/** One JSONL file per session, in a directory named for the session's cwd. A tool call's arguments are the edit; its `toolResult` message says whether it applied. */
 export const piSessionsDir = (): string => path.join(homedir(), ".pi", "agent", "sessions");
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined => {
@@ -77,6 +83,9 @@ const editPayload = (
 
 export const parsePiSession = (file: string): ReplaySession => {
   const turns: ReplayTurn[] = [];
+  const calls: ReplayCall[] = [];
+  // An edit counts only once its toolResult says it applied, as it would have reached the live hook.
+  const pending = new Map<string, { turn: ReplayTurn; edit: ReplayEdit }>();
   let cwd: string | undefined;
   let turnIndex = 0;
   const current = (): ReplayTurn => {
@@ -101,6 +110,15 @@ export const parsePiSession = (file: string): ReplaySession => {
     if (entry.type !== "message") continue;
     const message = asRecord(entry.message);
     if (message === undefined) continue;
+    if (message.role === "toolResult") {
+      const id = message.toolCallId;
+      const waiting = typeof id === "string" ? pending.get(id) : undefined;
+      if (typeof id === "string" && waiting !== undefined) {
+        pending.delete(id);
+        if (message.isError !== true) waiting.turn.edits.push(waiting.edit);
+      }
+      continue;
+    }
     if (message.role === "user") {
       const prompt = promptOf(message.content);
       if (prompt === undefined) continue;
@@ -112,6 +130,7 @@ export const parsePiSession = (file: string): ReplaySession => {
       const call = asRecord(part);
       if (call?.type !== "toolCall" || typeof call.name !== "string" || typeof call.id !== "string")
         continue;
+      calls.push({ tool: call.name, input: callInput(call.arguments) });
       const args = asRecord(call.arguments);
       if (args === undefined) continue;
       const payload = editPayload(sessionId, cwd ?? process.cwd(), call.id, call.name, args);
@@ -119,10 +138,15 @@ export const parsePiSession = (file: string): ReplaySession => {
       const parsed = postToolUseInputSchema.safeParse(payload);
       if (!parsed.success) continue;
       const turn = current();
-      turn.edits.push({ turn: turn.index, input: parsed.data });
+      pending.set(call.id, { turn, edit: { turn: turn.index, input: parsed.data } });
     }
   }
-  return { file, cwd: cwd ?? process.cwd(), turns: turns.filter((t) => t.edits.length > 0) };
+  return {
+    file,
+    cwd: cwd ?? process.cwd(),
+    turns: turns.filter((t) => t.edits.length > 0),
+    calls,
+  };
 };
 
 const sessionFiles = (dir: string): string[] => {
@@ -148,8 +172,17 @@ const inside = (root: string, dir: string): boolean => {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 };
 
+/** A session file that vanished or cannot be read since the directory walk is skipped, not fatal. */
+const readSession = (file: string): ReplaySession[] => {
+  try {
+    return [parsePiSession(file)];
+  } catch {
+    return [];
+  }
+};
+
 export const piSessionsFor = (root: string, dir = piSessionsDir()): ReplaySession[] =>
   sessionFiles(dir)
     .sort()
-    .map(parsePiSession)
-    .filter((s) => inside(root, s.cwd) && s.turns.length > 0);
+    .flatMap(readSession)
+    .filter((s) => inside(root, s.cwd) && (s.turns.length > 0 || s.calls.length > 0));
