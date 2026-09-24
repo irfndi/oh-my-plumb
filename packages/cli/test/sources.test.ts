@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
@@ -38,6 +38,15 @@ describe("source discovery", () => {
     expect(found.map((f) => [f.path, f.scope])).toEqual([
       ["AGENTS.md", "**/*"],
       ["apps/web/CLAUDE.md", "apps/web/**/*"],
+    ]);
+  });
+
+  it("lists a CLAUDE.md that links to AGENTS.md once, as AGENTS.md", () => {
+    const root = repo();
+    symlinkSync("AGENTS.md", path.join(root, "CLAUDE.md"));
+    expect(discoverProjectSources(root).map((f) => f.path)).toEqual([
+      "AGENTS.md",
+      "apps/web/CLAUDE.md",
     ]);
   });
 

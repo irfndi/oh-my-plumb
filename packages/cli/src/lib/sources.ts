@@ -1,4 +1,4 @@
-import { readdirSync, existsSync, type Dirent } from "node:fs";
+import { readdirSync, existsSync, realpathSync, type Dirent } from "node:fs";
 import path from "node:path";
 import { createSourceSha, type Rubric } from "oh-my-plumb-schema";
 import { expandHome, homeDir, isExcludedPath, resolveSourcePath, toSourcePath } from "./paths.js";
@@ -175,6 +175,22 @@ const followImports = (root: string, found: SourceCandidate[]): void => {
   }
 };
 
+// CLAUDE.md is often a symlink to AGENTS.md; listing both compiles and bills every rule twice.
+const onePerFile = (candidates: SourceCandidate[]): SourceCandidate[] => {
+  const seen = new Set<string>();
+  return candidates.filter((c) => {
+    let real: string;
+    try {
+      real = realpathSync(c.absolute);
+    } catch {
+      real = path.resolve(c.absolute);
+    }
+    if (seen.has(real)) return false;
+    seen.add(real);
+    return true;
+  });
+};
+
 const walkNested = (root: string, dir: string, depth: number, out: SourceCandidate[]): void => {
   if (depth > MAX_DEPTH) return;
   let entries: Dirent[];
@@ -231,7 +247,7 @@ export const discoverProjectSources = (root: string): SourceCandidate[] => {
     });
   }
   followImports(root, found);
-  return found;
+  return onePerFile(found);
 };
 
 export const discoverGlobalSources = (): SourceCandidate[] => {
@@ -242,7 +258,7 @@ export const discoverGlobalSources = (): SourceCandidate[] => {
       : [];
   });
   followImports(homeDir(), found);
-  return found;
+  return onePerFile(found);
 };
 
 export const hashFile = (absolute: string): string | undefined => {

@@ -46,4 +46,13 @@ describe("pi extension events", () => {
     expect(events).toContain("agent_before_settle");
     expect(events).not.toContain("turn_end");
   });
+
+  it("registers session_stop, the turn check Oh My Pi fires instead of agent_before_settle", async () => {
+    const { default: ohMyPlumb } = await import(extension);
+    const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+    ohMyPlumb({
+      on: (name: string, fn: (event: unknown, ctx: unknown) => unknown) => handlers.set(name, fn),
+    });
+    expect(handlers.has("session_stop")).toBe(true);
+  });
 });

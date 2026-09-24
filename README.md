@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20Codex%20%C2%B7%20OpenCode%20%C2%B7%20Pi-111111?style=flat-square" alt="Works with Claude Code, Codex, OpenCode and Pi">
+  <img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20Codex%20%C2%B7%20OpenCode%20%C2%B7%20Pi%20%C2%B7%20Oh%20My%20Pi-111111?style=flat-square" alt="Works with Claude Code, Codex, OpenCode, Pi and Oh My Pi">
   <img src="https://img.shields.io/badge/license-MIT-111111?style=flat-square" alt="MIT license">
 </p>
 
@@ -25,7 +25,7 @@ npx oh-my-plumb login    # paste your TypeSafe key once
 npx oh-my-plumb init     # hooks into every agent on this machine
 ```
 
-Then start `claude`, `codex`, `opencode` or `pi` as usual. That is the whole setup.
+Then start `claude`, `codex`, `opencode`, `pi` or `omp` as usual. That is the whole setup.
 
 ## What it does
 
@@ -72,6 +72,7 @@ The agent repairs it before moving on. No human in the loop.
 | Codex       | `npx oh-my-plumb init codex`    | `~/.codex/hooks.json`                       |
 | OpenCode    | `npx oh-my-plumb init opencode` | `~/.config/opencode/plugins/oh-my-plumb.js` |
 | Pi          | `npx oh-my-plumb init pi`       | `~/.pi/agent/extensions/oh-my-plumb.ts`     |
+| Oh My Pi    | `npx oh-my-plumb init omp`      | `~/.omp/agent/extensions/oh-my-plumb.ts`    |
 
 `init` with no name installs into every agent it finds. Add `--project` to install into the repo instead, so teammates get it with the checkout.
 
@@ -80,6 +81,8 @@ Codex only: start `codex`, type `/hooks`, and accept the four oh-my-plumb entrie
 OpenCode only: there are no hook processes, so oh-my-plumb runs as a plugin.
 
 Pi only: oh-my-plumb runs as an in-process extension. It reads each file before pi's `edit` or `write` runs, so the check sees the real diff. Same checks, same messages: an edit that breaks a rule gets the repair request appended to its tool result, and the turn check runs once, when pi is about to stop, asking for one more round if something is still broken. A `--project` install lands in `.pi/extensions/`, which pi loads only in a trusted project: accept pi's trust prompt, or pass `--approve` to `pi -p`.
+
+Oh My Pi only: `omp` loads the same extension from its own directories, `~/.omp/agent/extensions/` or, with `--project`, `.omp/extensions/`. The turn check hooks omp's `session_stop` instead of pi's `agent_before_settle`.
 
 ## See what your codebase already breaks
 
@@ -91,19 +94,19 @@ Every file is judged as if it had just been written. You get a table by rule and
 
 ## Commands
 
-| Command                         | What it does                                                                |
-| ------------------------------- | --------------------------------------------------------------------------- |
-| `oh-my-plumb login`             | store your TypeSafe key in `~/.oh-my-plumb/.env`                            |
-| `oh-my-plumb init [agent]`      | install the hooks (`claude`, `codex`, `opencode`, `pi`, or every one found) |
-| `oh-my-plumb audit [paths]`     | judge existing files, report by rule and by file                            |
-| `oh-my-plumb check [paths]`     | check uncommitted changes the way the hooks would                           |
-| `oh-my-plumb report`            | your rules, what fired, what never fires                                    |
-| `oh-my-plumb replay <agent>`    | judge this repo's past sessions in any of the three agents                  |
-| `oh-my-plumb compile`           | compile the rubric now instead of at the next session                       |
-| `oh-my-plumb calibrate`         | score every rule against your recent git history and recorded tool calls    |
-| `oh-my-plumb tune`              | rewrite the rules that never fire                                           |
-| `oh-my-plumb bench`             | latency and spend, measured on your machine                                 |
-| `oh-my-plumb uninstall [agent]` | remove the hooks                                                            |
+| Command                         | What it does                                                                       |
+| ------------------------------- | ---------------------------------------------------------------------------------- |
+| `oh-my-plumb login`             | store your TypeSafe key in `~/.oh-my-plumb/.env`                                   |
+| `oh-my-plumb init [agent]`      | install the hooks (`claude`, `codex`, `opencode`, `pi`, `omp`, or every one found) |
+| `oh-my-plumb audit [paths]`     | judge existing files, report by rule and by file                                   |
+| `oh-my-plumb check [paths]`     | check uncommitted changes the way the hooks would                                  |
+| `oh-my-plumb report`            | your rules, what fired, what never fires                                           |
+| `oh-my-plumb replay <agent>`    | judge this repo's past sessions in any of the three agents                         |
+| `oh-my-plumb compile`           | compile the rubric now instead of at the next session                              |
+| `oh-my-plumb calibrate`         | score every rule against your recent git history and recorded tool calls           |
+| `oh-my-plumb tune`              | rewrite the rules that never fire                                                  |
+| `oh-my-plumb bench`             | latency and spend, measured on your machine                                        |
+| `oh-my-plumb uninstall [agent]` | remove the hooks                                                                   |
 
 `report`, `check`, `audit`, `bench` and `calibrate` take `--json`.
 
