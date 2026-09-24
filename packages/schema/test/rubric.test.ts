@@ -206,6 +206,74 @@ describe("rubricSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("accepts a rubric compiled before tool-call rules and the tool log existed", () => {
+    const parsed = rubricSchema.parse({
+      ...base,
+      rules: [
+        {
+          id: "no-interface",
+          text: "Use `type`, never `interface`.",
+          source: { path: "AGENTS.md", line: 41 },
+          scope: ["**/*.ts"],
+          check: {
+            type: "lint",
+            pattern: "^\\s*(export\\s+)?interface\\s",
+            how: "@typescript-eslint/consistent-type-definitions",
+          },
+        },
+        {
+          id: "raw-error-to-user",
+          text: "Never show a user a raw error",
+          source: { path: "AGENTS.md", line: 120 },
+          scope: ["apps/web/src/**/*.ts"],
+          when: "edit",
+          check: {
+            type: "model",
+            question: {
+              type: "boolean",
+              instructions: "Does this change put raw exception text where a user will see it?",
+            },
+          },
+        },
+        {
+          id: "scope-creep",
+          text: "No features beyond what was asked",
+          source: { path: "AGENTS.md", line: 22 },
+          when: "turn",
+          check: {
+            type: "model",
+            question: {
+              type: "boolean",
+              instructions: "Does this change add functionality the task did not ask for?",
+            },
+          },
+        },
+        {
+          id: "reuse-error-codes",
+          text: "Reuse existing codes; don't invent near-duplicates",
+          source: { path: "AGENTS.md", line: 131 },
+          check: { type: "deferred", reason: "needs the list of codes that already exist" },
+        },
+        {
+          id: "ask-when-unsure",
+          text: "State your assumptions explicitly. If uncertain, ask",
+          source: { path: "AGENTS.md", line: 12 },
+          check: { type: "unenforceable", reason: "about the conversation, not the code" },
+        },
+      ],
+    });
+    expect(parsed.rules).toHaveLength(5);
+    expect(parsed.rules.map((r) => r.target)).toEqual(["diff", "diff", "diff", "diff", "diff"]);
+    expect(parsed.rules.map((r) => r.status)).toEqual([
+      "active",
+      "active",
+      "active",
+      "active",
+      "active",
+    ]);
+    expect(parsed.rules.map((r) => r.when ?? null)).toEqual([null, "edit", "turn", null, null]);
+  });
 });
 
 describe("ids", () => {
