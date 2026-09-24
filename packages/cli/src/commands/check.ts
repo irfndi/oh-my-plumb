@@ -3,7 +3,7 @@ import { parseArgs } from "node:util";
 import { PlumbError, toolCallSchema, type ToolCall } from "oh-my-plumb-schema";
 import { loudestVerdicts, runCheck, runToolCallCheck } from "../lib/checkRunner.js";
 import { EDIT_CHECK_TIMEOUT_MS, TURN_CHECK_TIMEOUT_MS } from "../lib/constants.js";
-import { hasApiKey, NO_KEY_HINT } from "../lib/credentials.js";
+import { requireApiKey } from "../lib/credentials.js";
 import { boundState } from "../lib/diff.js";
 import { splitDiff, workingTreeDiff } from "../lib/git.js";
 import { loadRubric } from "../lib/loadRubric.js";
@@ -64,7 +64,7 @@ export const runCheckCommand = async (argv: string[]): Promise<number> => {
     );
   const call = values["tool-call"] === undefined ? undefined : readToolCall(values["tool-call"]);
 
-  if (!hasApiKey(root)) throw new PlumbError("NO_API_KEY", NO_KEY_HINT);
+  requireApiKey(root);
 
   const files =
     call === undefined
