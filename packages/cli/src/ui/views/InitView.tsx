@@ -15,6 +15,8 @@ export type InitData =
       hosts: string[];
       afterwards: string[];
       sources: { path: string; scope: string; global: boolean }[];
+      /** Skills per folder; a skill's rules count only in turns that load it. */
+      skills: { folder: string; count: number }[];
       rubric: { path: string; rules: number } | null;
     };
 
@@ -67,6 +69,15 @@ export function InitView({ data }: { data: InitData }) {
                       ? "everywhere in this repo"
                       : `applies to ${scopeLabel([s.scope])}`}
                 </Text>
+              </Box>
+            ))}
+            {data.skills.map((s) => (
+              <Box key={s.folder}>
+                <Text color={palette.cloud}>
+                  {" "}
+                  {s.count} {s.count === 1 ? "skill" : "skills"}: {s.folder}
+                </Text>
+                <Text color={palette.ash}> only in turns that load them</Text>
               </Box>
             ))}
           </Box>

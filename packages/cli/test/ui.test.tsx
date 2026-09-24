@@ -4,6 +4,7 @@ import type { Rule } from "oh-my-plumb-schema";
 import { Verdicts } from "../src/ui/components/Verdicts.js";
 import { RuleTable } from "../src/ui/components/RuleTable.js";
 import { ReportView } from "../src/ui/views/ReportView.js";
+import { InitView } from "../src/ui/views/InitView.js";
 import type { PiTrustState } from "../src/lib/piTrust.js";
 import { CheckView } from "../src/ui/views/CheckView.js";
 import { scopeLabel, truncate, meter } from "../src/ui/theme.js";
@@ -158,6 +159,30 @@ describe("views", () => {
     expect(frame(null)).not.toContain("approved this project");
     expect(frame("untrusted")).toContain("Pi has not approved this project");
     expect(frame("unknown")).toContain("Not sure whether Pi approved this project");
+  });
+
+  it("init lists instruction files one per line and skills one line per folder", () => {
+    const { lastFrame } = render(
+      <InitView
+        data={{
+          kind: "installed",
+          root: "/r",
+          steps: [],
+          hosts: [],
+          afterwards: [],
+          sources: [{ path: "AGENTS.md", scope: "**/*", global: false }],
+          skills: [
+            { folder: "~/.claude/skills", count: 55 },
+            { folder: "installed Claude Code plugins", count: 1 },
+          ],
+          rubric: null,
+        }}
+      />,
+    );
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("AGENTS.md");
+    expect(frame).toContain("55 skills: ~/.claude/skills");
+    expect(frame).toContain("1 skill: installed Claude Code plugins");
   });
 
   it("check ends with the repair count", () => {

@@ -16,7 +16,11 @@ import { detectHosts, hostLabel, installHost, parseHost, type Installed } from "
 import { hookScriptPath } from "../lib/packageRoot.js";
 import { ohMyPlumbDir, findRepoRoot, rubricPath } from "../lib/paths.js";
 import { readRubric, writeRubric } from "../lib/rubricFile.js";
-import { discoverGlobalSources, discoverProjectSources } from "../lib/sources.js";
+import {
+  discoverGlobalSources,
+  discoverProjectSources,
+  type SourceCandidate,
+} from "../lib/sources.js";
 import { detectStack, routesFor, type DetectedStack, type TierRoute } from "../lib/detect.js";
 import type { Step } from "../ui/components/Checklist.js";
 import { showStatic } from "../ui/render.js";
@@ -93,6 +97,40 @@ export const withGuards = (
   return { ...base, sources, rules };
 };
 
+const foundText = (files: number, skills: number): string => {
+  const fileText = `${files} instruction ${files === 1 ? "file" : "files"}`;
+  return skills === 0
+    ? `${fileText} found`
+    : `${fileText} and ${skills} ${skills === 1 ? "skill" : "skills"} found`;
+};
+
+const SKILL_ROOTS = [
+  "~/.claude/skills",
+  "~/.pi/agent/skills",
+  ".claude/skills",
+  ".pi/skills",
+  "skills",
+];
+
+/** Where a skill lives, as one line: its skills folder, or the installed plugins as a whole. */
+const skillFolder = (skillPath: string): string => {
+  if (skillPath.startsWith("~/.claude/plugins/")) return "installed Claude Code plugins";
+  return (
+    SKILL_ROOTS.find((root) => skillPath.startsWith(`${root}/`)) ??
+    path.dirname(path.dirname(skillPath))
+  );
+};
+
+/** Skills counted per folder, in the order they were found. */
+const skillFolders = (skills: readonly SourceCandidate[]): { folder: string; count: number }[] => {
+  const counts = new Map<string, number>();
+  for (const skill of skills) {
+    const folder = skillFolder(skill.path);
+    counts.set(folder, (counts.get(folder) ?? 0) + 1);
+  }
+  return [...counts].map(([folder, count]) => ({ folder, count }));
+};
+
 export const runInit = async (argv: string[]): Promise<number> => {
   const { values, positionals } = parseArgs({
     args: argv,
@@ -109,6 +147,10 @@ export const runInit = async (argv: string[]): Promise<number> => {
 
   const project = discoverProjectSources(root);
   const global = discoverGlobalSources();
+  const all = [...project, ...global];
+  // A machine can hold dozens of skills; they are listed per folder, not one line each.
+  const skills = all.filter((c) => c.origin === "skill");
+  const files = all.filter((c) => c.origin !== "skill");
   if (project.length === 0 && global.length === 0) {
     await showStatic(InitView({ data: { kind: "no-sources", root } }));
     return 1;
@@ -125,7 +167,7 @@ export const runInit = async (argv: string[]): Promise<number> => {
     },
     {
       ok: true,
-      text: `${project.length + global.length} instruction ${project.length + global.length === 1 ? "file" : "files"} found`,
+      text: foundText(files.length, skills.length),
     },
   ];
   mkdirSync(ohMyPlumbDir(root), { recursive: true });
@@ -169,10 +211,12 @@ export const runInit = async (argv: string[]): Promise<number> => {
         steps,
         hosts: installed.map((i) => hostLabel(i.host)),
         afterwards: installed.flatMap((i) => (i.afterwards === undefined ? [] : [i.afterwards])),
-        sources: [
-          ...project.map((c) => ({ path: c.path, scope: c.scope, global: false })),
-          ...global.map((c) => ({ path: c.path, scope: c.scope, global: true })),
-        ],
+        sources: files.map((c) => ({
+          path: c.path,
+          scope: c.scope,
+          global: global.includes(c),
+        })),
+        skills: skillFolders(skills),
         rubric:
           rubric.kind === "ok" ? { path: rubric.path, rules: rubric.rubric.rules.length } : null,
       },
