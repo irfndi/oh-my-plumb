@@ -20,7 +20,7 @@ import { lastUserPrompt } from "./transcript.js";
 export type Pair = { rule: Rule; verdict: Verdict };
 
 /** Edit tools, in every host's spelling: their calls are judged as diffs, never as tool calls. */
-const EDIT_TOOL_NAMES = new Set(["edit", "write", "multiedit", "apply_patch"]);
+export const EDIT_TOOL_NAMES = new Set(["edit", "write", "multiedit", "apply_patch"]);
 
 /** The host fields every recorded call carries, whichever hook event delivered it. */
 export type ToolCallInput = {

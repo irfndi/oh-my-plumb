@@ -10,7 +10,7 @@ import {
   type Verdict,
 } from "oh-my-plumb-schema";
 import { runCheck, type CheckOutcome } from "../lib/checkRunner.js";
-import type { Pair } from "../lib/toolCallCheck.js";
+import { EDIT_TOOL_NAMES, type Pair } from "../lib/toolCallCheck.js";
 import { fastCheck } from "../lib/tier1.js";
 import { findMcpServer } from "../lib/detect.js";
 import {
@@ -24,7 +24,7 @@ import {
 import { EDIT_CHECK_TIMEOUT_MS, MAX_BLOCKS_PER_RULE_PER_TURN } from "../lib/constants.js";
 import { hasApiKey } from "../lib/credentials.js";
 import { boundState, editsFromPostToolUse, type EditHunk } from "../lib/diff.js";
-import { appendEvent } from "../lib/events.js";
+import { appendEvent, appendUnknownPayload } from "../lib/events.js";
 import { loadRubric } from "../lib/loadRubric.js";
 import { debug } from "../lib/output.js";
 import { findRepoRoot, isExcludedPath, relativeToRoot } from "../lib/paths.js";
@@ -52,7 +52,12 @@ export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
     return handleEdit(edit.data);
   }
   const call = toolCallPostToolUseSchema.safeParse(raw);
-  if (!call.success) return { kind: "silent" };
+  // Neither shape, or an edit tool whose edit payload no longer parses: the host
+  // changed what it sends. Counted by name so report shows the drift.
+  if (!call.success || EDIT_TOOL_NAMES.has(call.data.tool_name.toLowerCase())) {
+    appendUnknownPayload(raw);
+    return { kind: "silent" };
+  }
   // The call was judged before it ran; after it ran it only joins the turn's log.
   rememberCall(call.data);
   return { kind: "silent" };

@@ -84,6 +84,29 @@ Pi only: oh-my-plumb runs as an in-process extension. It reads each file before 
 
 Oh My Pi only: `omp` loads the same extension from its own directories, `~/.omp/agent/extensions/` or, with `--project`, `.omp/extensions/`. The turn check hooks omp's `session_stop` instead of pi's `agent_before_settle`.
 
+### Tested against
+
+| Host          | Tested against                    | What we depend on                                                                              |
+| ------------- | --------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Claude Code   | 2.1.281, plus recorded payloads   | the hook events SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop and their fields |
+| Codex         | recorded payloads, latest release | the `hooks.json` shape and the hook events it sends                                            |
+| OpenCode v1   | 1.18.32, installed in CI          | the plugin events `chat.message`, `tool.execute.before`, `tool.execute.after`                  |
+| OpenCode v2   | 2.0.12, installed in CI           | `tool.hook("execute.before" / "execute.after")` and `session.hook("context")`                  |
+| Pi / Oh My Pi | recorded payloads, latest release | the extension API: `tool_call`, `tool_result`, `agent_before_settle`, `session_stop`           |
+
+There is no minimum version. We support each host's latest release, and what we pin is a recorded payload per host, checked in as a test that drives the real integration. OpenCode also gets a real install in CI at the version in the table.
+
+If your host sends something we do not recognize, the hook still exits cleanly and lets the call through, but it logs the tool's name (never its input or output) and `oh-my-plumb report` shows it as "payloads skipped as unknown". A host change then shows up as a count instead of a quiet gap.
+
+### Refreshing host fixtures
+
+When a host ships a release:
+
+1. Install it and capture what it sends: the JSON the hook reads on stdin for Claude Code and Codex, the event arguments for OpenCode and pi.
+2. Replace the recorded payload in the matching test (`packages/cli/test/hostE2E.test.ts`, `opencodeV2Plugin.test.ts`, or `piExtension.test.ts`).
+3. Run `pnpm verify`. A shape the schema now rejects appears as an `unknown_payload` event; decide whether to support it.
+4. Update the host's row in the table above, and the pin in `.github/workflows/ci.yml` for OpenCode.
+
 ## See what your codebase already breaks
 
 ```

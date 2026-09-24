@@ -30,6 +30,7 @@ const reasonOf = (rule: Rule): string =>
 export function ReportView({ data }: { data: ReportData }) {
   const checks = data.events.filter((e): e is Check => e.kind === "check");
   const errors = data.events.filter((e) => e.kind === "error").length;
+  const unknown = data.events.filter((e) => e.kind === "unknown_payload").length;
   const edit = checks.filter((c) => c.phase === "edit");
   const turn = checks.filter((c) => c.phase === "turn");
   const spend = (list: readonly Check[]) => list.reduce((s, c) => s + (c.usage?.costUsd ?? 0), 0);
@@ -251,17 +252,25 @@ export function ReportView({ data }: { data: ReportData }) {
                 pad: { text: "" },
               }))}
             />
-            {errors > 0 ? (
-              <Box marginTop={1}>
-                <Text color={palette.amber}>
-                  {errors} {errors === 1 ? "check" : "checks"} failed or timed out. Those edits went
-                  unchecked.
-                </Text>
-              </Box>
-            ) : null}
           </Box>
         )}
       </Section>
+      {errors > 0 || unknown > 0 ? (
+        <Box flexDirection="column" marginTop={1}>
+          {errors > 0 ? (
+            <Text color={palette.amber}>
+              {errors} {errors === 1 ? "check" : "checks"} failed or timed out. Those edits went
+              unchecked.
+            </Text>
+          ) : null}
+          {unknown > 0 ? (
+            <Text color={palette.amber}>
+              {unknown} {unknown === 1 ? "payload" : "payloads"} skipped as unknown (possible host
+              version drift).
+            </Text>
+          ) : null}
+        </Box>
+      ) : null}
     </Box>
   );
 }

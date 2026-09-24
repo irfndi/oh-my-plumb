@@ -24,3 +24,54 @@ jobs:
       - run: pnpm -r run build
       - run: pnpm -r run typecheck
       - run: pnpm -r run test
+
+  # Real-binary smoke for the host CI can install headlessly: OpenCode, both
+  # major versions. Claude Code and Codex have no headless installer and pi/omp
+  # need a model key to do anything worth asserting, so recorded payloads stay
+  # their pin. The pins are the README's "Tested against" versions.
+  # Separate from `verify` so it cannot make the main gate flaky, and not
+  # continue-on-error: a version mismatch is the signal it exists to raise. An
+  # npm registry outage is not our regression, so the install skips green.
+  opencode-binary:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: "opencode-ai@1.18.32"
+            bin: opencode
+            version: "1.18.32"
+            smoke: "opencode debug v2"
+          - package: "@opencode/cli@2.0.12"
+            bin: opencode2
+            version: "opencode v2.0.12"
+            smoke: "opencode2 api --standalone get /api/plugin"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install the pinned OpenCode, or skip when the registry is down
+        id: install
+        run: |
+          if npm i -g "${{ matrix.package }}"; then
+            echo "installed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "installed=false" >> "$GITHUB_OUTPUT"
+            echo "npm registry unavailable; skipping the OpenCode smoke."
+          fi
+      - name: The installed version equals the pin
+        if: steps.install.outputs.installed == 'true'
+        run: |
+          got="$(${{ matrix.bin }} --version)"
+          echo "${{ matrix.bin }} --version -> ${got}"
+          test "${got}" = "${{ matrix.version }}"
+      - name: Plugin discovery runs without a model key
+        if: steps.install.outputs.installed == 'true'
+        # An empty home on purpose: a resolved config can carry MCP keys, and
+        # none may reach a log. Stdout is discarded; the exit code is the check.
+        run: |
+          mkdir -p "$RUNNER_TEMP/oc-home/.config" "$RUNNER_TEMP/oc-repo"
+          cd "$RUNNER_TEMP/oc-repo" && git init -q
+          HOME="$RUNNER_TEMP/oc-home" XDG_CONFIG_HOME="$RUNNER_TEMP/oc-home/.config" \
+            timeout 120 ${{ matrix.smoke }} > /dev/null

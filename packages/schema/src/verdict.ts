@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { toolNameSchema } from "./hooks.js";
 import { ruleWhenSchema } from "./rubric.js";
 
 export const bandSchema = z.enum(["act", "flag", "clear"]);
@@ -64,6 +65,13 @@ export const eventSchema = z.discriminatedUnion("kind", [
     sessionId: z.string().optional(),
     reason: z.string(),
     sources: z.array(z.string()),
+  }),
+  z.object({
+    kind: z.literal("unknown_payload"),
+    at: z.string(),
+    sessionId: z.string().optional(),
+    /** Name only: what the payload called the tool, never its input or output. */
+    tool: toolNameSchema,
   }),
 ]);
 export type PlumbEvent = z.infer<typeof eventSchema>;
