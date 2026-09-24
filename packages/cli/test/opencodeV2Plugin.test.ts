@@ -422,13 +422,10 @@ describe("opencode v2 plugin", () => {
     expect(existsSync(events)).toBe(false);
   }, 30_000);
 
-  it("pre-tool-use passes the call through while the script has no such route", async () => {
+  it("judges a call before it runs, and without a key lets it run and logs the skip", async () => {
     const root = repoWithToolCallRule();
     const hooks = await loadPlugin(root);
     const events = path.join(root, ".oh-my-plumb", "events.jsonl");
-    // Today's script exits 0 with no output for this name, so the call runs
-    // unchecked: fail-open by contract. When #48 lands, this route judges and
-    // the assertion below flips to an events file in a deliberate test update.
     await expect(
       hooks.tool.get("execute.before")?.({
         tool: "shell",
@@ -439,6 +436,8 @@ describe("opencode v2 plugin", () => {
         input: { command: "ls" },
       }),
     ).resolves.toBeUndefined();
-    expect(existsSync(events)).toBe(false);
+    const log = readFileSync(events, "utf8");
+    expect(log).toContain('"kind":"skip"');
+    expect(log).toContain('"reason":"no api key"');
   }, 30_000);
 });
