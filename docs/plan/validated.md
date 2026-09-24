@@ -82,8 +82,7 @@ validate_migration` via MCP JSON-RPC is Phase 3, not MVP.
    skill dirs + guard-like `package.json` scripts; `routesFor` tier adapter).
 5. Phase 3 DONE (local + spawned guards; MCP JSON-RPC client deferred): `lib/guards.ts`
    (`routesForFile` trigger routing, `parseGuardOutput`, `resolveSkillGuard`,
-   `runGuard` 2s deadline silent-pass), Tier2 local migration guard in `lib/tier2.ts`,
-   external MCP/skill dispatch in `postToolUse.ts`, Tier-2 route lines in `init` rules.yaml.
+   `runGuard` 2s deadline silent-pass), external MCP/skill dispatch in `postToolUse.ts`, Tier-2 route lines in `init` rules.yaml.
 6. Phase 4 DONE (docs + help; OMP layout validation deferred to installed-OMP check):
    README agents table + Pi section, `init [agent]` help text, Jev adapter unchanged
    (`jev-latest`, `lib/jev.ts`, `lib/band.ts` thresholds act 0.8 / flag 0.5).
