@@ -119,6 +119,13 @@ describe("rubricSchema", () => {
     expect(
       rubricSchema.safeParse({ ...base, rules: [{ ...toolRule, target: "callLog" }] }).success,
     ).toBe(false);
+    // Only a model check can judge a call; any other check would sit in the rubric and never run.
+    expect(
+      rubricSchema.safeParse({
+        ...base,
+        rules: [{ ...toolRule, check: { type: "lint", how: "x" } }],
+      }).success,
+    ).toBe(false);
   });
 
   it("validates choice and score questions", () => {

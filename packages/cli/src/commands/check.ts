@@ -16,7 +16,7 @@ import { showLive } from "../ui/render.js";
 import { CheckView, type CheckData, type CheckSection } from "../ui/views/CheckView.js";
 
 /** A recorded tool call from a file: JSON, zod-parsed, with a named failure when it is neither. */
-const readToolCall = (file: string): ToolCall => {
+export const readToolCall = (file: string): ToolCall => {
   const raw = readRegularText(file);
   if (raw === undefined)
     throw new PlumbError("CHECK_INPUT_INVALID", `${file} is missing or not a regular file`);
@@ -57,12 +57,12 @@ export const runCheckCommand = async (argv: string[]): Promise<number> => {
       "no rubric here or in ~/.oh-my-plumb; run oh-my-plumb compile first",
     );
 
-  const call = values["tool-call"] === undefined ? undefined : readToolCall(values["tool-call"]);
-  if (call !== undefined && (values.diff !== undefined || positionals.length > 0))
+  if (values["tool-call"] !== undefined && (values.diff !== undefined || positionals.length > 0))
     throw new PlumbError(
       "CHECK_INPUT_INVALID",
       "--tool-call replaces the diff; pass one or the other",
     );
+  const call = values["tool-call"] === undefined ? undefined : readToolCall(values["tool-call"]);
 
   if (!hasApiKey(root)) throw new PlumbError("NO_API_KEY", NO_KEY_HINT);
 
@@ -177,7 +177,8 @@ export const runCheckCommand = async (argv: string[]): Promise<number> => {
     header: Header({
       command: "check",
       where: root,
-      note: files.length === 0 ? "nothing to check: no changed lines" : undefined,
+      note:
+        call === undefined && files.length === 0 ? "nothing to check: no changed lines" : undefined,
     }),
     run,
     done: (data) => CheckView({ data }),

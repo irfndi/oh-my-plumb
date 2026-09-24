@@ -185,6 +185,13 @@ export const ruleSchema = z
         message: `rule "${rule.id}" is model-checked and needs "when": "edit" or "turn"`,
       });
     }
+    if (rule.target === "toolCall" && rule.check.type !== "model") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["target"],
+        message: `rule "${rule.id}" targets tool calls, which only a model check can judge`,
+      });
+    }
   });
 export type Rule = z.infer<typeof ruleSchema>;
 export type RuleInput = z.input<typeof ruleSchema>;
