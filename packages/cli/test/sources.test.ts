@@ -7,6 +7,7 @@ import {
   checkStaleness,
   discoverGlobalSources,
   discoverProjectSources,
+  type SourceCandidate,
 } from "../src/lib/sources.js";
 import { fillSourceShas, mergeRules } from "../src/lib/rubricFile.js";
 
@@ -98,6 +99,31 @@ describe("global sources", () => {
       delete process.env.OH_MY_PLUMB_HOME_DIR;
     }
   });
+
+  it("reads pi's global AGENTS.md and follows imports in the global CLAUDE.md", () => {
+    const home = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-home-"));
+    process.env.OH_MY_PLUMB_HOME_DIR = home;
+    try {
+      mkdirSync(path.join(home, ".pi", "agent"), { recursive: true });
+      writeFileSync(path.join(home, ".pi", "agent", "AGENTS.md"), "- pi rule\n");
+      mkdirSync(path.join(home, ".claude"), { recursive: true });
+      writeFileSync(path.join(home, ".claude", "CLAUDE.md"), "See @notes.md\n");
+      writeFileSync(path.join(home, ".claude", "notes.md"), "- note\n");
+      const found = discoverGlobalSources();
+      expect(found.map((c) => c.path)).toEqual([
+        "~/.claude/CLAUDE.md",
+        "~/.pi/agent/AGENTS.md",
+        "~/.claude/notes.md",
+      ]);
+      expect(found.find((c) => c.path === "~/.claude/notes.md")).toMatchObject({
+        scope: "**/*",
+        required: true,
+        origin: "global",
+      });
+    } finally {
+      delete process.env.OH_MY_PLUMB_HOME_DIR;
+    }
+  });
 });
 
 describe("merging", () => {
@@ -120,5 +146,148 @@ describe("merging", () => {
     const merged = mergeRules(mk("project"), mk("global"));
     expect(merged).toHaveLength(1);
     expect(merged[0]).toMatchObject({ text: "project", origin: "project" });
+  });
+});
+
+const moreSources = (): string => {
+  const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-"));
+  writeFileSync(path.join(root, "GEMINI.md"), "- gemini rule\n");
+  writeFileSync(path.join(root, "CLAUDE.local.md"), "- local rule\n");
+  writeFileSync(path.join(root, "AGENTS.override.md"), "- override rule\n");
+  writeFileSync(path.join(root, ".windsurfrules"), "- windsurf rule\n");
+  mkdirSync(path.join(root, ".github"), { recursive: true });
+  writeFileSync(path.join(root, ".github", "copilot-instructions.md"), "- copilot rule\n");
+  mkdirSync(path.join(root, ".cursor", "rules"), { recursive: true });
+  writeFileSync(
+    path.join(root, ".cursor", "rules", "scoped.mdc"),
+    '---\ndescription: TS only\nglobs: "src/**/*.ts"\n---\n- scoped rule\n',
+  );
+  writeFileSync(path.join(root, ".cursor", "rules", "plain.mdc"), "- no front matter\n");
+  writeFileSync(
+    path.join(root, ".cursor", "rules", "broken.mdc"),
+    "---\nglobs src/**/*.ts\n---\n- broken front matter\n",
+  );
+  mkdirSync(path.join(root, "apps", ".cursor", "rules"), { recursive: true });
+  writeFileSync(path.join(root, "apps", ".cursor", "rules", "team.mdc"), "- team rule\n");
+  mkdirSync(path.join(root, "node_modules", "dep", ".cursor", "rules"), { recursive: true });
+  writeFileSync(path.join(root, "node_modules", "dep", ".cursor", "rules", "ignored.mdc"), "x\n");
+  writeFileSync(
+    path.join(root, ".cursor", "rules", "crlf.mdc"),
+    '---\r\nglobs: "lib/**/*.ts"\r\n---\r\n- windows rule\r\n',
+  );
+  writeFileSync(
+    path.join(root, ".cursor", "rules", "unterminated.mdc"),
+    "---\nglobs: src/**/*.ts\n- never closed\n",
+  );
+  writeFileSync(
+    path.join(root, ".cursor", "rules", "list.mdc"),
+    "---\nglobs: src/**/*.ts, tests/**/*.ts # both\n---\n- two globs\n",
+  );
+  writeFileSync(
+    path.join(root, ".cursor", "rules", "block.mdc"),
+    '---\nglobs:\n  - "a/**"\n  - b/**\n---\n- block list\n',
+  );
+  writeFileSync(path.join(root, ".env"), "SECRET=1\n");
+  writeFileSync(path.join(path.dirname(root), "outside-rules.md"), "- outside\n");
+  writeFileSync(
+    path.join(root, "CLAUDE.md"),
+    "Rules live in @docs/more-rules.md and @missing.md. Keys live in @.env, " +
+      "shared rules in @../outside-rules.md. See @docs/period.md.\n",
+  );
+  mkdirSync(path.join(root, "docs"), { recursive: true });
+  writeFileSync(path.join(root, "docs", "more-rules.md"), "Back to @../CLAUDE.md\n");
+  writeFileSync(path.join(root, "docs", "period.md"), "- ends a sentence\n");
+  let deep = root;
+  for (let i = 0; i < 7; i += 1) {
+    deep = path.join(deep, `d${i}`);
+    mkdirSync(deep, { recursive: true });
+  }
+  mkdirSync(path.join(deep, ".cursor", "rules"), { recursive: true });
+  writeFileSync(path.join(deep, ".cursor", "rules", "too-deep.mdc"), "- too deep\n");
+  return root;
+};
+
+describe("more instruction files", () => {
+  it("discovers root tool files, cursor rules, and @path imports", () => {
+    const root = moreSources();
+    const found = discoverProjectSources(root);
+    const mustFind = (p: string): SourceCandidate => {
+      const hit = found.find((f) => f.path === p);
+      if (hit === undefined) throw new Error(`missing candidate: ${p}`);
+      return hit;
+    };
+
+    for (const name of ["GEMINI.md", ".windsurfrules", ".github/copilot-instructions.md"]) {
+      expect(mustFind(name)).toMatchObject({ scope: "**/*", required: true, origin: "root" });
+    }
+    // Per-developer files are offered to compile, but a teammate without one is not stale.
+    for (const name of ["CLAUDE.local.md", "AGENTS.override.md"]) {
+      expect(mustFind(name)).toMatchObject({ scope: "**/*", required: false, origin: "root" });
+    }
+    expect(mustFind(".cursor/rules/crlf.mdc").scope).toBe("lib/**/*.ts");
+    expect(mustFind(".cursor/rules/unterminated.mdc").scope).toBe("**/*");
+    expect(mustFind(".cursor/rules/list.mdc").scope).toBe("{src/**/*.ts,tests/**/*.ts}");
+    expect(mustFind(".cursor/rules/block.mdc").scope).toBe("{a/**,b/**}");
+
+    expect(mustFind(".cursor/rules/scoped.mdc")).toMatchObject({
+      scope: "src/**/*.ts",
+      required: true,
+      origin: "root",
+    });
+    expect(mustFind(".cursor/rules/plain.mdc")).toMatchObject({
+      scope: "**/*",
+      required: true,
+      origin: "root",
+    });
+    expect(mustFind(".cursor/rules/broken.mdc")).toMatchObject({
+      scope: "**/*",
+      required: true,
+      origin: "root",
+    });
+    expect(mustFind("apps/.cursor/rules/team.mdc")).toMatchObject({
+      scope: "apps/**/*",
+      required: true,
+      origin: "nested",
+    });
+
+    expect(found.some((f) => f.path.endsWith("ignored.mdc"))).toBe(false);
+    expect(found.some((f) => f.path.endsWith("too-deep.mdc"))).toBe(false);
+
+    // An import is inlined into the file that imports it, so it takes that file's scope.
+    expect(mustFind("docs/more-rules.md")).toMatchObject({
+      scope: "**/*",
+      required: true,
+      origin: "root",
+    });
+    expect(mustFind("docs/period.md").scope).toBe("**/*");
+    // Secrets and files outside the repo never become sources.
+    expect(found.some((f) => f.path === ".env")).toBe(false);
+    expect(found.some((f) => f.path.includes("outside-rules"))).toBe(false);
+    expect(found.filter((f) => f.path === "CLAUDE.md")).toHaveLength(1);
+    expect(found.some((f) => f.path === "missing.md")).toBe(false);
+  });
+
+  it("stays fresh only while the rubric lists the new sources", () => {
+    const root = moreSources();
+    const found = discoverProjectSources(root);
+    const all: Rubric = {
+      version: 1,
+      compiledAt: "x",
+      sources: found.map((f) => ({ path: f.path })),
+      rules: [],
+    };
+    const filled = fillSourceShas(all, root);
+    expect(filled.missing).toEqual([]);
+    expect(checkStaleness(filled.rubric, found, root)).toEqual({ status: "fresh" });
+
+    const withoutGemini = {
+      ...all,
+      sources: all.sources.filter((s) => s.path !== "GEMINI.md"),
+    };
+    const partial = fillSourceShas(withoutGemini, root);
+    expect(checkStaleness(partial.rubric, found, root)).toMatchObject({
+      status: "stale",
+      added: ["GEMINI.md"],
+    });
   });
 });

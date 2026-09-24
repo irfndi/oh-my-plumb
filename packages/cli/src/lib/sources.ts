@@ -1,8 +1,8 @@
 import { readdirSync, existsSync, type Dirent } from "node:fs";
 import path from "node:path";
 import { createSourceSha, type Rubric } from "oh-my-plumb-schema";
-import { homeDir, resolveSourcePath, toSourcePath } from "./paths.js";
-import { readRegularFile } from "./regularFile.js";
+import { expandHome, homeDir, isExcludedPath, resolveSourcePath, toSourcePath } from "./paths.js";
+import { readRegularFile, readRegularText } from "./regularFile.js";
 
 export type SourceCandidate = {
   /** Rubric spelling: repo-relative or "~/...". */
@@ -15,9 +15,23 @@ export type SourceCandidate = {
   origin: "root" | "nested" | "global" | "contributing";
 };
 
-const ROOT_NAMES = ["AGENTS.md", "CLAUDE.md", ".cursorrules"];
+const ROOT_NAMES = [
+  "AGENTS.md",
+  "CLAUDE.md",
+  ".cursorrules",
+  "GEMINI.md",
+  ".github/copilot-instructions.md",
+  ".windsurfrules",
+];
+/** Per-developer overrides, usually gitignored: listed, but a teammate without one is not stale. */
+const PERSONAL_NAMES = ["CLAUDE.local.md", "AGENTS.override.md"];
 const NESTED_NAMES = ["AGENTS.md", "CLAUDE.md"];
-const GLOBAL_NAMES = ["~/.claude/CLAUDE.md", "~/.codex/AGENTS.md", "~/.config/opencode/AGENTS.md"];
+const GLOBAL_NAMES = [
+  "~/.claude/CLAUDE.md",
+  "~/.codex/AGENTS.md",
+  "~/.config/opencode/AGENTS.md",
+  "~/.pi/agent/AGENTS.md",
+];
 const SKIP_DIRS = new Set([
   "node_modules",
   ".git",
@@ -36,6 +50,130 @@ const SKIP_DIRS = new Set([
   ".opencode",
 ]);
 const MAX_DEPTH = 6;
+
+const unquote = (value: string): string | undefined => {
+  const quote = value[0];
+  if (quote !== '"' && quote !== "'") return value;
+  return value.length >= 2 && value.endsWith(quote) ? value.slice(1, -1).trim() : undefined;
+};
+
+/**
+ * Cursor's `globs:` front matter as one scope glob: a comma list, a `[...]` list
+ * or a YAML block list becomes a brace list. Absent, unterminated or malformed
+ * front matter falls back to the file's default scope.
+ */
+const cursorScope = (text: string | undefined): string | undefined => {
+  if (text === undefined) return undefined;
+  const lines = text.split(/\r?\n/);
+  if (lines[0]?.trim() !== "---") return undefined;
+  const end = lines.findIndex((line, i) => i > 0 && line.trim() === "---");
+  if (end === -1) return undefined;
+  const front = lines.slice(1, end);
+  const at = front.findIndex((line) => /^\s*globs:/.test(line));
+  if (at === -1) return undefined;
+  const inline = (/^\s*globs:\s*(.*)$/.exec(front[at] ?? "")?.[1] ?? "")
+    .replace(/\s+#.*$/, "")
+    .trim();
+  const raw: string[] = [];
+  if (inline !== "") raw.push(...inline.replace(/^\[(.*)\]$/, "$1").split(","));
+  else {
+    for (const line of front.slice(at + 1)) {
+      const item = /^\s*-\s+(.*)$/.exec(line)?.[1];
+      if (item === undefined) break;
+      raw.push(item.replace(/\s+#.*$/, ""));
+    }
+  }
+  const globs = raw.map((g) => unquote(g.trim()));
+  if (globs.some((g) => g === undefined)) return undefined;
+  const kept = globs.filter((g): g is string => g !== undefined && g !== "");
+  if (kept.length === 0) return undefined;
+  return kept.length === 1 ? kept[0] : `{${kept.join(",")}}`;
+};
+
+/** Every `.cursor/rules/*.mdc` directly under `dir`, inside the walk's depth and skip limits. */
+const scanCursorRules = (root: string, dir: string, out: SourceCandidate[]): void => {
+  const rulesDir = path.join(dir, ".cursor", "rules");
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(rulesDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const atRoot = dir === root;
+  const rel = toSourcePath(root, dir);
+  const origin: SourceCandidate["origin"] = atRoot ? "root" : "nested";
+  const fallback = atRoot ? "**/*" : `${rel}/**/*`;
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".mdc")) continue;
+    const file = path.join(rulesDir, entry.name);
+    out.push({
+      path: toSourcePath(root, file),
+      absolute: file,
+      scope: cursorScope(readRegularText(file)) ?? fallback,
+      required: true,
+      origin,
+    });
+  }
+};
+
+const AT_IMPORT = /(?:^|[\s`(])@([^\s`)\]}"',;:!?]+)/gm;
+
+/** `@path` import tokens, the spelling Claude Code follows inside CLAUDE.md. */
+const importTokens = (text: string): string[] => {
+  const tokens: string[] = [];
+  for (const match of text.matchAll(AT_IMPORT)) {
+    if (match[1] !== undefined) tokens.push(match[1]);
+  }
+  return tokens;
+};
+
+/** An import resolves against the file carrying it; `~` and absolute paths resolve as spelled. */
+const resolveImport = (fromFile: string, spec: string): string =>
+  spec === "~" || spec.startsWith("~/")
+    ? expandHome(spec)
+    : path.isAbsolute(spec)
+      ? spec
+      : path.resolve(path.dirname(fromFile), spec);
+
+/**
+ * Follow `@path` imports in CLAUDE.md files the way Claude Code does: the
+ * target is inlined into the importing file, so it is a source with the
+ * importer's scope. Only files inside `root` are adopted, so a committed
+ * project rubric never names a file another machine lacks, and the paths no
+ * check may see (secrets, oh-my-plumb's own files) are never sources.
+ */
+const followImports = (root: string, found: SourceCandidate[]): void => {
+  const seen = new Set(found.map((c) => path.resolve(c.absolute)));
+  const queue = found
+    .filter((c) => path.basename(c.path) === "CLAUDE.md")
+    .map((c) => ({ file: c.absolute, scope: c.scope, origin: c.origin, depth: 0 }));
+  while (queue.length > 0) {
+    const next = queue.shift();
+    if (next === undefined) break;
+    if (next.depth >= MAX_DEPTH) continue;
+    const text = readRegularText(next.file);
+    if (text === undefined) continue;
+    for (const token of importTokens(text)) {
+      // A sentence can end right after the path: "See @docs/rules.md."
+      const target = [token, token.replace(/\.+$/, "")]
+        .map((spec) => path.resolve(resolveImport(next.file, spec)))
+        .find((candidate) => readRegularFile(candidate) !== undefined);
+      if (target === undefined || seen.has(target)) continue;
+      const rel = path.relative(root, target);
+      if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) continue;
+      if (isExcludedPath(rel.split(path.sep).join("/"))) continue;
+      seen.add(target);
+      found.push({
+        path: toSourcePath(root, target),
+        absolute: target,
+        scope: next.scope,
+        required: true,
+        origin: next.origin,
+      });
+      queue.push({ file: target, scope: next.scope, origin: next.origin, depth: next.depth + 1 });
+    }
+  }
+};
 
 const walkNested = (root: string, dir: string, depth: number, out: SourceCandidate[]): void => {
   if (depth > MAX_DEPTH) return;
@@ -61,6 +199,7 @@ const walkNested = (root: string, dir: string, depth: number, out: SourceCandida
         });
       }
     }
+    scanCursorRules(root, sub, out);
     walkNested(root, sub, depth + 1, out);
   }
 };
@@ -73,6 +212,13 @@ export const discoverProjectSources = (root: string): SourceCandidate[] => {
       found.push({ path: name, absolute: file, scope: "**/*", required: true, origin: "root" });
     }
   }
+  for (const name of PERSONAL_NAMES) {
+    const file = path.join(root, name);
+    if (existsSync(file)) {
+      found.push({ path: name, absolute: file, scope: "**/*", required: false, origin: "root" });
+    }
+  }
+  scanCursorRules(root, root, found);
   walkNested(root, root, 1, found);
   const contributing = path.join(root, "CONTRIBUTING.md");
   if (existsSync(contributing)) {
@@ -84,16 +230,20 @@ export const discoverProjectSources = (root: string): SourceCandidate[] => {
       origin: "contributing",
     });
   }
+  followImports(root, found);
   return found;
 };
 
-export const discoverGlobalSources = (): SourceCandidate[] =>
-  GLOBAL_NAMES.flatMap((p) => {
+export const discoverGlobalSources = (): SourceCandidate[] => {
+  const found: SourceCandidate[] = GLOBAL_NAMES.flatMap((p) => {
     const absolute = path.join(homeDir(), p.slice(2));
     return existsSync(absolute)
       ? [{ path: p, absolute, scope: "**/*", required: true, origin: "global" as const }]
       : [];
   });
+  followImports(homeDir(), found);
+  return found;
+};
 
 export const hashFile = (absolute: string): string | undefined => {
   const bytes = readRegularFile(absolute);
