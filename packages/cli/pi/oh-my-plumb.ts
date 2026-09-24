@@ -133,7 +133,11 @@ export const preToolCallResult = (out) => {
     typeof decision.permissionDecisionReason === "string" &&
     decision.permissionDecisionReason !== ""
   ) {
-    return { block: true, reason: decision.permissionDecisionReason };
+    const note =
+      typeof out?.systemMessage === "string" && out.systemMessage !== ""
+        ? out.systemMessage
+        : undefined;
+    return { block: true, reason: decision.permissionDecisionReason, note };
   }
   if (typeof out?.systemMessage === "string" && out.systemMessage !== "") {
     return { note: out.systemMessage };
@@ -168,8 +172,8 @@ export default function ohMyPlumb(pi) {
         20_000,
       );
       const result = preToolCallResult(out);
-      if (result?.block) return { block: true, reason: result.reason };
       if (result?.note !== undefined) ctx.ui?.notify?.(result.note, "warning");
+      if (result?.block) return { block: true, reason: result.reason };
     } catch {}
   });
 

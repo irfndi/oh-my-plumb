@@ -129,6 +129,15 @@ describe("blocking a recorded call before it runs", () => {
     expect(readEvents(root).filter((event) => event.kind === "check")).toHaveLength(checksBefore);
   });
 
+  it("denies a rule-breaking call every time, never letting a repeat through", async () => {
+    violation(0.97);
+    const root = repoWith();
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const out = await handlePreToolUse({ ...payload(root), session_id: "repeats" });
+      expect(out.kind).toBe("block");
+    }
+  });
+
   it("a check that fails lets the call run and logs the error", async () => {
     model.failure = new Error("gateway exploded");
     const root = repoWith();

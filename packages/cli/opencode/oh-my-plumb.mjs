@@ -154,7 +154,11 @@ export const preToolCallResult = (out) => {
     typeof decision.permissionDecisionReason === "string" &&
     decision.permissionDecisionReason !== ""
   ) {
-    return { block: true, reason: decision.permissionDecisionReason };
+    const note =
+      typeof out?.systemMessage === "string" && out.systemMessage !== ""
+        ? out.systemMessage
+        : undefined;
+    return { block: true, reason: decision.permissionDecisionReason, note };
   }
   if (typeof out?.systemMessage === "string" && out.systemMessage !== "") {
     return { note: out.systemMessage };
@@ -183,15 +187,15 @@ export default async ({ client, directory }) => {
         const tool = input?.tool;
         if (typeof tool !== "string" || tool === "edit" || tool === "write" || READ_TOOLS.has(tool))
           return;
-        const s = sessions.get(input.sessionID);
-        if (!s || !toolCallRulesFor(directory)) return;
+        // A session this plugin has not seen (a reload wipes the map) is still checked, without a turn id.
+        if (typeof input.sessionID !== "string" || !toolCallRulesFor(directory)) return;
         const out = await runHook(
           "pre-tool-use",
           preToolCallPayload({
             tool,
             args: output.args,
             sessionID: input.sessionID,
-            turnId: s.turnId,
+            turnId: sessions.get(input.sessionID)?.turnId,
             directory,
             callID: input.callID,
           }),

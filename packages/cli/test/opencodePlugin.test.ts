@@ -145,6 +145,29 @@ describe("opencode plugin tool calls", () => {
     expect(readFileSync(events, "utf8")).toContain('"files":["postgres_query"]');
   }, 20_000);
 
+  it("keeps the flag note beside a deny, and checks a session it has not seen", async () => {
+    const deny = {
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: "stop",
+      },
+      systemMessage: "also flagged",
+    };
+    expect(preToolCallResult(deny)).toEqual({ block: true, reason: "stop", note: "also flagged" });
+
+    const root = repoWithToolCallRule();
+    const api = await plugin({ client: {}, directory: root });
+    // No chat.message first: a reloaded plugin still judges the call.
+    await api["tool.execute.before"](
+      { tool: "bash", sessionID: "unseen", callID: "c1" },
+      { args: { command: "ls" } },
+    );
+    expect(readFileSync(path.join(root, ".oh-my-plumb", "events.jsonl"), "utf8")).toContain(
+      '"reason":"no api key"',
+    );
+  }, 20_000);
+
   it("forwards tool calls only while a project or global rubric has an active tool-call rule", () => {
     const root = repoWithToolCallRule();
     const nested = path.join(root, "packages", "app");

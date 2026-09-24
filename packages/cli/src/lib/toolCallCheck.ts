@@ -1,5 +1,4 @@
 import {
-  createBlockKey,
   isPlumbError,
   turnIdOf,
   type HookOutput,
@@ -7,14 +6,14 @@ import {
   type Verdict,
 } from "oh-my-plumb-schema";
 import { runToolCallCheck, selectToolCallRules, type CheckOutcome } from "./checkRunner.js";
-import { EDIT_CHECK_TIMEOUT_MS, MAX_BLOCKS_PER_RULE_PER_TURN } from "./constants.js";
+import { EDIT_CHECK_TIMEOUT_MS } from "./constants.js";
 import { hasApiKey } from "./credentials.js";
 import { appendEvent } from "./events.js";
 import { loadRubric } from "./loadRubric.js";
 import { debug } from "./output.js";
 import { findRepoRoot } from "./paths.js";
 import { flagNotice, toolCallReason } from "./reason.js";
-import { blockCount, incrementBlock, readPrompt, turnDir } from "./session.js";
+import { readPrompt, turnDir } from "./session.js";
 import { lastUserPrompt } from "./transcript.js";
 
 export type Pair = { rule: Rule; verdict: Verdict };
@@ -88,12 +87,8 @@ export const handleToolCall = async (input: ToolCallInput): Promise<HookOutput> 
       const rule = byId.get(verdict.ruleId);
       return rule !== undefined && verdict.band === band ? [{ rule, verdict }] : [];
     });
-  const actPairs = pairs("act");
-  const acting = actPairs.filter(
-    ({ rule }) =>
-      blockCount(turn, createBlockKey(rule.id, call.tool)) < MAX_BLOCKS_PER_RULE_PER_TURN,
-  );
-  for (const { rule } of acting) incrementBlock(turn, createBlockKey(rule.id, call.tool));
+  // No per-turn cap: the call has not run, so letting it through after a few denials would run it.
+  const acting = pairs("act");
 
   appendEvent(root, {
     kind: "check",
@@ -110,7 +105,7 @@ export const handleToolCall = async (input: ToolCallInput): Promise<HookOutput> 
     blocked: acting.length > 0,
   });
 
-  const flagged = [...pairs("flag"), ...actPairs.filter((p) => !acting.includes(p))];
+  const flagged = pairs("flag");
   const systemMessage = flagged.length > 0 ? flagNotice("edit", flagged, [call.tool]) : undefined;
   if (acting.length > 0) {
     return {
