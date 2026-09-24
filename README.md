@@ -124,13 +124,13 @@ Some rules are exact. "Use `type`, not `interface`" is one: either the word is i
 - Local: the script runs inside the hook, so the diff never leaves your machine.
 - Free: no tokens, no API call.
 
-A guard is a script committed with your repo. The hook finds it at `skills/<name>/guard.mjs` (`guard.js` and `guard.sh` also work; it searches `skills/`, `.pi/skills/` and `.claude/skills/`). [`skills/no-interface`](skills/no-interface) is a working example. A rubric rule points at it with a `guard` check:
+A guard is an executable script committed with your repo. The hook finds it at `<dir>/<name>/guard.mjs` (`guard.js` and `guard.sh` also work), searching `.pi/skills/`, then `skills/`, then `.claude/skills/`, and takes the first match. The hook runs the file directly, so it needs a shebang line and the executable bit. That works on macOS and Linux; on Windows the script cannot start, and the guard never runs. [`skills/no-interface`](skills/no-interface) is a working example. A rubric rule points at it with a `guard` check:
 
 ```json
 {
   "id": "type-not-interface",
   "text": "Use `type`, not `interface`.",
-  "source": { "path": "AGENTS.md", "line": 41 },
+  "source": { "path": "AGENTS.md" },
   "check": {
     "type": "guard",
     "skill": "no-interface",
@@ -140,7 +140,7 @@ A guard is a script committed with your repo. The hook finds it at `skills/<name
 }
 ```
 
-`scope` is the glob of files the guard watches. A check may carry a `command` (`["node", "./scripts/check.mjs"]`) instead of a `skill` when the script lives outside a skill.
+`scope` is the glob of files the guard watches. A check may carry a `command` (`["node", "./scripts/check.mjs"]`) instead of a `skill` when the script lives outside a skill. The command runs from the repo root, so a relative path resolves there.
 
 ### The contract
 
