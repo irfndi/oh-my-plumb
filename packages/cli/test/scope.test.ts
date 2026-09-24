@@ -66,6 +66,8 @@ describe("tool-call scope", () => {
   it("matches tool names, not file paths", () => {
     expect(ruleAppliesToTool({ scope: undefined }, "Bash")).toBe(true);
     expect(ruleAppliesToTool({ scope: ["Bash"] }, "Bash")).toBe(true);
+    expect(ruleAppliesToTool({ scope: ["Bash"] }, "bash")).toBe(true);
+    expect(ruleAppliesTo({ scope: ["Src/**"] }, "src/a.ts")).toBe(false);
     expect(ruleAppliesToTool({ scope: ["Bash"] }, "mcp__postgres__query")).toBe(false);
     expect(ruleAppliesToTool({ scope: ["mcp__postgres__*"] }, "mcp__postgres__query")).toBe(true);
     expect(ruleAppliesToTool({ scope: ["mcp__postgres__*"] }, "Bash")).toBe(false);

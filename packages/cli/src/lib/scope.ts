@@ -3,11 +3,11 @@ import type { Rule } from "oh-my-plumb-schema";
 
 const matchers = new Map<string, (p: string) => boolean>();
 
-const matcherFor = (globs: readonly string[]): ((p: string) => boolean) => {
-  const key = globs.join("\n");
+const matcherFor = (globs: readonly string[], nocase = false): ((p: string) => boolean) => {
+  const key = `${nocase ? "i" : "c"}\n${globs.join("\n")}`;
   let m = matchers.get(key);
   if (m === undefined) {
-    m = picomatch([...globs], { dot: true });
+    m = picomatch([...globs], { dot: true, nocase });
     matchers.set(key, m);
   }
   return m;
@@ -17,6 +17,6 @@ const matcherFor = (globs: readonly string[]): ((p: string) => boolean) => {
 export const ruleAppliesTo = (rule: Pick<Rule, "scope">, relativePath: string): boolean =>
   rule.scope === undefined || matcherFor(rule.scope)(relativePath);
 
-/** Tool name against a tool-call rule's globs. No scope means every tool. */
+/** Tool name against a tool-call rule's globs, ignoring case: hosts spell `Bash` and `bash`. No scope means every tool. */
 export const ruleAppliesToTool = (rule: Pick<Rule, "scope">, tool: string): boolean =>
-  rule.scope === undefined || matcherFor(rule.scope)(tool);
+  rule.scope === undefined || matcherFor(rule.scope, true)(tool);
