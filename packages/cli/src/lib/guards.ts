@@ -111,7 +111,7 @@ export const SKILL_DIRS = [".pi/skills", "skills", ".claude/skills"];
 /** Guard routes from the rubric: one per guard check, keyed to the rule that owns it. */
 export const guardRoutes = (rules: readonly Rule[], root: string): GuardRoute[] =>
   rules.flatMap((rule) => {
-    if (rule.check.type !== "guard") return [];
+    if (rule.status !== "active" || rule.check.type !== "guard") return [];
     const { command, server, skill, scope } = rule.check;
     const entry = skill === undefined ? undefined : resolveSkillGuard(root, SKILL_DIRS, skill);
     return [

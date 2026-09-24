@@ -131,7 +131,7 @@ export const routesFor = (stack: DetectedStack, root: string): TierRoute[] => {
     routes.push({
       tier: 2,
       trigger: MIGRATION_GUARD.trigger,
-      action: "Migration files must be validated by the local migration guard",
+      action: "Migration files must pass the validate_migration guard",
       mcp: MIGRATION_GUARD.mcp,
     });
   }

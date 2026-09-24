@@ -85,9 +85,9 @@ export const withGuards = (
         text: guard.action,
       },
     });
-    const at = rules.findIndex((existing) => existing.id === rule.id);
-    if (at === -1) rules.push(rule);
-    else rules[at] = rule;
+    // A rule already in the rubric is the user's to edit or disable; init never resets it.
+    if (rules.some((existing) => existing.id === rule.id)) continue;
+    rules.push(rule);
     if (!sources.some((source) => source.path === rule.source.path))
       sources.push({ path: rule.source.path });
   }

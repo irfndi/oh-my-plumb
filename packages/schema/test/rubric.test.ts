@@ -9,7 +9,7 @@ const base = {
 
 const guardRule = {
   id: "guard-postgres-inspector-validate-migration",
-  text: "Migration files must be validated by the local migration guard",
+  text: "Migration files must pass the validate_migration guard",
   source: { path: ".pi/mcp.json" },
   scope: ["{prisma/migrations,drizzle}/**"],
   check: {
@@ -18,7 +18,7 @@ const guardRule = {
     server: "postgres-inspector",
     tool: "validate_migration",
     scope: "{prisma/migrations,drizzle}/**",
-    text: "Migration files must be validated by the local migration guard",
+    text: "Migration files must pass the validate_migration guard",
   },
 };
 

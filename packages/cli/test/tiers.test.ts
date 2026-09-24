@@ -192,6 +192,15 @@ describe("init rubric round-trip", () => {
     const again = withGuards(rubric, stack, routes);
     expect(again?.rules.filter((r) => r.check.type === "guard")).toHaveLength(1);
 
+    // A guard the user disabled stays disabled across init and never routes.
+    const disabled = withGuards(
+      again && { ...again, rules: again.rules.map((r) => ({ ...r, status: "disabled" as const })) },
+      stack,
+      routes,
+    );
+    expect(disabled?.rules.every((r) => r.status === "disabled")).toBe(true);
+    expect(guardRoutes(disabled?.rules ?? [], root)).toEqual([]);
+
     const [route] = guardRoutes(again?.rules ?? [], root);
     if (route === undefined) throw new Error("guard route missing");
     expect(route.trigger).toBe("{prisma/migrations,drizzle}/**");
@@ -253,7 +262,7 @@ describe("report missing routes", () => {
           },
           {
             id: "migration-guard",
-            text: "Migration files must be validated by the local migration guard",
+            text: "Migration files must pass the validate_migration guard",
             source: { path: "AGENTS.md" },
             check: {
               type: "guard",
@@ -261,7 +270,7 @@ describe("report missing routes", () => {
               server: "postgres-inspector",
               tool: "validate_migration",
               scope: "{prisma/migrations,drizzle}/**",
-              text: "Migration files must be validated by the local migration guard",
+              text: "Migration files must pass the validate_migration guard",
             },
           },
         ],
