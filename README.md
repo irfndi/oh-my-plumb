@@ -78,7 +78,7 @@ The agent repairs it before moving on. No human in the loop.
 
 Codex only: start `codex`, type `/hooks`, and accept the four oh-my-plumb entries. Codex asks this once for any new hook. Codex edits through `apply_patch`; oh-my-plumb reads the patch and judges every file in it.
 
-OpenCode only: there are no hook processes, so oh-my-plumb runs as a plugin.
+OpenCode only: there are no hook processes, so oh-my-plumb runs as a plugin. Both versions work: `init` reads `opencode --version` and installs the module that version loads, v1's or v2's. The v2 plugin was written against the `v2` branch at commit `0bc8b8dbeb9540842ae5a69bb5c9af3182999522` (September 2026).
 
 Pi only: oh-my-plumb runs as an in-process extension. It reads each file before pi's `edit` or `write` runs, so the check sees the real diff. Same checks, same messages: an edit that breaks a rule gets the repair request appended to its tool result, and the turn check runs once, when pi is about to stop, asking for one more round if something is still broken. A `--project` install lands in `.pi/extensions/`, which pi loads only in a trusted project: accept pi's trust prompt, or pass `--approve` to `pi -p`.
 

@@ -1,17 +1,37 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { packageRoot } from "./packageRoot.js";
+import { homeDir } from "./paths.js";
 
 export const OPENCODE_PLUGIN_MARKER = "oh-my-plumb-opencode-plugin";
 
 /**
+ * Whether the OpenCode on this machine is v2. Both versions install a binary
+ * named `opencode`, so the version is what tells them apart: the v2 installer
+ * adds an `opencode2` alias and reports a 2.x `--version`, v1 reports 0.x.
+ */
+export const opencodeIsV2 = (): boolean => {
+  if (spawnSync("which", ["opencode2"], { encoding: "utf8" }).status === 0) return true;
+  // v2 unpacks here before a shell has it on PATH; only v2 uses this directory.
+  if (existsSync(path.join(homeDir(), ".opencode", "bin", "opencode"))) return true;
+  const probe = spawnSync("opencode", ["--version"], { encoding: "utf8", timeout: 5_000 });
+  if (probe.status !== 0) return false;
+  const match = /(\d+)\.\d+\.\d+/.exec(probe.stdout ?? "");
+  return match !== null && Number(match[1]) >= 2;
+};
+
+/**
  * The plugin as shipped in the package. The installed file only points at it,
  * so an upgrade needs no reinstall. OpenCode discovers `plugins/*.js` and
- * `*.ts` only, so the installed file is `.js` whatever the package uses.
+ * `*.ts` only, so the installed file is `.js` whatever the package uses, and
+ * it points at whichever version's module that version's loader accepts:
+ * v1 wants the function in `oh-my-plumb.mjs`, v2 the `{ id, setup }` object in
+ * `oh-my-plumb-v2.js`, and neither reads the other's.
  */
 export const pluginSourcePath = (): string =>
-  path.join(packageRoot(), "opencode", "oh-my-plumb.mjs");
+  path.join(packageRoot(), "opencode", opencodeIsV2() ? "oh-my-plumb-v2.js" : "oh-my-plumb.mjs");
 
 const shim = (source: string): string =>
   [

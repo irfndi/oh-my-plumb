@@ -43,7 +43,13 @@ export const hostPresent = (host: Host): boolean => {
     case "codex":
       return existsSync(path.join(homeDir(), ".codex")) || onPath("codex");
     case "opencode":
-      return existsSync(path.join(homeDir(), ".config", "opencode")) || onPath("opencode");
+      return (
+        existsSync(path.join(homeDir(), ".config", "opencode")) ||
+        onPath("opencode") ||
+        onPath("opencode2") ||
+        // The v2 installer unpacks into ~/.opencode/bin and then adds it to PATH in the shell config.
+        existsSync(path.join(homeDir(), ".opencode", "bin", "opencode"))
+      );
     case "pi":
       return existsSync(path.join(homeDir(), ".pi", "agent", "extensions")) || onPath("pi");
     case "omp":
