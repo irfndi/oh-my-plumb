@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
@@ -102,7 +102,8 @@ describe("a skill guard through postToolUse, end to end", () => {
     const root = repoWithGuard(recordingGuard);
     const out = await write("guard-pass", root, "export type X = 1;\n");
     expect(out.kind).toBe("silent");
-    expect(existsSync(path.join(root, "guard-ran"))).toBe(true);
+    // The guard got the edited file's repo-relative path, as the contract says.
+    expect(readFileSync(path.join(root, "guard-ran"), "utf8")).toBe("a.ts");
   });
 
   it("runs a relative command guard from the repo root, not the hook's cwd", async () => {
@@ -156,6 +157,11 @@ describe("the shipped no-interface guard", () => {
       "const a = 1;\nexport interface X {}\n",
     );
     expect(hit?.reason).toContain("line 2");
+  });
+
+  it("blocks an export default interface too", async () => {
+    const hit = await runGuard("r", "s", [guard], "src/a.ts", "export default interface X {}\n");
+    expect(hit?.reason).toContain("line 1");
   });
 
   it("passes a type alias, and ignores files that are not TypeScript", async () => {

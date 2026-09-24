@@ -8,7 +8,7 @@ const isTypeScript = /\.(ts|tsx|mts|cts)$/.test(process.env.FILE_PATH ?? "");
 const hits = [];
 if (isTypeScript) {
   text.split("\n").forEach((line, index) => {
-    if (/^\s*(export\s+)?(declare\s+)?interface\s+[A-Za-z_$]/.test(line)) {
+    if (/^\s*(export\s+(default\s+)?)?(declare\s+)?interface\s+[A-Za-z_$]/.test(line)) {
       hits.push(`line ${index + 1}: ${line.trim().slice(0, 120)}`);
     }
   });
