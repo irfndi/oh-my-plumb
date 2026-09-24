@@ -11,7 +11,6 @@ const guardRule = {
   id: "guard-postgres-inspector-validate-migration",
   text: "Migration files must pass the validate_migration guard",
   source: { path: ".pi/mcp.json" },
-  scope: ["{prisma/migrations,drizzle}/**"],
   check: {
     type: "guard",
     command: ["node", "./scripts/validate-migration.mjs"],
@@ -183,6 +182,11 @@ describe("rubricSchema", () => {
     expect(rule.check.text).toBe(guardRule.check.text);
     // What `rubric validate` writes to disk parses back the same way.
     expect(rubricSchema.safeParse(JSON.parse(JSON.stringify(parsed))).success).toBe(true);
+  });
+
+  it("gives a guard's trigger one owner: check.scope, never a rule-level scope too", () => {
+    const both = { ...guardRule, scope: ["src/**"] };
+    expect(rubricSchema.safeParse({ ...base, rules: [both] }).success).toBe(false);
   });
 
   it("rejects a guard with neither a command nor a skill", () => {

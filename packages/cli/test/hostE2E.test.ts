@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { PlumbEvent } from "oh-my-plumb-schema";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import { readEvents } from "../src/lib/events.js";
 import { installHost } from "../src/lib/hosts.js";
 import { eventsPath } from "../src/lib/paths.js";
@@ -16,6 +16,19 @@ const piExtension = "../pi/oh-my-plumb.ts";
 const opencodePlugin = "../opencode/oh-my-plumb.mjs";
 
 const home = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-host-e2e-home-"));
+
+// The hosts run the built hook, so a missing or stale build would test old code and pass.
+const cliRoot = path.resolve(import.meta.dirname, "..");
+const newestIn = (dir: string): number =>
+  readdirSync(dir, { withFileTypes: true, recursive: true })
+    .filter((e) => e.isFile())
+    .reduce((newest, e) => Math.max(newest, statSync(path.join(e.parentPath, e.name)).mtimeMs), 0);
+beforeAll(() => {
+  const hook = path.join(cliRoot, "dist", "oh-my-plumb-hook.js");
+  if (!existsSync(hook)) throw new Error("dist/oh-my-plumb-hook.js is missing: run pnpm build");
+  if (statSync(hook).mtimeMs < newestIn(path.join(cliRoot, "src")))
+    throw new Error("dist is older than src: run pnpm build");
+});
 
 // The Pi and OpenCode children inherit this process's env, so the keys are
 // blanked for the whole run: a developer's key must never reach the model in
@@ -72,8 +85,8 @@ const repoWith = (rules: unknown[]): string => {
   return root;
 };
 
-const run = (command: string, input: string) =>
-  spawnSync(command, {
+const run = (command: string, input: string) => {
+  const r = spawnSync(command, {
     input,
     encoding: "utf8",
     shell: true,
@@ -85,11 +98,24 @@ const run = (command: string, input: string) =>
     },
     timeout: 25_000,
   });
+  // A shell that failed to start or timed out has no status to assert; say which.
+  if (r.error !== undefined) throw new Error(`hook command did not run: ${r.error.message}`);
+  return r;
+};
 
 type CheckEvent = Extract<PlumbEvent, { kind: "check" }>;
 const isCheck = (event: PlumbEvent): event is CheckEvent => event.kind === "check";
 
 const checksIn = (root: string): CheckEvent[] => readEvents(root).filter(isCheck);
+
+/** The one check event a host run wrote; silence is the regression this suite exists for, so name it. */
+const onlyCheck = (root: string): CheckEvent => {
+  const checks = checksIn(root);
+  if (checks.length !== 1) throw new Error(`expected one check event, found ${checks.length}`);
+  const [check] = checks;
+  if (check === undefined) throw new Error("expected one check event, found none");
+  return check;
+};
 
 /** The PostToolUse command `oh-my-plumb init` wrote for this host. */
 const ourCommand = (file: string): string => {
@@ -100,7 +126,7 @@ const ourCommand = (file: string): string => {
   return entry.command;
 };
 
-const expectFastCheck = (check: CheckEvent | undefined, file: string): void => {
+const expectFastCheck = (check: CheckEvent, file: string): void => {
   expect(check?.files).toEqual([file]);
   expect(check?.verdicts).toEqual([
     {
@@ -149,7 +175,7 @@ describe("one recorded payload per host, end to end (needs `pnpm build` first)",
       ctx,
     );
     expect(JSON.stringify(out)).toContain("oh-my-plumb:");
-    const [check] = checksIn(root);
+    const check = onlyCheck(root);
     expectFastCheck(check, "src/pi.ts");
   }, 30_000);
 
@@ -173,7 +199,7 @@ describe("one recorded payload per host, end to end (needs `pnpm build` first)",
       toolOutput,
     );
     expect(toolOutput.output).toContain("oh-my-plumb:");
-    const [check] = checksIn(root);
+    const check = onlyCheck(root);
     expectFastCheck(check, "src/oc.ts");
   }, 60_000);
 
@@ -201,7 +227,7 @@ describe("one recorded payload per host, end to end (needs `pnpm build` first)",
     );
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('"decision":"block"');
-    const [check] = checksIn(root);
+    const check = onlyCheck(root);
     expectFastCheck(check, "src/claude.ts");
   }, 30_000);
 
@@ -233,7 +259,7 @@ describe("one recorded payload per host, end to end (needs `pnpm build` first)",
     );
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('"decision":"block"');
-    const [check] = checksIn(root);
+    const check = onlyCheck(root);
     expectFastCheck(check, "src/codex.ts");
   }, 30_000);
 

@@ -20,6 +20,12 @@ const statusCell = (status: RuleStatus): Cell => {
   }
 };
 
+/** A guard's trigger is its check.scope; every other rule scopes with rule.scope. */
+const scopeCell = (rule: Rule): Cell => {
+  const scope = rule.check.type === "guard" ? [rule.check.scope] : rule.scope;
+  return { text: scopeLabel(scope), color: scope ? palette.mist : palette.ash };
+};
+
 const checkCell = (rule: Rule): Cell => {
   switch (rule.check.type) {
     case "lint":
@@ -89,7 +95,7 @@ export function RuleTable({ rules, stats, runnableOnly = false }: RuleTableProps
           }
         : { text: "", color: palette.ash },
       cal: calibrationCell(rule),
-      scope: { text: scopeLabel(rule.scope), color: rule.scope ? palette.mist : palette.ash },
+      scope: scopeCell(rule),
     };
   });
   return <Columns columns={columns} rows={rows} indent={2} />;

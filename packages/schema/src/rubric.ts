@@ -188,6 +188,13 @@ export const ruleSchema = z
         message: `rule "${rule.id}" is model-checked and needs "when": "edit" or "turn"`,
       });
     }
+    if (rule.check.type === "guard" && rule.scope !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["scope"],
+        message: `rule "${rule.id}" is a guard; its trigger lives in check.scope alone`,
+      });
+    }
     if (rule.target === "toolCall" && rule.check.type !== "model") {
       ctx.addIssue({
         code: "custom",
