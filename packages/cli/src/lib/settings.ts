@@ -29,10 +29,12 @@ export const hookSpecs = (
   const cmd = (name: string): string => `node "${hookScript}" ${name}`;
   const editMatcher = "Edit|Write|MultiEdit|apply_patch";
   // A rubric with a tool-call rule needs shell and MCP calls delivered too:
-  // Claude names them Bash and mcp__server__tool, Codex shell.
+  // Claude names them Bash and mcp__server__tool, Codex shell. A skill load (Claude's
+  // Skill) is only logged after it runs, never judged before, so it joins PostToolUse alone.
   const toolCallRules = opts?.toolCallRules ?? false;
   const toolMatcher = opts?.host === "claude" ? "Bash|mcp__.*" : "shell";
-  const matcher = toolCallRules ? `${editMatcher}|${toolMatcher}` : editMatcher;
+  const logMatcher = opts?.host === "claude" ? `${toolMatcher}|Skill` : toolMatcher;
+  const matcher = toolCallRules ? `${editMatcher}|${logMatcher}` : editMatcher;
   const specs: HookSpec[] = [
     { event: "SessionStart", command: cmd("session-start"), timeout: 10 },
     { event: "UserPromptSubmit", command: cmd("turn-start"), timeout: 10 },

@@ -33,12 +33,14 @@ import {
   blockCount,
   incrementBlock,
   readPrompt,
+  readToolCalls,
   recordBlockedFile,
   recordChecked,
   recordFileStart,
   recordToolCall,
   turnDir,
 } from "../lib/session.js";
+import { filterToLoadedSkills } from "../lib/skillScope.js";
 import { lastUserPrompt } from "../lib/transcript.js";
 
 type Checked = { edit: EditHunk; relative: string; outcome: CheckOutcome };
@@ -79,7 +81,8 @@ const handleEdit = async (input: PostToolUseInput): Promise<HookOutput> => {
 
   const loaded = loadRubric(root);
   for (const problem of loaded.problems) debug(problem);
-  if (loaded.rules.length === 0) return { kind: "silent" };
+  const rules = filterToLoadedSkills(loaded.rules, readToolCalls(turn));
+  if (rules.length === 0) return { kind: "silent" };
 
   const checkable: { edit: EditHunk; relative: string; diff: string }[] = [];
   for (const edit of edits) {
@@ -102,7 +105,7 @@ const handleEdit = async (input: PostToolUseInput): Promise<HookOutput> => {
   const files = checkable.map((c) => c.relative);
 
   const tier2Hits: { relative: string; hit: GuardHit }[] = [];
-  const routes = guardRoutes(loaded.rules, root);
+  const routes = guardRoutes(rules, root);
   if (routes.length > 0) {
     const external = await Promise.all(
       checkable.flatMap(({ edit, relative }) =>
@@ -193,14 +196,9 @@ const handleEdit = async (input: PostToolUseInput): Promise<HookOutput> => {
   try {
     checked = await Promise.all(
       checkable.map(async ({ edit, relative, diff }) => {
-        const fast = fastCheck(
-          loaded.rules,
-          "edit",
-          [{ file: relative, text: diff }],
-          loaded.thresholds,
-        );
+        const fast = fastCheck(rules, "edit", [{ file: relative, text: diff }], loaded.thresholds);
         const fastIds = new Set(fast.verdicts.map((v) => v.ruleId));
-        const modelRules = loaded.rules.filter((r) => !fastIds.has(r.id));
+        const modelRules = rules.filter((r) => !fastIds.has(r.id));
         if (modelRules.length === 0) {
           return {
             edit,

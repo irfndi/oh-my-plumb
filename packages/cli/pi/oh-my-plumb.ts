@@ -68,7 +68,11 @@ const hasToolCallRule = (file) => {
     const rubric = JSON.parse(readFileSync(file, "utf8"));
     return (
       Array.isArray(rubric?.rules) &&
-      rubric.rules.some((rule) => rule?.target === "toolCall" && rule?.status !== "disabled")
+      rubric.rules.some(
+        (rule) =>
+          rule?.status !== "disabled" &&
+          (rule?.target === "toolCall" || String(rule?.source?.path ?? "").endsWith("/SKILL.md")),
+      )
     );
   } catch {
     return false;
@@ -204,7 +208,11 @@ export default function ohMyPlumb(pi) {
         }
         return;
       }
-      if (typeof event.toolName !== "string" || READ_TOOLS[event.toolName]) return;
+      if (typeof event.toolName !== "string") return;
+      // Pi loads a skill by reading its SKILL.md: that read is how a skill's rules know it ran.
+      const loadsSkill =
+        event.toolName === "read" && String(event.input?.path ?? "").endsWith("SKILL.md");
+      if (READ_TOOLS[event.toolName] && !loadsSkill) return;
       if (!toolCallRulesFor(cwd)) return;
       // A failed attempt still counts: the call was made, and a rule may forbid it.
       const out = await runHook(

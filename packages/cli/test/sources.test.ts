@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
@@ -10,6 +10,8 @@ import {
   type SourceCandidate,
 } from "../src/lib/sources.js";
 import { fillSourceShas, mergeRules } from "../src/lib/rubricFile.js";
+import { compilePrompt } from "../src/lib/compilePrompt.js";
+import { planCompile } from "../src/hooks/sessionStart.js";
 
 const repo = (): string => {
   const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-"));
@@ -366,5 +368,91 @@ describe("more instruction files", () => {
       status: "stale",
       added: ["GEMINI.md"],
     });
+  });
+});
+
+describe("skill sources", () => {
+  const skillText = "# deploy\n- Run the checksum before installing\n";
+  const skillRepo = (): string => {
+    const root = repo();
+    mkdirSync(path.join(root, "skills", "deploy"), { recursive: true });
+    writeFileSync(path.join(root, "skills", "deploy", "SKILL.md"), skillText);
+    mkdirSync(path.join(root, ".claude", "skills", "archive"), { recursive: true });
+    writeFileSync(path.join(root, ".claude", "skills", "archive", "SKILL.md"), "# archive\n");
+    mkdirSync(path.join(root, "skills", "node_modules", "sneaky"), { recursive: true });
+    writeFileSync(path.join(root, "skills", "node_modules", "sneaky", "SKILL.md"), "ignored\n");
+    // A SKILL.md inside a skill's own folder belongs to that skill, not a second one.
+    mkdirSync(path.join(root, "skills", "deploy", "scripts"), { recursive: true });
+    writeFileSync(path.join(root, "skills", "deploy", "scripts", "SKILL.md"), "nested\n");
+    return root;
+  };
+
+  it("finds every SKILL.md under the known skill dirs and skips node_modules", () => {
+    const found = discoverProjectSources(skillRepo()).filter((c) => c.origin === "skill");
+    expect(found.map((c) => [c.path, c.scope, c.required])).toEqual([
+      ["skills/deploy/SKILL.md", "**/*", false],
+      [".claude/skills/archive/SKILL.md", "**/*", false],
+    ]);
+  });
+
+  it("lists the skill source in the compile plan and its prompt", async () => {
+    const home = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-home-"));
+    process.env.OH_MY_PLUMB_HOME_DIR = home;
+    try {
+      const plan = await planCompile(skillRepo());
+      const project = plan.targets.find((t) => t.which === "project");
+      expect(project?.candidates.some((c) => c.path === "skills/deploy/SKILL.md")).toBe(true);
+      expect(compilePrompt("SKILL.md", plan.targets)).toContain("skills/deploy/SKILL.md");
+    } finally {
+      delete process.env.OH_MY_PLUMB_HOME_DIR;
+    }
+  });
+
+  it("reports a deleted SKILL.md in staleness instead of passing", () => {
+    const root = skillRepo();
+    const base = rubricFor(root);
+    const rubric: Rubric = {
+      ...base,
+      sources: [
+        ...base.sources,
+        { path: "skills/deploy/SKILL.md", sha: createSourceSha(skillText) },
+        { path: ".claude/skills/archive/SKILL.md", sha: createSourceSha("# archive\n") },
+      ],
+    };
+    const candidates = discoverProjectSources(root);
+    expect(checkStaleness(rubric, candidates, root)).toEqual({ status: "fresh" });
+    rmSync(path.join(root, "skills", "deploy", "SKILL.md"));
+    expect(checkStaleness(rubric, candidates, root)).toMatchObject({
+      status: "stale",
+      removed: ["skills/deploy/SKILL.md"],
+    });
+  });
+});
+
+describe("global skill sources", () => {
+  it("finds user and installed-plugin skills under home", () => {
+    const home = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-home-"));
+    process.env.OH_MY_PLUMB_HOME_DIR = home;
+    try {
+      mkdirSync(path.join(home, ".claude", "skills", "backup"), { recursive: true });
+      writeFileSync(path.join(home, ".claude", "skills", "backup", "SKILL.md"), "# backup\n");
+      const pluginRoot = path.join(home, ".claude", "plugins", "cache", "m", "foo", "1.0.0");
+      mkdirSync(path.join(pluginRoot, "skills", "foo"), { recursive: true });
+      writeFileSync(path.join(pluginRoot, "skills", "foo", "SKILL.md"), "# foo\n");
+      writeFileSync(
+        path.join(home, ".claude", "plugins", "installed_plugins.json"),
+        JSON.stringify({
+          version: 2,
+          plugins: { "foo@m": [{ scope: "user", installPath: pluginRoot }] },
+        }),
+      );
+      const found = discoverGlobalSources().filter((c) => c.origin === "skill");
+      expect(found.map((c) => c.path)).toEqual([
+        "~/.claude/skills/backup/SKILL.md",
+        "~/.claude/plugins/cache/m/foo/1.0.0/skills/foo/SKILL.md",
+      ]);
+    } finally {
+      delete process.env.OH_MY_PLUMB_HOME_DIR;
+    }
   });
 });

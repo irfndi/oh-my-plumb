@@ -13,7 +13,8 @@ import { loadRubric } from "./loadRubric.js";
 import { debug } from "./output.js";
 import { findRepoRoot } from "./paths.js";
 import { flagNotice, toolCallReason } from "./reason.js";
-import { readPrompt, turnDir } from "./session.js";
+import { readPrompt, readToolCalls, turnDir } from "./session.js";
+import { filterToLoadedSkills } from "./skillScope.js";
 import { lastUserPrompt } from "./transcript.js";
 
 export type Pair = { rule: Rule; verdict: Verdict };
@@ -42,9 +43,11 @@ export const handleToolCall = async (input: ToolCallInput): Promise<HookOutput> 
   const call = { tool: input.tool_name, input: input.tool_input };
   // An edit tool's payload that the edit schema rejected is malformed, not a tool call.
   if (EDIT_TOOL_NAMES.has(call.tool.toLowerCase())) return { kind: "silent" };
-  if (selectToolCallRules(loaded.rules, "edit", call.tool).length === 0) return { kind: "silent" };
-
   const turn = turnDir(input.session_id, turnIdOf(input));
+  // A skill's rules bind only a turn that loaded the skill.
+  const rules = filterToLoadedSkills(loaded.rules, readToolCalls(turn));
+  if (selectToolCallRules(rules, "edit", call.tool).length === 0) return { kind: "silent" };
+
   if (!hasApiKey(root)) {
     appendEvent(root, {
       kind: "skip",
@@ -64,7 +67,7 @@ export const handleToolCall = async (input: ToolCallInput): Promise<HookOutput> 
       phase: "edit",
       call,
       task,
-      rules: loaded.rules,
+      rules,
       thresholds: loaded.thresholds,
       timeoutMs: EDIT_CHECK_TIMEOUT_MS,
     });
