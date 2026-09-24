@@ -93,7 +93,7 @@ Some rules judge what a call does rather than what a diff looks like: "never `DR
 
 - Scope matches the tool's name, ignoring case: `["mcp__postgres__*"]` covers that one server's tools (`mcp__postgres__query`), and a server boundary is exact, so it does not cover `mcp__postgres-inspector__query`. `["Bash"]` covers the shell. OpenCode names MCP tools `<server>_<tool>` (`postgres_query`), so add that spelling when the repo uses OpenCode.
 - Ask about the command and the arguments, never the output or the conversation. The judge sees only what the call is about to do: "Does this call's SQL text contain an INSERT, UPDATE, DELETE, DROP or TRUNCATE statement?" A question that needs the result or the chat to answer can only land midrange, and midrange never fires.
-- Flag by default, act only for absolute wording. "Read-only queries in production" is absolute, so a question on the statement text may stop the call outright. "Don't post to Slack without asking" hinges on what happened outside the arguments — write it to flag ("Do this call's arguments post a new message?") and let the note reach the person.
+- Flag by default, act only for absolute wording. "Read-only queries in production" is absolute, so a question on the statement text may stop the call outright. "Don't post to Slack without asking" hinges on what happened outside the arguments, so write it to flag ("Do this call's arguments post a new message?") and let the note reach the person.
 
 ## Step 5. Decide when each model rule runs
 

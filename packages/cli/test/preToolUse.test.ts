@@ -26,6 +26,8 @@ vi.mock("ai", async (importOriginal) => {
     ...actual,
     experimental_evaluate: async (options: { state: unknown }) => {
       if (model.failure !== undefined) throw model.failure;
+      // The judge's state is what these tests inspect; a call without one is a bug here, not a pass.
+      if (options.state === undefined) throw new Error("evaluate was called without a state");
       model.seen = JSON.stringify(options.state);
       return { answers: model.answer ?? {}, usage: { inputTokens: 12, outputTokens: 4 } };
     },
