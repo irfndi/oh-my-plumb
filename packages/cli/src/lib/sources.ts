@@ -34,6 +34,10 @@ export const mcpSourceScope = (server: string): string => `mcp__${server}__*`;
 /** A rubric source backed by MCP server instructions instead of a file. */
 export const isMcpSource = (source: { kind?: "mcp" | undefined }): boolean => source.kind === "mcp";
 
+/** The rubric's opted-in MCP servers, spelled the way source paths are compared, so one owner decides a match. */
+export const optedInServers = (rubric: Rubric | undefined, root: string): Set<string> =>
+  new Set((rubric?.mcpInstructions ?? []).map((server) => canonicalSourcePath(root, server)));
+
 /** sha256 of each captured MCP source's instructions, keyed by canonical source path. */
 export const capturedMcpShas = (
   root: string,
@@ -388,13 +392,14 @@ export const checkStaleness = (
 ): Staleness => {
   if (rubric === undefined) return { status: "missing" };
   const captured = capturedMcpShas(root, candidates);
+  const optedIn = optedInServers(rubric, root);
   const changed: string[] = [];
   const removed: string[] = [];
   const unhashed: string[] = [];
   for (const source of rubric.sources) {
     if (isMcpSource(source)) {
       // A server taken off the opt-in list leaves a dead source behind.
-      if (!(rubric.mcpInstructions ?? []).includes(source.path)) {
+      if (!optedIn.has(canonicalSourcePath(root, source.path))) {
         removed.push(source.path);
         continue;
       }

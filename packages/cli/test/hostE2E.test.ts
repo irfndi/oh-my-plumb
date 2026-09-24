@@ -28,6 +28,14 @@ beforeAll(() => {
   if (!existsSync(hook)) throw new Error("dist/oh-my-plumb-hook.js is missing: run pnpm build");
   if (statSync(hook).mtimeMs < newestIn(path.join(cliRoot, "src")))
     throw new Error("dist is older than src: run pnpm build");
+  // The hook imports the schema package's build too, so that one must be fresh as well.
+  const schemaRoot = path.resolve(cliRoot, "..", "schema");
+  const schemaDist = path.join(schemaRoot, "dist", "index.js");
+  if (
+    !existsSync(schemaDist) ||
+    statSync(schemaDist).mtimeMs < newestIn(path.join(schemaRoot, "src"))
+  )
+    throw new Error("the schema package's dist is missing or older than its src: run pnpm build");
 });
 
 // The Pi and OpenCode children inherit this process's env, so the keys are

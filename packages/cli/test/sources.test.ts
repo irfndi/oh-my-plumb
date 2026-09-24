@@ -126,6 +126,14 @@ describe("MCP source staleness", () => {
       root,
     );
     expect(neverHashed).toMatchObject({ status: "stale", unhashed: ["fakeGuard"] });
+    // An opt-in spelled "./fakeGuard" is the same server as the source "fakeGuard".
+    expect(
+      checkStaleness(
+        { ...rubric, mcpInstructions: ["./fakeGuard"] },
+        discoverProjectSources(root),
+        root,
+      ),
+    ).toEqual({ status: "fresh" });
     // Taking the server off the opt-in list leaves its source dead, and that is stale.
     expect(
       checkStaleness({ ...rubric, mcpInstructions: [] }, discoverProjectSources(root), root),

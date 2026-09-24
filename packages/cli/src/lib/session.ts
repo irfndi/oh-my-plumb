@@ -151,6 +151,7 @@ const CONTENT_KEYS = new Set([
   "newString",
   "oldText",
   "newText",
+  "patchText",
 ]);
 
 const summaryValue = (value: unknown, depth: number, key?: string): string => {
@@ -200,7 +201,16 @@ const toolCallsDir = (dir: string): string => path.join(dir, "tool-calls");
 export const recordToolCall = (dir: string, name: string, input: unknown): void => {
   try {
     const calls = toolCallsDir(dir);
-    const entry = { name: name.slice(0, 100), summary: callSummary(input) };
+    // An apply_patch command is the patch itself, file text and all: only its length is logged.
+    const shown =
+      name.toLowerCase() === "apply_patch" &&
+      typeof input === "object" &&
+      input !== null &&
+      "command" in input &&
+      typeof input.command === "string"
+        ? { command: `[${input.command.length} chars]` }
+        : input;
+    const entry = { name: name.slice(0, 100), summary: callSummary(shown) };
     for (let attempt = 0; attempt < 32; attempt += 1) {
       const order = countWithPrefix(calls, "call.") + 1;
       if (order > MAX_TOOL_CALLS_PER_TURN) return;

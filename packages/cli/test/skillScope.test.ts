@@ -61,4 +61,11 @@ describe("skill scoping", () => {
       ),
     ).toContain("deploy-checksum");
   });
+
+  it("is not loaded by a tool that shares the skill's name", () => {
+    const bash: Rule = { ...skillRule, id: "bash-skill", source: { path: "skills/bash/SKILL.md" } };
+    expect(
+      filterToLoadedSkills([bash], [{ order: 1, name: "bash", summary: "{command=ls}" }]),
+    ).toEqual([]);
+  });
 });
