@@ -10,7 +10,8 @@ export type PlumbErrorCode =
   | "GIT_UNAVAILABLE"
   | "CLAUDE_UNAVAILABLE"
   | "CHECK_TIMEOUT"
-  | "CHECK_FAILED";
+  | "CHECK_FAILED"
+  | "CHECK_INPUT_INVALID";
 
 export class PlumbError extends Error {
   readonly code: PlumbErrorCode;

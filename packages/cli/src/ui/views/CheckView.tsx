@@ -1,6 +1,7 @@
 import { Box, Text } from "ink";
 import type { Verdict } from "oh-my-plumb-schema";
 import { Header } from "../components/Header.js";
+import { Callout } from "../components/Callout.js";
 import { Section } from "../components/Section.js";
 import { Verdicts } from "../components/Verdicts.js";
 import { ms, usd } from "../../lib/ui.js";
@@ -15,7 +16,14 @@ export type CheckSection = {
   verdicts: Verdict[];
 };
 
-export type CheckData = { root: string; sections: CheckSection[]; spendUsd: number; all: boolean };
+export type CheckData = {
+  root: string;
+  sections: CheckSection[];
+  spendUsd: number;
+  all: boolean;
+  /** The repair sentence for a tool-call check whose verdicts fired. Absent otherwise. */
+  reason?: string;
+};
 
 export function CheckView({ data }: { data: CheckData }) {
   const acts = data.sections.flatMap((s) => s.verdicts).filter((v) => v.band === "act").length;
@@ -36,6 +44,11 @@ export function CheckView({ data }: { data: CheckData }) {
           <Verdicts verdicts={s.verdicts} all={data.all} />
         </Section>
       ))}
+      {data.reason === undefined ? null : (
+        <Callout tone="bad" title="What the rule asks">
+          <Text color={palette.cloud}>{data.reason}</Text>
+        </Callout>
+      )}
       <Box>
         <Text color={acts > 0 ? palette.rose : palette.sage} bold>
           {acts > 0 ? `${glyph.cross} ${acts} to repair` : `${glyph.check} nothing to repair`}

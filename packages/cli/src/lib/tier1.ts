@@ -1,4 +1,5 @@
 import type { Rule, Thresholds, Verdict } from "oh-my-plumb-schema";
+import { judgesDiff } from "./checkRunner.js";
 import { ruleAppliesTo } from "./scope.js";
 
 /**
@@ -48,7 +49,8 @@ export const fastCheck = (
   const skipped: Rule[] = [];
   const files = fileDiffs.map((f) => f.file);
   for (const rule of rules) {
-    if (rule.status !== "active" || rule.check.type !== "model" || rule.when !== phase) continue;
+    if (rule.status !== "active" || rule.check.type !== "model" || !judgesDiff(rule)) continue;
+    if (rule.when !== phase) continue;
     if (!files.some((f) => ruleAppliesTo(rule, f))) continue;
     const pattern = patternOf(rule);
     if (pattern === undefined) {

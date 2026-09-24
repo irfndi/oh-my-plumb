@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { PlumbError } from "oh-my-plumb-schema";
-import { runCheck } from "../lib/checkRunner.js";
+import { judgesDiff, runCheck } from "../lib/checkRunner.js";
 import { EDIT_CHECK_TIMEOUT_MS, TURN_CHECK_TIMEOUT_MS } from "../lib/constants.js";
 import { readEvents } from "../lib/events.js";
 import { hasApiKey, NO_KEY_HINT } from "../lib/credentials.js";
@@ -87,7 +87,7 @@ export const runBench = async (argv: string[]): Promise<number> => {
   const script = hookScriptPath();
   const sample = path.join(root, SAMPLE);
   const activeModelRules = loaded.rules.filter(
-    (r) => r.status === "active" && r.check.type === "model",
+    (r) => judgesDiff(r) && r.status === "active" && r.check.type === "model",
   ).length;
 
   const run = async (progress: (label: string) => void): Promise<BenchData> => {

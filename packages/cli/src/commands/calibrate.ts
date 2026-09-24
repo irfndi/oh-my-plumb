@@ -1,7 +1,7 @@
 import { parseArgs } from "node:util";
 import { PlumbError, DEFAULT_THRESHOLDS, type Rule, type RuleStatus } from "oh-my-plumb-schema";
 import { summarizeCalibration } from "../lib/calibration.js";
-import { runCheck } from "../lib/checkRunner.js";
+import { judgesDiff, runCheck } from "../lib/checkRunner.js";
 import { EDIT_CHECK_TIMEOUT_MS, TURN_CHECK_TIMEOUT_MS } from "../lib/constants.js";
 import { recentHistory } from "../lib/git.js";
 import { hasApiKey, NO_KEY_HINT } from "../lib/credentials.js";
@@ -56,7 +56,7 @@ export const runCalibrate = async (argv: string[]): Promise<number> => {
   const where = values.global ? homeDir() : repoRoot;
 
   const modelRules = rubric.rules.filter(
-    (r) => r.check.type === "model" && r.status !== "disabled",
+    (r) => judgesDiff(r) && r.check.type === "model" && r.status !== "disabled",
   );
   if (modelRules.length === 0) {
     await showStatic(Callout({ tone: "ok", title: "No model-checked rules to calibrate" }));
@@ -126,7 +126,8 @@ export const runCalibrate = async (argv: string[]): Promise<number> => {
     const at = new Date().toISOString();
     const rows: CalibrateRow[] = [];
     const rules = rubric.rules.map((rule) => {
-      if (rule.check.type !== "model" || rule.status === "disabled") return rule;
+      if (!judgesDiff(rule) || rule.check.type !== "model" || rule.status === "disabled")
+        return rule;
       const summary = summarizeCalibration(samples.get(rule.id) ?? [], thresholds);
       rows.push({ id: rule.id, when: rule.when ?? "", ...summary, states: summary.hunks });
       return {

@@ -36,12 +36,19 @@ const toSdkQuestion = (q: Question): Experimental_EvaluationQuestion => {
   }
 };
 
-export type CheckState = {
-  task?: string;
-  file?: string;
-  files?: string[];
-  diff: string;
-};
+/** What the judge sees: the change, or one recorded tool call. */
+export type CheckState =
+  | {
+      task?: string;
+      file?: string;
+      files?: string[];
+      diff: string;
+    }
+  | {
+      task?: string;
+      tool: string;
+      input: string;
+    };
 
 export type ModelCheckResult = {
   verdicts: Verdict[];

@@ -17,6 +17,7 @@ const TITLES: Record<PlumbErrorCode, string> = {
   HOST_UNSUPPORTED: "Replay is not available for this agent yet",
   CHECK_TIMEOUT: "Jev did not answer in time",
   CHECK_FAILED: "Jev refused the check",
+  CHECK_INPUT_INVALID: "The check input could not be read",
 };
 
 export function ErrorView({ error }: { error: unknown }) {
