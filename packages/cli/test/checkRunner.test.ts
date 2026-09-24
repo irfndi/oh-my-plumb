@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { Verdict } from "oh-my-plumb-schema";
+import type { Rule, Verdict } from "oh-my-plumb-schema";
 import {
   mergeOutcomes,
   renderToolInput,
+  runTurnToolCallCheck,
+  selectTurnToolCallRules,
   stateFor,
   type CheckOutcome,
   type CheckRequest,
@@ -35,23 +37,57 @@ describe("handing the judge a turn's state", () => {
     ...extra,
   });
 
-  it("carries the turn's tool-call log alongside the diff a turn rule is judged on", () => {
-    const toolCalls = [{ order: 1, name: "Bash", summary: "{command=rm -rf /}" }];
-    expect(stateFor({ ...request(), toolCalls }, request().fileDiffs)).toEqual({
+  it("hands a diff rule only the diff: the tool-call log never rides along", () => {
+    expect(stateFor(request(), request().fileDiffs)).toEqual({
       files: ["a.ts"],
       diff: "--- a/a.ts\n+++ b/a.ts\n+x",
-      toolCalls,
     });
-  });
-
-  it("leaves the log out when the turn has none, and keeps the edit phase's single-file state", () => {
-    const bare = { files: ["a.ts"], diff: "--- a/a.ts\n+++ b/a.ts\n+x" };
-    expect(stateFor(request(), request().fileDiffs)).toEqual(bare);
-    expect(stateFor(request({ toolCalls: [] }), request().fileDiffs)).toEqual(bare);
     expect(stateFor(request({ phase: "edit" }), request().fileDiffs)).toEqual({
       file: "a.ts",
       diff: "+x",
     });
+  });
+});
+
+describe("turn-phase tool-call rules", () => {
+  const rule = (id: string, over: Partial<Rule>): Rule => ({
+    id,
+    text: "t",
+    source: { path: "AGENTS.md" },
+    status: "active",
+    target: "toolCall",
+    when: "turn",
+    check: { type: "model", question: { type: "boolean", instructions: "?" } },
+    ...over,
+  });
+  const log = [
+    { order: 1, name: "Edit", summary: "{file_path=package.json}" },
+    { order: 2, name: "Bash", summary: "{command=pnpm test}" },
+  ];
+
+  it("judge the log only: diff rules, edit-phase rules and off-scope rules stay out", () => {
+    const rules = [
+      rule("uses-context7", {}),
+      rule("no-npm", { scope: ["bash"] }),
+      rule("mcp-only", { scope: ["mcp__*"] }),
+      rule("per-call", { when: "edit" }),
+      rule("diff-rule", { target: "diff" }),
+      rule("off", { status: "disabled" }),
+    ];
+    expect(selectTurnToolCallRules(rules, log).map((r) => r.id)).toEqual([
+      "uses-context7",
+      "no-npm",
+    ]);
+  });
+
+  it("makes no model call for an empty log", async () => {
+    const out = await runTurnToolCallCheck({
+      log: [],
+      rules: [rule("uses-context7", {})],
+      thresholds: { act: 0.8, flag: 0.5 },
+      timeoutMs: 1,
+    });
+    expect(out.calls).toBe(0);
   });
 });
 

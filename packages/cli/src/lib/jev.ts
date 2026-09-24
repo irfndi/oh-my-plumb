@@ -44,8 +44,11 @@ export type CheckState =
       file?: string;
       files?: string[];
       diff: string;
-      /** Stop's per-turn tool-call log, next to the diff, so a turn question can ask what ran. */
-      toolCalls?: ToolCallEntry[];
+    }
+  | {
+      task?: string;
+      /** The turn's tool-call log, in call order: what a turn-phase tool-call rule is judged on. */
+      toolCalls: ToolCallEntry[];
     }
   | {
       task?: string;

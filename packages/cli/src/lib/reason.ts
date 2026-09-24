@@ -37,6 +37,15 @@ export const repairReason = (
   return `oh-my-plumb: ${subject} appears to break ${lines.length === 1 ? "a rule" : `${lines.length} rules`} from this repository's instructions.\n${lines.map((l) => `- ${l}`).join("\n")}\n${ask}`;
 };
 
+/** What Stop says when a turn-phase tool-call rule fires: the rule, and that the turn's calls broke it. */
+export const turnToolCallReason = (
+  violations: readonly { rule: Rule; verdict: Verdict }[],
+): string => {
+  const lines = violations.map(sentence);
+  const count = lines.length === 1 ? "a rule" : `${lines.length} rules`;
+  return `oh-my-plumb: The tools this turn called appear to break ${count} from this repository's instructions.\n${lines.map((l) => `- ${l}`).join("\n")}\nDo what the rule asks before you finish.`;
+};
+
 /** What the hook says when a tool-call rule fires: the rule, from where, and which call to redo. */
 export const toolCallReason = (
   violations: readonly { rule: Rule; verdict: Verdict }[],

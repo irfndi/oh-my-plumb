@@ -244,6 +244,41 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
     expect(events).toContain('"reason":"no api key"');
   });
 
+  it("a turn that only ran tools is still judged by its turn-phase tool-call rules", () => {
+    const root = repoWith([
+      {
+        id: "docs-before-deps",
+        text: "Look up library docs before changing a dependency",
+        source: { path: "AGENTS.md" },
+        target: "toolCall",
+        when: "turn",
+        check: { type: "model", question: { type: "boolean", instructions: "?" } },
+      },
+    ]);
+    execSync(
+      "git init -q . && git add -A && git -c user.email=a@b -c user.name=a commit -q -m init",
+      { cwd: root },
+    );
+    const base = { session_id: "tools-only", prompt_id: "p", cwd: root };
+    run(
+      "turn-start",
+      JSON.stringify({ ...base, hook_event_name: "UserPromptSubmit", prompt: "go" }),
+    );
+    const call = run(
+      "post-tool-use",
+      JSON.stringify({ ...shellPayload(root, "Bash", { command: "pnpm add zod" }), ...base }),
+    );
+    expect(call.stdout).toBe("");
+    const stop = run(
+      "stop",
+      JSON.stringify({ ...base, hook_event_name: "Stop", stop_hook_active: false }),
+    );
+    expect(stop.status).toBe(0);
+    const events = readFileSync(path.join(root, ".oh-my-plumb", "events.jsonl"), "utf8");
+    expect(events).toContain('"reason":"no api key"');
+    expect(events).toContain("the turn's tool calls");
+  });
+
   it("a shell deletion is part of the turn diff", () => {
     const root = repoWith([
       {

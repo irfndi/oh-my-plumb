@@ -5,7 +5,7 @@ import type { FileDiff } from "./git.js";
 import { checkWithModel, isModelRule, type CheckState, type ModelRule } from "./jev.js";
 import { ruleAppliesTo, ruleAppliesToTool } from "./scope.js";
 import { MAX_STATE_CHARS } from "./constants.js";
-import type { ToolCallEntry } from "./session.js";
+import { callSummary, type ToolCallEntry } from "./session.js";
 
 export type CheckRequest = {
   phase: CheckPhase;
@@ -15,8 +15,6 @@ export type CheckRequest = {
   rules: readonly Rule[];
   thresholds: Thresholds;
   timeoutMs: number;
-  /** The turn's tool-call log, judged with a turn-phase diff so a rule can ask what ran. */
-  toolCalls?: readonly ToolCallEntry[];
   /** Transient gateway failures to retry. Hooks leave it at zero. */
   retries?: number;
 };
@@ -128,15 +126,12 @@ export const mergeOutcomes = (outcomes: readonly CheckOutcome[]): CheckOutcome =
   };
 };
 
-/** What the judge sees: the turn's change, and alongside it the turn's tool-call log when Stop has one. */
+/** What the judge sees for a diff rule: the change, one file at a time on edit, the group on turn. */
 export const stateFor = (request: CheckRequest, fileDiffs: readonly FileDiff[]): CheckState => ({
   ...(request.task === undefined ? {} : { task: request.task }),
   ...(request.phase === "edit" && fileDiffs.length === 1 && fileDiffs[0] !== undefined
     ? { file: fileDiffs[0].file, diff: fileDiffs[0].text }
     : { files: fileDiffs.map((f) => f.file), diff: renderFiles(fileDiffs) }),
-  ...(request.toolCalls === undefined || request.toolCalls.length === 0
-    ? {}
-    : { toolCalls: [...request.toolCalls] }),
 });
 
 export const runCheck = async (request: CheckRequest): Promise<CheckOutcome> => {
@@ -177,8 +172,72 @@ export const renderToolInput = (call: ToolCall): string => {
     : `${text.slice(0, MAX_STATE_CHARS)}\n[oh-my-plumb: input cut at ${MAX_STATE_CHARS} characters]`;
 };
 
-/** One model call carrying every tool-call rule in scope for this one call. */
+export type TurnToolCallCheckRequest = {
+  /** The turn's tool-call log, in call order. */
+  log: readonly ToolCallEntry[];
+  task?: string;
+  rules: readonly Rule[];
+  thresholds: Thresholds;
+  timeoutMs: number;
+  retries?: number;
+};
+
+/** Turn-phase tool-call rules for this log: a scoped rule runs only when the turn called a tool its scope names. */
+export const selectTurnToolCallRules = (
+  rules: readonly Rule[],
+  log: readonly ToolCallEntry[],
+): Rule[] =>
+  rules.filter(
+    (rule) =>
+      runsInPhase(rule, "turn", "toolCall") &&
+      (rule.scope === undefined || log.some((entry) => ruleAppliesToTool(rule, entry.name))),
+  );
+
+/** One model call judging the turn's whole tool-call log against every turn-phase tool-call rule it concerns. */
+export const runTurnToolCallCheck = async (
+  request: TurnToolCallCheckRequest,
+): Promise<CheckOutcome> => {
+  const modelRules =
+    request.log.length === 0
+      ? []
+      : selectTurnToolCallRules(request.rules, request.log).filter(isModelRule);
+  if (modelRules.length === 0) {
+    return { verdicts: [], modelRules, calls: 0, usage: {}, modelLatencyMs: 0 };
+  }
+  const started = performance.now();
+  const result = await checkWithModel(
+    modelRules,
+    {
+      ...(request.task === undefined ? {} : { task: request.task }),
+      toolCalls: [...request.log],
+    },
+    request.thresholds,
+    request.timeoutMs,
+    request.retries ?? 0,
+  );
+  return {
+    verdicts: result.verdicts,
+    modelRules,
+    calls: 1,
+    usage: result.usage,
+    modelLatencyMs: Math.round(performance.now() - started),
+  };
+};
+
+/**
+ * One recorded call against the tool-call rules of a phase. On edit the judge
+ * sees the call itself; on turn it sees a one-entry log, the shape turn rules read.
+ */
 export const runToolCallCheck = async (request: ToolCallCheckRequest): Promise<CheckOutcome> => {
+  if (request.phase === "turn")
+    return runTurnToolCallCheck({
+      log: [{ order: 1, name: request.call.tool, summary: callSummary(request.call.input) }],
+      ...(request.task === undefined ? {} : { task: request.task }),
+      rules: request.rules,
+      thresholds: request.thresholds,
+      timeoutMs: request.timeoutMs,
+      ...(request.retries === undefined ? {} : { retries: request.retries }),
+    });
   const modelRules = selectToolCallRules(request.rules, request.phase, request.call.tool).filter(
     isModelRule,
   );

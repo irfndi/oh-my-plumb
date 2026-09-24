@@ -142,9 +142,21 @@ const toolCallEntrySchema = z.object({
 /** One entry of the turn's tool-call log: which tool ran, in what order, with what shape of input. */
 export type ToolCallEntry = z.infer<typeof toolCallEntrySchema>;
 
-const summaryValue = (value: unknown, depth: number): string => {
+/** Fields that carry file text in some host's edit call: always reduced to their length, however short. */
+const CONTENT_KEYS = new Set([
+  "content",
+  "old_string",
+  "new_string",
+  "oldString",
+  "newString",
+  "oldText",
+  "newText",
+]);
+
+const summaryValue = (value: unknown, depth: number, key?: string): string => {
   if (typeof value === "string") {
-    if (value.length > MAX_TOOL_STRING_CHARS) return `[${value.length} chars]`;
+    if (value.length > MAX_TOOL_STRING_CHARS || (key !== undefined && CONTENT_KEYS.has(key)))
+      return `[${value.length} chars]`;
     return value.replace(/\s+/g, " ").trim();
   }
   if (value === null) return "null";
@@ -157,17 +169,24 @@ const summaryValue = (value: unknown, depth: number): string => {
   }
   if (typeof value === "object") {
     if (depth <= 0) return "{...}";
-    const entries = Object.entries(value);
-    const head = entries
-      .slice(0, 8)
-      .map(([key, item]) => `${key}=${summaryValue(item, depth - 1)}`);
-    const more = entries.length > 8 ? `, +${entries.length - 8} more` : "";
-    return `{${head.join(", ")}${more}}`;
+    // Walks at most nine keys, so a huge input costs no more than a small one.
+    const head: string[] = [];
+    let more = false;
+    for (const key in value) {
+      if (!Object.hasOwn(value, key)) continue;
+      if (head.length === 8) {
+        more = true;
+        break;
+      }
+      const item: unknown = Reflect.get(value, key);
+      head.push(`${key}=${summaryValue(item, depth - 1, key)}`);
+    }
+    return `{${head.join(", ")}${more ? ", ..." : ""}}`;
   }
   return String(value);
 };
 
-/** Names and argument shapes only: a string past the bound collapses to "[N chars]", so a file body never lands in the log. */
+/** Names and argument shapes only: a long string, or any file-text field, collapses to "[N chars]", so no file body lands in the log. */
 export const callSummary = (input: unknown): string => {
   const rendered = summaryValue(input, 3);
   return rendered.length <= MAX_TOOL_SUMMARY_CHARS
@@ -291,6 +310,7 @@ export const readBaselineStatus = (dir: string): BaselineStatus | undefined => {
 
 export const hasTurnState = (dir: string): boolean =>
   readFileStarts(dir).length > 0 ||
+  readToolCalls(dir).length > 0 ||
   readBaseline(dir) !== undefined ||
   readBaselineStatus(dir) !== undefined;
 

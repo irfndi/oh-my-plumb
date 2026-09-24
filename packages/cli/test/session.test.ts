@@ -2,11 +2,16 @@ import { mkdirSync, mkdtempSync, readdirSync, statSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
-import { MAX_TOOL_CALLS_PER_TURN, MAX_TOOL_SUMMARY_CHARS } from "../src/lib/constants.js";
+import {
+  MAX_TOOL_CALLS_PER_TURN,
+  MAX_TOOL_STRING_CHARS,
+  MAX_TOOL_SUMMARY_CHARS,
+} from "../src/lib/constants.js";
 import {
   markBaseline,
   readBaselineStatus,
   blockCount,
+  callSummary,
   clearTurn,
   hasTurnState,
   incrementBlock,
@@ -162,5 +167,40 @@ describe("turn state on disk", () => {
       JSON.stringify({ order: 1, name: "Bash", summary: "x".repeat(MAX_TOOL_SUMMARY_CHARS + 1) }),
     );
     expect(readToolCalls(dir)).toEqual([]);
+    // A good entry next to corrupt ones survives.
+    writeFileSync(
+      path.join(calls, "call.000003"),
+      JSON.stringify({ order: 3, name: "Bash", summary: "{command=ls}" }),
+    );
+    expect(readToolCalls(dir).map((e) => e.order)).toEqual([3]);
+  });
+
+  it("collapses strings at the bound and file text at any length", () => {
+    expect(callSummary({ command: "x".repeat(MAX_TOOL_STRING_CHARS) })).toBe(
+      `{command=${"x".repeat(MAX_TOOL_STRING_CHARS)}}`,
+    );
+    expect(callSummary({ command: "x".repeat(MAX_TOOL_STRING_CHARS + 1) })).toBe(
+      `{command=[${MAX_TOOL_STRING_CHARS + 1} chars]}`,
+    );
+    // A short .env body is still a file body.
+    expect(callSummary({ file_path: ".env", content: "KEY=1" })).toBe(
+      "{file_path=.env, content=[5 chars]}",
+    );
+    expect(callSummary({ edits: [{ oldText: "a", newText: "b" }] })).toBe(
+      "{edits=[{oldText=[1 chars], newText=[1 chars]}]}",
+    );
+    const wide = Object.fromEntries(
+      Array.from({ length: 50 }, (_, i) => [`k${i}`, "v".repeat(60)]),
+    );
+    const long = callSummary(wide);
+    expect(long.length).toBe(MAX_TOOL_SUMMARY_CHARS);
+    expect(long.endsWith("...")).toBe(true);
+  });
+
+  it("counts a turn that only ran tools as turn state", () => {
+    const dir = turnDir("s", "tools-only");
+    expect(hasTurnState(dir)).toBe(false);
+    recordToolCall(dir, "Bash", { command: "pnpm test" });
+    expect(hasTurnState(dir)).toBe(true);
   });
 });

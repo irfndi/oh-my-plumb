@@ -9,7 +9,12 @@ import {
   type Rule,
   type Verdict,
 } from "oh-my-plumb-schema";
-import { mergeOutcomes, runCheck, type CheckOutcome } from "../lib/checkRunner.js";
+import {
+  mergeOutcomes,
+  runCheck,
+  runTurnToolCallCheck,
+  type CheckOutcome,
+} from "../lib/checkRunner.js";
 import {
   MAX_STOP_CHECKS_PER_TURN,
   STOP_FALLBACK_DIFF_TIMEOUT_MS,
@@ -25,7 +30,7 @@ import { loadRubric } from "../lib/loadRubric.js";
 import { debug } from "../lib/output.js";
 import { findRepoRoot, isExcludedPath, relativeToRoot } from "../lib/paths.js";
 import { readRegularFile, readRegularText } from "../lib/regularFile.js";
-import { flagNotice, repairReason } from "../lib/reason.js";
+import { flagNotice, repairReason, turnToolCallReason } from "../lib/reason.js";
 import {
   clearTurn,
   hasTurnState,
@@ -167,7 +172,10 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
     return finish({ kind: "silent" });
   }
   const { files, fileDiffs } = turn;
-  if (files.length === 0) return finish({ kind: "silent" });
+  const log = readToolCalls(dir);
+  // A turn that only ran tools still answers to the rules about which tools it ran.
+  if (files.length === 0 && log.length === 0) return finish({ kind: "silent" });
+  const subjects = files.length > 0 ? files : ["the turn's tool calls"];
   const bounded = fileDiffs.map((f) => ({
     file: f.file,
     text: boundState(f.text, 8_000).text,
@@ -180,7 +188,7 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
       phase: "turn",
       sessionId: input.session_id,
       reason: "no api key",
-      files,
+      files: subjects,
     });
   }
 
@@ -204,15 +212,23 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
   const task = lastUserPrompt(input.transcript_path ?? undefined) ?? readPrompt(dir);
   let outcome: CheckOutcome;
   try {
-    const turnOutcome = await runCheck({
-      phase: "turn",
-      fileDiffs: bounded,
-      task,
-      toolCalls: readToolCalls(dir),
-      rules: loaded.rules,
-      thresholds: loaded.thresholds,
-      timeoutMs: TURN_CHECK_TIMEOUT_MS,
-    });
+    const [turnOutcome, callsOutcome] = await Promise.all([
+      runCheck({
+        phase: "turn",
+        fileDiffs: bounded,
+        task,
+        rules: loaded.rules,
+        thresholds: loaded.thresholds,
+        timeoutMs: TURN_CHECK_TIMEOUT_MS,
+      }),
+      runTurnToolCallCheck({
+        log,
+        task,
+        rules: loaded.rules,
+        thresholds: loaded.thresholds,
+        timeoutMs: TURN_CHECK_TIMEOUT_MS,
+      }),
+    ]);
     const editOutcomes = await Promise.all(
       unchecked.map((f) =>
         runCheck({
@@ -225,7 +241,7 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
         }),
       ),
     );
-    outcome = mergeOutcomes([turnOutcome, ...editOutcomes]);
+    outcome = mergeOutcomes([turnOutcome, callsOutcome, ...editOutcomes]);
   } catch (error) {
     appendEvent(root, {
       kind: "error",
@@ -254,7 +270,7 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
     phase: "turn",
     sessionId: input.session_id,
     promptId: turnIdOf(input),
-    files,
+    files: subjects,
     rules: outcome.modelRules.length,
     latencyMs: Math.round(performance.now() - started),
     modelLatencyMs: outcome.modelLatencyMs,
@@ -263,11 +279,17 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
     blocked: acting.length > 0,
   });
 
-  const systemMessage = flagged.length > 0 ? flagNotice("turn", flagged, files) : undefined;
+  const systemMessage = flagged.length > 0 ? flagNotice("turn", flagged, subjects) : undefined;
   if (acting.length > 0) {
+    const onDiff = acting.filter(({ rule }) => rule.target === "diff");
+    const onCalls = acting.filter(({ rule }) => rule.target === "toolCall");
+    const reason = [
+      ...(onDiff.length > 0 ? [repairReason("turn", onDiff, files)] : []),
+      ...(onCalls.length > 0 ? [turnToolCallReason(onCalls)] : []),
+    ].join("\n\n");
     return finish({
       kind: "block",
-      reason: repairReason("turn", acting, files),
+      reason,
       ...(systemMessage === undefined ? {} : { systemMessage }),
     });
   }

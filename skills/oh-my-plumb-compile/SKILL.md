@@ -75,7 +75,7 @@ The test: if a careful reviewer would want to see the whole change before answer
 
 Lint rules always run per edit and do not need `when`.
 
-A tool-call rule carries `when` like any model rule. One recorded call is all the judge sees, so a question that call can answer is `"edit"`.
+A tool-call rule carries `when` like any model rule. `"edit"` judges each call as it happens: the tool's name and its input, for rules about one command ("never run npm"). `"turn"` judges the whole turn's tool-call log once at the end: entries of `order`, `name` and `summary`, edits included, for rules about which tools a turn used and in what order ("look up docs with context7 before changing a dependency"). A turn rule sees the log, not the diff. Give it a scope only when it concerns calls to particular tools; a rule that requires a tool the turn may never have called has no scope.
 
 ## Step 6. Write the rubric file
 
