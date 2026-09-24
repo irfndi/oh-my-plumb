@@ -283,6 +283,10 @@ describe("init rubric round-trip", () => {
     const again = withGuards(rubric, stack, routes);
     expect(again?.rules.filter((r) => r.check.type === "guard")).toHaveLength(1);
 
+    // A kept rule whose source entry went missing gets it back.
+    const restored = withGuards(again && { ...again, sources: [] }, stack, routes);
+    expect(restored?.sources.map((s) => s.path)).toEqual([".pi/mcp.json"]);
+
     // A guard the user disabled stays disabled across init and never routes.
     const disabled = withGuards(
       again && { ...again, rules: again.rules.map((r) => ({ ...r, status: "disabled" as const })) },
@@ -346,6 +350,8 @@ describe("route gaps", () => {
     expect(routeGaps(root, { command: ["node", "--inspect"] }, [])).toEqual([
       'command "node --inspect" names no script',
     ]);
+    // An inline script has no file to look for.
+    expect(routeGaps(root, { command: ["node", "-e", "console.log(1)"] }, [])).toEqual([]);
   });
 });
 

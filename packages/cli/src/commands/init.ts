@@ -75,7 +75,6 @@ export const withGuards = (
       id: createRuleId(`guard ${guard.mcp.server} ${guard.mcp.tool}`),
       text: guard.action,
       source: { path: entry.slice(0, entry.lastIndexOf(":")) },
-      scope: [guard.trigger],
       check: {
         type: "guard",
         server: guard.mcp.server,
@@ -85,10 +84,11 @@ export const withGuards = (
       },
     });
     // A rule already in the rubric is the user's to edit or disable; init never resets it.
-    if (rules.some((existing) => existing.id === rule.id)) continue;
-    rules.push(rule);
-    if (!sources.some((source) => source.path === rule.source.path))
-      sources.push({ path: rule.source.path });
+    const kept = rules.find((existing) => existing.id === rule.id) ?? rule;
+    if (kept === rule) rules.push(rule);
+    // Every rule's source must be listed, including a kept rule whose entry went missing.
+    if (!sources.some((source) => source.path === kept.source.path))
+      sources.push({ path: kept.source.path });
   }
   return { ...base, sources, rules };
 };

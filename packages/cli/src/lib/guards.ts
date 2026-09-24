@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import type { Rule } from "oh-my-plumb-schema";
+import { assertNever, type Rule } from "oh-my-plumb-schema";
 import { z } from "zod";
 import { callMcpGuard, type McpLaunch } from "./mcp.js";
 import { debug } from "./output.js";
@@ -137,12 +137,27 @@ export const guardRoutes = (rules: readonly Rule[], root: string): GuardRoute[] 
     ];
   });
 
-/** The local file a guard command runs, or undefined when the command is not a local script. */
-const commandFile = (command: readonly string[]): string | undefined => {
+/** What a guard command runs, as far as a gap check can tell without running it. */
+type CommandTarget =
+  | { kind: "script"; file: string }
+  | { kind: "inline" }
+  | { kind: "unchecked" }
+  | { kind: "none" };
+
+const NODE_INLINE = new Set(["-e", "--eval", "-p", "--print"]);
+
+const commandTarget = (command: readonly string[]): CommandTarget => {
   const first = command[0];
-  if (first === "node") return command.slice(1).find((arg) => !arg.startsWith("-"));
+  if (first === "node") {
+    const args = command.slice(1);
+    if (args.some((arg) => NODE_INLINE.has(arg))) return { kind: "inline" };
+    const file = args.find((arg) => !arg.startsWith("-"));
+    return file === undefined ? { kind: "none" } : { kind: "script", file };
+  }
   // ponytail: only local script targets are checked; a bare binary would need a PATH walk
-  return first !== undefined && first.includes("/") ? first : undefined;
+  return first !== undefined && first.includes("/")
+    ? { kind: "script", file: first }
+    : { kind: "unchecked" };
 };
 
 /**
@@ -160,11 +175,21 @@ export const routeGaps = (
   if (server !== undefined && !mcpServers.some((detected) => detected.endsWith(`:${server}`)))
     gaps.push(`MCP server "${server}" is not configured here`);
   if (command !== undefined) {
-    const file = commandFile(command);
-    if (command[0] === "node" && file === undefined)
-      gaps.push(`command "${command.join(" ")}" names no script`);
-    else if (file !== undefined && !existsSync(path.resolve(root, file)))
-      gaps.push(`${file} does not exist`);
+    const target = commandTarget(command);
+    switch (target.kind) {
+      case "script":
+        if (!existsSync(path.resolve(root, target.file)))
+          gaps.push(`${target.file} does not exist`);
+        break;
+      case "none":
+        gaps.push(`command "${command.join(" ")}" names no script`);
+        break;
+      case "inline":
+      case "unchecked":
+        break;
+      default:
+        assertNever(target);
+    }
   } else if (skill === undefined && server === undefined) {
     gaps.push("no guard command resolves here");
   }
