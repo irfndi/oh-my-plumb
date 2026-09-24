@@ -26,6 +26,8 @@ const checkCell = (rule: Rule): Cell => {
       return { text: "linter", color: palette.sage };
     case "model":
       return { text: `jev ${rule.check.question.type}`, color: palette.indigo };
+    case "guard":
+      return { text: "guard", color: palette.plum };
     case "deferred":
       return { text: "deferred", color: palette.ceramicWarm };
     case "unenforceable":

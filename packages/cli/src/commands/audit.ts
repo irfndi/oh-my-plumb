@@ -3,7 +3,7 @@ import { PlumbError } from "oh-my-plumb-schema";
 import { auditFiles, auditableFiles, listRepoFiles, tallyByRule } from "../lib/audit.js";
 import { isGitRepo } from "../lib/git.js";
 import { hasApiKey, NO_KEY_HINT } from "../lib/credentials.js";
-import { loadRules } from "../lib/loadRules.js";
+import { loadRubric } from "../lib/loadRubric.js";
 import { findRepoRoot } from "../lib/paths.js";
 import { say, usd } from "../lib/ui.js";
 import { Header } from "../ui/components/Header.js";
@@ -29,7 +29,7 @@ export const runAudit = async (argv: string[]): Promise<number> => {
       "GIT_UNAVAILABLE",
       "audit walks the files git knows about, and this is not a git repository",
     );
-  const loaded = loadRules(root);
+  const loaded = loadRubric(root);
   if (loaded.rules.length === 0)
     throw new PlumbError(
       "RUBRIC_MISSING",

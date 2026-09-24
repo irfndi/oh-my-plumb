@@ -11,7 +11,7 @@ export type LoadedRules = {
 };
 
 /** Project rubric plus the global one, project winning on a clash. */
-export const loadRules = (root: string): LoadedRules => {
+export const loadRubric = (root: string): LoadedRules => {
   const problems: string[] = [];
   const pick = (file: string): Rubric | undefined => {
     const read = readRubric(file);

@@ -94,6 +94,31 @@ export const modelCheckSchema = z.object({
   pattern: z.string().min(1).max(500).optional(),
 });
 
+/**
+ * A rule an external guard enforces: `init` records the command or skill it
+ * found, Tier 2 runs it with a hard deadline, the hit names the owning rule.
+ */
+export const guardCheckSchema = z
+  .object({
+    type: z.literal("guard"),
+    /** Guard command, spawned with FILE_PATH in env and the file text on stdin. */
+    command: z.array(z.string().min(1)).min(1).optional(),
+    /** Named skill whose guard script runs instead of a command. */
+    skill: z.string().min(1).max(200).optional(),
+    /** MCP server that owns the guard; a gap when it is not configured here. */
+    server: z.string().min(1).max(200).optional(),
+    /** MCP tool the guard mirrors, spelled out for the reader. */
+    tool: z.string().min(1).max(200).optional(),
+    /** File glob the guard watches: the trigger `init` detected. */
+    scope: z.string().min(1).max(500),
+    /** The rule the guard enforces, in a human's words. */
+    text: z.string().min(1).max(600),
+  })
+  .refine(
+    (c) => c.command !== undefined || c.skill !== undefined,
+    "say which guard command runs, or name the skill",
+  );
+
 export const deferredCheckSchema = z.object({
   type: z.literal("deferred"),
   reason: z.string().min(1).max(300),
@@ -107,6 +132,7 @@ export const unenforceableCheckSchema = z.object({
 export const checkSchema = z.discriminatedUnion("type", [
   lintCheckSchema,
   modelCheckSchema,
+  guardCheckSchema,
   deferredCheckSchema,
   unenforceableCheckSchema,
 ]);

@@ -6,6 +6,8 @@ import { ruleSchema } from "oh-my-plumb-schema";
 import { collectReport } from "../src/commands/report.js";
 import { detectStack, routesFor, type DetectedStack } from "../src/lib/detect.js";
 import { fastCheck } from "../src/lib/tier1.js";
+import { guardRoutes, routeGaps, routesForFile, runGuard } from "../src/lib/guards.js";
+import { withGuards } from "../src/commands/init.js";
 
 describe("tier1 fast path", () => {
   const rule = (overrides: object) =>
@@ -119,16 +121,20 @@ describe("phase 3 guards", () => {
       guards.routesForFile(
         [
           {
+            ruleId: "migration-guard",
             trigger: "{prisma/migrations,drizzle}/**",
-            mcp: { server: "pg", tool: "v", command: ["echo"] },
+            command: ["echo"],
           },
         ],
         "prisma/migrations/001.sql",
       ),
     ).toHaveLength(1);
-    expect(guards.routesForFile([{ trigger: "src/**" }], "prisma/migrations/001.sql")).toHaveLength(
-      0,
-    );
+    expect(
+      guards.routesForFile(
+        [{ ruleId: "no-console", trigger: "src/**" }],
+        "prisma/migrations/001.sql",
+      ),
+    ).toHaveLength(0);
   });
 
   it("missing guard binary is a silent pass, error output is a hit", async () => {
@@ -137,8 +143,8 @@ describe("phase 3 guards", () => {
       await guards.runGuard("r", "s", ["/nonexistent-guard-bin", "x"], "f.sql", "text", 500),
     ).toBeUndefined();
     const hit = await guards.runGuard(
-      "tier2:skill:t",
-      "tier2:skill:t",
+      "migration-guard",
+      "migration-guard",
       ["node", "-e", "console.log(JSON.stringify({isError:true,content:'nope'}))"],
       "f.sql",
       "text",
@@ -146,36 +152,71 @@ describe("phase 3 guards", () => {
     );
     expect(hit?.reason).toContain("nope");
   });
+
+  it("a guard that hangs or prints garbage is a silent pass", async () => {
+    // Genuine delay: the hang must happen in the spawned child, whose clock fake timers cannot reach.
+    expect(
+      await runGuard(
+        "r",
+        "s",
+        ["node", "-e", "setTimeout(() => {}, 60_000)"],
+        "f.sql",
+        "text",
+        300,
+      ),
+    ).toBeUndefined();
+    expect(
+      await runGuard("r", "s", ["node", "-e", "console.log('not json')"], "f.sql", "text", 5000),
+    ).toBeUndefined();
+  });
 });
 
-describe("init rules.yaml round-trip", () => {
-  it("emitted tier-2 lines parse back with mcp guard attached", async () => {
-    const guards = await import("../src/lib/guards.js");
-    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
-    const { tmpdir } = await import("node:os");
+describe("init rubric round-trip", () => {
+  it("records a detected guard as a rubric rule and reads it back as a route", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-roundtrip-"));
-    mkdirSync(path.join(root, ".oh-my-plumb"), { recursive: true });
-    const { routesFor } = await import("../src/lib/detect.js");
-    const { detectStack } = await import("../src/lib/detect.js");
-    void routesFor;
-    void detectStack;
-    writeFileSync(
-      path.join(root, ".oh-my-plumb", "rules.yaml"),
-      [
-        `version: "1.0"`,
-        `routes:`,
-        `  - tier: 2 trigger: "{prisma/migrations,drizzle}/**" action: "x"`,
-        `    mcp: postgres-inspector validate_migration node ./scripts/validate-migration.mjs`,
-        ``,
-      ].join("\n"),
+    mkdirSync(path.join(root, "scripts"), { recursive: true });
+    writeFileSync(path.join(root, "scripts", "validate-migration.mjs"), "");
+    const stack: DetectedStack = {
+      manifests: ["package.json"],
+      lintConfigs: [],
+      mcpServers: [".pi/mcp.json:postgres-inspector"],
+      skills: [],
+    };
+    const routes = routesFor(stack, root);
+
+    const rubric = withGuards(undefined, stack, routes);
+    expect(rubric?.rules.map((r) => r.check.type)).toContain("guard");
+    expect(rubric?.sources.map((s) => s.path)).toContain(".pi/mcp.json");
+
+    // Running init again upserts the same rule instead of duplicating it.
+    const again = withGuards(rubric, stack, routes);
+    expect(again?.rules.filter((r) => r.check.type === "guard")).toHaveLength(1);
+
+    // A guard the user disabled stays disabled across init and never routes.
+    const disabled = withGuards(
+      again && { ...again, rules: again.rules.map((r) => ({ ...r, status: "disabled" as const })) },
+      stack,
+      routes,
     );
-    const routes = guards.readTier2Routes(root);
-    expect(routes).toHaveLength(1);
-    expect(routes[0]?.trigger).toBe("{prisma/migrations,drizzle}/**");
-    expect(routes[0]?.mcp?.server).toBe("postgres-inspector");
-    expect(routes[0]?.mcp?.tool).toBe("validate_migration");
-    expect(routes[0]?.mcp?.command).toEqual(["node", "./scripts/validate-migration.mjs"]);
-    expect(guards.routesForFile(routes, "prisma/migrations/001.sql")).toHaveLength(1);
+    expect(disabled?.rules.every((r) => r.status === "disabled")).toBe(true);
+    expect(guardRoutes(disabled?.rules ?? [], root)).toEqual([]);
+
+    const [route] = guardRoutes(again?.rules ?? [], root);
+    if (route === undefined) throw new Error("guard route missing");
+    expect(route.trigger).toBe("{prisma/migrations,drizzle}/**");
+    expect(route.command).toEqual(["node", "./scripts/validate-migration.mjs"]);
+    expect(routesForFile([route], "prisma/migrations/001.sql")).toHaveLength(1);
+
+    const hit = await runGuard(
+      route.ruleId,
+      route.ruleId,
+      ["node", "-e", "console.log(JSON.stringify({isError:true,content:'nope'}))"],
+      "prisma/migrations/001.sql",
+      "text",
+      5000,
+    );
+    expect(hit?.ruleId).toBe("guard-postgres-inspector-validate-migration");
+    expect(again?.rules.some((r) => r.id === hit?.ruleId)).toBe(true);
   });
 });
 
@@ -201,6 +242,20 @@ describe("init route gating", () => {
   });
 });
 
+describe("route gaps", () => {
+  it("finds the script past node's own flags", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-gaps-"));
+    mkdirSync(path.join(root, "scripts"), { recursive: true });
+    writeFileSync(path.join(root, "scripts", "x.mjs"), "");
+    expect(
+      routeGaps(root, { command: ["node", "--env-file=.env", "./scripts/x.mjs"] }, []),
+    ).toEqual([]);
+    expect(routeGaps(root, { command: ["node", "--inspect"] }, [])).toEqual([
+      'command "node --inspect" names no script',
+    ]);
+  });
+});
+
 describe("report missing routes", () => {
   it("lists a configured route whose script is missing, then drops it once it resolves", () => {
     const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-report-route-"));
@@ -219,18 +274,21 @@ describe("report missing routes", () => {
             when: "edit",
             check: { type: "model", question: { type: "boolean", instructions: "q" } },
           },
+          {
+            id: "migration-guard",
+            text: "Migration files must pass the validate_migration guard",
+            source: { path: "AGENTS.md" },
+            check: {
+              type: "guard",
+              command: ["node", "./scripts/validate-migration.mjs"],
+              server: "postgres-inspector",
+              tool: "validate_migration",
+              scope: "{prisma/migrations,drizzle}/**",
+              text: "Migration files must pass the validate_migration guard",
+            },
+          },
         ],
       }),
-    );
-    writeFileSync(
-      path.join(root, ".oh-my-plumb", "rules.yaml"),
-      [
-        `version: "1.0"`,
-        `routes:`,
-        `  - tier: 2 trigger: "{prisma/migrations,drizzle}/**" action: "x"`,
-        `    mcp: postgres-inspector validate_migration node ./scripts/validate-migration.mjs`,
-        ``,
-      ].join("\n"),
     );
 
     const listed = collectReport(root)?.missingRoutes;

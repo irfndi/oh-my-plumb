@@ -73,8 +73,8 @@ export function ReportView({ data }: { data: ReportData }) {
           tone="warn"
           title={`${data.missingRoutes.length} ${data.missingRoutes.length === 1 ? "route points" : "routes point"} at a guard that is not here`}
         >
-          {data.missingRoutes.map((m) => (
-            <Text key={m.trigger} color={palette.cloud}>
+          {data.missingRoutes.map((m, index) => (
+            <Text key={`${m.trigger}:${index}`} color={palette.cloud}>
               {m.trigger}
               <Text color={palette.ash}>
                 {"  "}

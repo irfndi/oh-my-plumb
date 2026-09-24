@@ -10,12 +10,12 @@ import {
 } from "oh-my-plumb-schema";
 import { runCheck, type CheckOutcome } from "../lib/checkRunner.js";
 import { fastCheck } from "../lib/tier1.js";
-import { readTier2Routes, routesForFile, runGuard, type GuardHit } from "../lib/guards.js";
+import { guardRoutes, routesForFile, runGuard, type GuardHit } from "../lib/guards.js";
 import { EDIT_CHECK_TIMEOUT_MS, MAX_BLOCKS_PER_RULE_PER_TURN } from "../lib/constants.js";
 import { hasApiKey } from "../lib/credentials.js";
 import { boundState, editsFromPostToolUse, type EditHunk } from "../lib/diff.js";
 import { appendEvent } from "../lib/events.js";
-import { loadRules } from "../lib/loadRules.js";
+import { loadRubric } from "../lib/loadRubric.js";
 import { debug } from "../lib/output.js";
 import { findRepoRoot, isExcludedPath, relativeToRoot } from "../lib/paths.js";
 import { flagNotice, repairReason } from "../lib/reason.js";
@@ -48,7 +48,7 @@ export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
   const turn = turnDir(input.session_id, turnIdOf(input));
   for (const edit of edits) recordFileStart(turn, edit.filePath, edit.original);
 
-  const loaded = loadRules(root);
+  const loaded = loadRubric(root);
   for (const problem of loaded.problems) debug(problem);
   if (loaded.rules.length === 0) return { kind: "silent" };
 
@@ -73,32 +73,24 @@ export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
   const files = checkable.map((c) => c.relative);
 
   const tier2Hits: { relative: string; hit: GuardHit }[] = [];
-  const routes = readTier2Routes(root);
+  const routes = guardRoutes(loaded.rules, root);
   if (routes.length > 0) {
     const external = await Promise.all(
       checkable.flatMap(({ edit, relative }) =>
         routesForFile(routes, relative).flatMap((r) => {
           const jobs: Promise<{ relative: string; hit: GuardHit } | undefined>[] = [];
-          if (r.mcp !== undefined) {
+          if (r.command !== undefined) {
             jobs.push(
-              runGuard(
-                `tier2:${r.mcp.server}:${r.mcp.tool}`,
-                `tier2:${r.mcp.server}`,
-                r.mcp.command,
-                relative,
-                edit.after ?? "",
-              ).then((hit) => (hit === undefined ? undefined : { relative, hit })),
+              runGuard(r.ruleId, r.ruleId, r.command, relative, edit.after ?? "").then((hit) =>
+                hit === undefined ? undefined : { relative, hit },
+              ),
             );
           }
           if (r.skill !== undefined) {
             jobs.push(
-              runGuard(
-                `tier2:skill:${r.skill.name}`,
-                `tier2:skill:${r.skill.name}`,
-                [r.skill.entry],
-                relative,
-                edit.after ?? "",
-              ).then((hit) => (hit === undefined ? undefined : { relative, hit })),
+              runGuard(r.ruleId, r.ruleId, [r.skill], relative, edit.after ?? "").then((hit) =>
+                hit === undefined ? undefined : { relative, hit },
+              ),
             );
           }
           return jobs;
