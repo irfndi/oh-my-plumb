@@ -6,6 +6,7 @@
 // script has its own deadline.
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -61,7 +62,32 @@ const textOf = (content) =>
     .map((p) => p.text)
     .join("\n");
 
+/** Whether any rubric this session can load has a tool-call rule; without one a tool call is not worth a hook spawn. */
+const hasToolCallRule = (file) => {
+  try {
+    const rubric = JSON.parse(readFileSync(file, "utf8"));
+    return (
+      Array.isArray(rubric?.rules) &&
+      rubric.rules.some((rule) => rule?.target === "toolCall" && rule?.status !== "disabled")
+    );
+  } catch {
+    return false;
+  }
+};
+
+const toolCallRulesFor = (cwd) => {
+  const home = process.env.OH_MY_PLUMB_HOME_DIR ?? homedir();
+  if (hasToolCallRule(path.join(home, ".oh-my-plumb", "global.json"))) return true;
+  for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
+    if (hasToolCallRule(path.join(dir, ".oh-my-plumb", "rubric.json"))) return true;
+    if (path.dirname(dir) === dir) return false;
+  }
+};
+
 const EDIT_TOOLS = { edit: true, write: true };
+// Pi's own read-only tools are never judged, so they must not spawn a hook. Every
+// other tool — bash, MCP, an extension's own — is forwarded; rule scopes decide.
+const READ_TOOLS: Record<string, true> = { read: true, grep: true, glob: true };
 
 const readOrNull = (file) => {
   try {
@@ -75,6 +101,15 @@ export const postToolUsePayload = ({ filePath, original, after, sessionId, cwd, 
   tool_name: "Write",
   tool_input: { file_path: filePath, content: after },
   tool_response: { filePath, originalFile: original },
+  session_id: sessionId,
+  cwd,
+  hook_event_name: "PostToolUse",
+  tool_use_id: toolCallId,
+});
+
+export const toolCallPayload = ({ tool, input, sessionId, cwd, toolCallId }) => ({
+  tool_name: tool,
+  tool_input: input ?? {},
   session_id: sessionId,
   cwd,
   hook_event_name: "PostToolUse",
@@ -97,19 +132,41 @@ export default function ohMyPlumb(pi) {
 
   pi.on("tool_result", async (event, ctx) => {
     try {
+      const sessionId = ctx.sessionManager?.getSessionId?.() ?? "pi";
+      const cwd = ctx.cwd ?? process.cwd();
       const before = originals.get(event.toolCallId);
       originals.delete(event.toolCallId);
-      if (!EDIT_TOOLS[event.toolName] || before === undefined || event.isError) return;
-      const after = readOrNull(before.absolute);
-      if (after === null) return;
+      if (EDIT_TOOLS[event.toolName]) {
+        if (before === undefined || event.isError) return;
+        const after = readOrNull(before.absolute);
+        if (after === null) return;
+        const out = await runHook(
+          "post-tool-use",
+          postToolUsePayload({
+            filePath: before.absolute,
+            original: before.original,
+            after,
+            sessionId,
+            cwd,
+            toolCallId: event.toolCallId,
+          }),
+          20_000,
+        );
+        if (out?.decision === "block" && typeof out.reason === "string") {
+          return { content: [{ type: "text", text: `${textOf(event.content)}\n\n${out.reason}` }] };
+        }
+        return;
+      }
+      if (typeof event.toolName !== "string" || READ_TOOLS[event.toolName]) return;
+      if (!toolCallRulesFor(cwd)) return;
+      // A failed attempt still counts: the call was made, and a rule may forbid it.
       const out = await runHook(
         "post-tool-use",
-        postToolUsePayload({
-          filePath: before.absolute,
-          original: before.original,
-          after,
-          sessionId: ctx.sessionManager?.getSessionId?.() ?? "pi",
-          cwd: ctx.cwd ?? process.cwd(),
+        toolCallPayload({
+          tool: event.toolName,
+          input: event.input,
+          sessionId,
+          cwd,
           toolCallId: event.toolCallId,
         }),
         20_000,

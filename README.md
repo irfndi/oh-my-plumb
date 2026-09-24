@@ -170,6 +170,8 @@ On every in-scope edit the hook spawns the script once:
 
 Four hooks per agent. Session start: hash the instruction files, ask the agent to compile if they changed. Turn start: snapshot the working tree with git. After each edit: run the edit-phase rules on that hunk. End of turn: diff the whole turn against the snapshot and run the turn-phase rules, plus the edit-phase rules for anything a shell command wrote.
 
+Shell and MCP calls reach the hook only while your rubric has a tool-call rule, so a repo without one never pays for a hook on every command. `oh-my-plumb rubric validate` turns the Claude Code and Codex matchers on or off for a project install; pi and OpenCode check the rubric themselves.
+
 ## Uninstall
 
 ```

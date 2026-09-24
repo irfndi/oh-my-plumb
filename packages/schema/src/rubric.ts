@@ -195,6 +195,17 @@ export const ruleSchema = z
         message: `rule "${rule.id}" is a guard; its trigger lives in check.scope alone`,
       });
     }
+    const editTools = ["edit", "write", "multiedit", "apply_patch"];
+    if (
+      rule.target === "toolCall" &&
+      rule.scope?.some((glob) => editTools.includes(glob.toLowerCase())) === true
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["scope"],
+        message: `rule "${rule.id}" targets tool calls but names an edit tool; edits are judged as diffs`,
+      });
+    }
     if (rule.target === "toolCall" && rule.check.type !== "model") {
       ctx.addIssue({
         code: "custom",

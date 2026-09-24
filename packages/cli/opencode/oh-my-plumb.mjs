@@ -12,6 +12,8 @@
 // its own deadline.
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -97,6 +99,42 @@ const textOf = (parts) =>
     .map((p) => p.text)
     .join("\n");
 
+/** Whether any rubric this session can load has a tool-call rule; without one a tool call is not worth a hook spawn. */
+const hasToolCallRule = (file) => {
+  try {
+    const rubric = JSON.parse(readFileSync(file, "utf8"));
+    return (
+      Array.isArray(rubric?.rules) &&
+      rubric.rules.some((rule) => rule?.target === "toolCall" && rule?.status !== "disabled")
+    );
+  } catch {
+    return false;
+  }
+};
+
+export const toolCallRulesFor = (cwd) => {
+  const home = process.env.OH_MY_PLUMB_HOME_DIR ?? homedir();
+  if (hasToolCallRule(path.join(home, ".oh-my-plumb", "global.json"))) return true;
+  for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
+    if (hasToolCallRule(path.join(dir, ".oh-my-plumb", "rubric.json"))) return true;
+    if (path.dirname(dir) === dir) return false;
+  }
+};
+
+// OpenCode's own read-only tools are never judged, so they never spawn a hook.
+const READ_TOOLS = new Set(["read", "grep", "glob", "list", "todoread"]);
+
+/** A shell or MCP call as the hook's schema reads it; rule scopes match on the name. */
+export const toolCallPayload = ({ tool, args, sessionID, turnId, directory, callID }) => ({
+  tool_name: tool,
+  tool_input: args ?? {},
+  session_id: sessionID,
+  prompt_id: turnId,
+  cwd: directory,
+  hook_event_name: "PostToolUse",
+  tool_use_id: callID,
+});
+
 export default async ({ client, directory }) => {
   const log = (message) => {
     try {
@@ -168,33 +206,53 @@ export default async ({ client, directory }) => {
 
     "tool.execute.after": async (input, output) => {
       try {
-        if (input?.tool !== "edit" && input?.tool !== "write") return;
         const s = sessions.get(input.sessionID);
         if (!s) return;
-        const args = input.args ?? {};
-        const file_path = absolute(args.filePath);
-        if (file_path === "") return;
-        const hunks = hunksFrom(output?.metadata?.diff);
-        const payload =
-          input.tool === "edit"
-            ? {
-                tool_name: "Edit",
-                tool_input: {
-                  file_path,
-                  old_string: String(args.oldString ?? ""),
-                  new_string: String(args.newString ?? ""),
-                  replace_all: Boolean(args.replaceAll),
-                },
-                tool_response: hunks ? { filePath: file_path, structuredPatch: hunks } : {},
-              }
-            : {
-                tool_name: "Write",
-                tool_input: { file_path, content: String(args.content ?? "") },
-                // A diff from the host means the file existed; without one it is treated as new.
-                tool_response: hunks
-                  ? { filePath: file_path, originalFile: "", structuredPatch: hunks }
-                  : { filePath: file_path, originalFile: null },
-              };
+        let payload;
+        if (
+          typeof input?.tool === "string" &&
+          input.tool !== "edit" &&
+          input.tool !== "write" &&
+          !READ_TOOLS.has(input.tool)
+        ) {
+          // bash, MCP tools and any other tool: forwarded only while a rubric has a tool-call rule.
+          if (!toolCallRulesFor(directory)) return;
+          payload = toolCallPayload({
+            tool: input.tool,
+            args: input.args,
+            sessionID: input.sessionID,
+            turnId: s.turnId,
+            directory,
+            callID: input.callID,
+          });
+        } else if (input?.tool === "edit" || input?.tool === "write") {
+          const args = input.args ?? {};
+          const file_path = absolute(args.filePath);
+          if (file_path === "") return;
+          const hunks = hunksFrom(output?.metadata?.diff);
+          payload =
+            input.tool === "edit"
+              ? {
+                  tool_name: "Edit",
+                  tool_input: {
+                    file_path,
+                    old_string: String(args.oldString ?? ""),
+                    new_string: String(args.newString ?? ""),
+                    replace_all: Boolean(args.replaceAll),
+                  },
+                  tool_response: hunks ? { filePath: file_path, structuredPatch: hunks } : {},
+                }
+              : {
+                  tool_name: "Write",
+                  tool_input: { file_path, content: String(args.content ?? "") },
+                  // A diff from the host means the file existed; without one it is treated as new.
+                  tool_response: hunks
+                    ? { filePath: file_path, originalFile: "", structuredPatch: hunks }
+                    : { filePath: file_path, originalFile: null },
+                };
+        } else {
+          return;
+        }
         const out = await runHook(
           "post-tool-use",
           {

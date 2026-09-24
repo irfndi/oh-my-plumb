@@ -6,7 +6,8 @@ import { installPiExtension, uninstallPiExtension } from "./piPlugin.js";
 import { installOpencodePlugin, uninstallOpencodePlugin } from "./opencodePlugin.js";
 import { hookScriptPath } from "./packageRoot.js";
 import { homeDir } from "./paths.js";
-import { hookSpecs, installHooks, uninstallHooks } from "./settings.js";
+import { hasOurHooks, hookSpecs, installHooks, uninstallHooks } from "./settings.js";
+import { loadRubric } from "./loadRubric.js";
 
 export const hostLabel = (host: Host): string => {
   switch (host) {
@@ -86,20 +87,46 @@ export const installTarget = (host: Host, root: string, project: boolean): strin
   }
 };
 
+/** The shell and MCP matchers are registered only while the rubric has a tool-call rule to judge them with. */
+const hasToolCallRule = (root: string): boolean =>
+  loadRubric(root).rules.some((rule) => rule.target === "toolCall");
+
+/**
+ * Keep a project's installed Claude Code and Codex hooks in step with its rubric:
+ * shell and MCP matchers on while it has a tool-call rule, off otherwise.
+ * Only files that already carry oh-my-plumb's hooks are touched.
+ */
+export const syncToolCallMatchers = (root: string): Host[] => {
+  const toolCallRules = hasToolCallRule(root);
+  const hosts: readonly ("claude" | "codex")[] = ["claude", "codex"];
+  return hosts.flatMap((host) => {
+    const target = installTarget(host, root, true);
+    if (!hasOurHooks(target)) return [];
+    installHooks(target, hookSpecs(hookScriptPath(), { host, toolCallRules }));
+    return [host];
+  });
+};
+
 export type Installed = { host: Host; target: string; what: string; afterwards?: string };
 
 export const installHost = (host: Host, root: string, project: boolean): Installed => {
   const target = installTarget(host, root, project);
   switch (host) {
     case "claude":
-      installHooks(target, hookSpecs(hookScriptPath()));
+      installHooks(
+        target,
+        hookSpecs(hookScriptPath(), { host, toolCallRules: hasToolCallRule(root) }),
+      );
       return {
         host,
         target,
         what: "hooks written: SessionStart, UserPromptSubmit, PostToolUse, Stop",
       };
     case "codex":
-      installHooks(target, hookSpecs(hookScriptPath()));
+      installHooks(
+        target,
+        hookSpecs(hookScriptPath(), { host, toolCallRules: hasToolCallRule(root) }),
+      );
       return {
         host,
         target,

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import { postToolUseInputSchema } from "oh-my-plumb-schema";
+import { postToolUseInputSchema, toolCallPostToolUseSchema } from "oh-my-plumb-schema";
 import { editsFromPostToolUse } from "../src/lib/diff.js";
 
 // A computed specifier keeps tsc out of the extension, which Pi loads as untyped JS.
 const extension = "../pi/oh-my-plumb.ts";
-const { postToolUsePayload } = await import(extension);
+const { postToolUsePayload, toolCallPayload } = await import(extension);
 
 describe("pi extension payload", () => {
   it("passes the hook schema and diffs an edit against the original", () => {
@@ -35,6 +35,19 @@ describe("pi extension payload", () => {
     const [edit] = editsFromPostToolUse(postToolUseInputSchema.parse(payload));
     expect(edit?.isNewFile).toBe(true);
     expect(edit?.text).toContain("+export type B = 1;");
+  });
+
+  it("builds shell and extension tool payloads the hook schema accepts", () => {
+    for (const tool of ["bash", "greet"]) {
+      const payload = toolCallPayload({
+        tool,
+        input: { command: "ls -la" },
+        sessionId: "s1",
+        cwd: "/repo",
+        toolCallId: "t3",
+      });
+      expect(toolCallPostToolUseSchema.parse(payload).tool_name).toBe(tool);
+    }
   });
 });
 
