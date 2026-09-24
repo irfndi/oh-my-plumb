@@ -71,6 +71,19 @@ describe("tool-call scope", () => {
     expect(ruleAppliesToTool({ scope: ["Bash"] }, "mcp__postgres__query")).toBe(false);
     expect(ruleAppliesToTool({ scope: ["mcp__postgres__*"] }, "mcp__postgres__query")).toBe(true);
     expect(ruleAppliesToTool({ scope: ["mcp__postgres__*"] }, "Bash")).toBe(false);
+    expect(ruleAppliesToTool({ scope: ["mcp__postgres__*"] }, "mcp__postgres2__query")).toBe(false);
+    expect(ruleAppliesToTool({ scope: ["mcp__postgres__*"] }, "mcp__puppeteer__screenshot")).toBe(
+      false,
+    );
+    expect(
+      ruleAppliesToTool(
+        { scope: ["mcp__postgres-inspector__*"] },
+        "mcp__postgres-inspector__validate_migration",
+      ),
+    ).toBe(true);
+    expect(
+      ruleAppliesToTool({ scope: ["mcp__postgres__*"] }, "mcp__postgres-inspector__query"),
+    ).toBe(false);
   });
 
   it("selects tool-call rules by phase and tool name, and never leaks a diff rule either way", () => {

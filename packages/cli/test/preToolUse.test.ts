@@ -16,14 +16,17 @@ import { emit } from "../src/lib/output.js";
 const saved = { typesafe: process.env.TYPESAFE_AI_API_KEY, home: process.env.OH_MY_PLUMB_HOME_DIR };
 process.env.TYPESAFE_AI_API_KEY = "unit-test-key";
 
-const model = vi.hoisted((): { answer?: Record<string, unknown>; failure?: Error } => ({}));
+const model = vi.hoisted(
+  (): { answer?: Record<string, unknown>; failure?: Error; seen?: string } => ({}),
+);
 
 vi.mock("ai", async (importOriginal) => {
   const actual = await importOriginal<typeof AiModule>();
   return {
     ...actual,
-    experimental_evaluate: async () => {
+    experimental_evaluate: async (options: { state: unknown }) => {
       if (model.failure !== undefined) throw model.failure;
+      model.seen = JSON.stringify(options.state);
       return { answers: model.answer ?? {}, usage: { inputTokens: 12, outputTokens: 4 } };
     },
   };
@@ -39,7 +42,14 @@ const rule = {
   check: { type: "model", question: { type: "boolean", instructions: "?" } },
 };
 
-const repoWith = (): string => {
+const mcpRule = {
+  ...rule,
+  id: "no-drop-through-postgres",
+  text: "Never DROP or TRUNCATE a table through the postgres MCP",
+  scope: ["mcp__postgres__*"],
+};
+
+const repoWith = (rules: unknown[] = [rule]): string => {
   const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-repo-"));
   writeFileSync(path.join(root, "AGENTS.md"), "- rule\n");
   mkdirSync(path.join(root, ".oh-my-plumb"));
@@ -49,23 +59,27 @@ const repoWith = (): string => {
       version: 1,
       compiledAt: "x",
       sources: [{ path: "AGENTS.md" }],
-      rules: [rule],
+      rules,
     }),
   );
   return root;
 };
 
-const payload = (cwd: string) => ({
+const payload = (
+  cwd: string,
+  tool_name = "Bash",
+  tool_input: Record<string, unknown> = { command: "rm -rf /" },
+) => ({
   session_id: "t",
   cwd,
   hook_event_name: "PreToolUse",
-  tool_name: "Bash",
-  tool_input: { command: "rm -rf /" },
+  tool_name,
+  tool_input,
   tool_use_id: "b1",
 });
 
-const violation = (probability: number): void => {
-  model.answer = { "no-blind-shell": { type: "boolean", probability } };
+const violation = (probability: number, id = "no-blind-shell"): void => {
+  model.answer = { [id]: { type: "boolean", probability } };
 };
 
 const checksIn = (root: string): Extract<PlumbEvent, { kind: "check" }>[] =>
@@ -78,6 +92,7 @@ beforeEach(() => {
   process.env.TYPESAFE_AI_API_KEY = "unit-test-key";
   model.answer = undefined;
   model.failure = undefined;
+  model.seen = undefined;
 });
 
 afterEach(() => {
@@ -158,6 +173,106 @@ describe("blocking a recorded call before it runs", () => {
     expect(events.some((event) => event.kind === "error" && event.code === "CHECK_TIMEOUT")).toBe(
       true,
     );
+  });
+});
+
+describe("a rule scoped to one MCP server", () => {
+  const mcpPayload = (cwd: string, tool_input: Record<string, unknown>) =>
+    payload(cwd, "mcp__postgres__query", tool_input);
+
+  it("judges the call on its arguments before it runs, and a contradicting output never reaches the judge", async () => {
+    violation(0.97, "no-drop-through-postgres");
+    const root = repoWith([mcpRule]);
+    const out = await handlePreToolUse(mcpPayload(root, { query: "DROP TABLE users" }));
+    expect(out.kind).toBe("block");
+    if (out.kind !== "block") return;
+    expect(out.reason).toContain('Rule "no-drop-through-postgres"');
+    expect(out.reason).toContain("mcp__postgres__query");
+    expect(model.seen).toContain("DROP TABLE users");
+    // The verdict came from the arguments alone; nothing after the run re-judges them.
+    const judgedBefore = model.seen;
+    const post = await handlePostToolUse({
+      ...mcpPayload(root, { query: "DROP TABLE users" }),
+      hook_event_name: "PostToolUse",
+      tool_response: { rows: [], note: "read-only select, no rows changed" },
+    });
+    expect(post).toEqual({ kind: "silent" });
+    expect(model.seen).toBe(judgedBefore);
+    expect(model.seen).not.toContain("read-only select");
+  });
+
+  it("never sees the output: an alarming result cannot block a call whose arguments are clean", async () => {
+    violation(0.1, "no-drop-through-postgres");
+    const root = repoWith([mcpRule]);
+    const pre = await handlePreToolUse(
+      mcpPayload(root, { query: "SELECT id FROM users LIMIT 10" }),
+    );
+    expect(pre).toEqual({ kind: "silent" });
+    expect(model.seen).toContain("SELECT id FROM users LIMIT 10");
+    expect(model.seen).not.toContain("DROP TABLE users");
+    // After the run the payload claims a DROP happened; nothing after the run calls the judge.
+    model.seen = undefined;
+    const out = await handlePostToolUse({
+      ...mcpPayload(root, { query: "SELECT id FROM users LIMIT 10" }),
+      hook_event_name: "PostToolUse",
+      tool_response: { rows: [], note: "DROP TABLE users executed" },
+    });
+    expect(out).toEqual({ kind: "silent" });
+    expect(model.seen).toBeUndefined();
+  });
+
+  it("an act verdict blocks the MCP call before it runs, with the rule in the reason", async () => {
+    violation(0.97, "no-drop-through-postgres");
+    const root = repoWith([mcpRule]);
+    const out = await handlePreToolUse(mcpPayload(root, { query: "DROP TABLE users" }));
+    expect(out.kind).toBe("block");
+    if (out.kind !== "block") return;
+    expect(out.reason).toContain('Rule "no-drop-through-postgres"');
+    expect(out.reason).toContain("mcp__postgres__query");
+    expect(checksIn(root)[0]?.blocked).toBe(true);
+  });
+
+  it("a flag lets the MCP call run and surfaces the note", async () => {
+    violation(0.6, "no-drop-through-postgres");
+    const root = repoWith([mcpRule]);
+    const out = await handlePreToolUse(mcpPayload(root, { query: "DROP TABLE users" }));
+    expect(out.kind).toBe("notice");
+    if (out.kind !== "notice") return;
+    expect(out.systemMessage).toContain("no-drop-through-postgres");
+    expect(out.systemMessage).toContain("mcp__postgres__query");
+    expect(checksIn(root)[0]?.blocked).toBe(false);
+  });
+
+  it("an ignore verdict passes the MCP call without a word", async () => {
+    violation(0.1, "no-drop-through-postgres");
+    const root = repoWith([mcpRule]);
+    const out = await handlePreToolUse(mcpPayload(root, { query: "SELECT 1" }));
+    expect(out).toEqual({ kind: "silent" });
+  });
+
+  it("calls no rule's scope covers stay silent and are never judged", async () => {
+    violation(0.97, "no-drop-through-postgres");
+    const root = repoWith([mcpRule]);
+    expect(
+      await handlePreToolUse(payload(root, "mcp__slack__postMessage", { channel: "#ops" })),
+    ).toEqual({ kind: "silent" });
+    expect(await handlePreToolUse(payload(root))).toEqual({ kind: "silent" });
+    expect(checksIn(root)).toEqual([]);
+  });
+
+  it("a check that fails or times out lets the MCP call run and logs why", async () => {
+    for (const [failure, code] of [
+      [new Error("gateway exploded"), "CHECK_FAILED"],
+      [Object.assign(new Error("no answer"), { name: "TimeoutError" }), "CHECK_TIMEOUT"],
+    ] as const) {
+      model.failure = failure;
+      const root = repoWith([mcpRule]);
+      const out = await handlePreToolUse(mcpPayload(root, { query: "DROP TABLE users" }));
+      expect(out).toEqual({ kind: "silent" });
+      expect(readEvents(root).some((event) => event.kind === "error" && event.code === code)).toBe(
+        true,
+      );
+    }
   });
 });
 

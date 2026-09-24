@@ -155,6 +155,20 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
     expect(existsSync(path.join(root, ".oh-my-plumb", "events.jsonl"))).toBe(false);
   });
 
+  it("pre-tool-use for an MCP call without a key lets it run and logs the skip", () => {
+    const root = repoWith([toolCallRule(["mcp__postgres__*"])]);
+    const r = run(
+      "pre-tool-use",
+      JSON.stringify(prePayload(root, "mcp__postgres__query", { query: "DROP TABLE users" })),
+    );
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe("");
+    const events = readFileSync(path.join(root, ".oh-my-plumb", "events.jsonl"), "utf8");
+    expect(events).toContain('"kind":"skip"');
+    expect(events).toContain('"reason":"no api key"');
+    expect(events).toContain('"files":["mcp__postgres__query"]');
+  });
+
   it("stays silent on a call no rule's scope covers, and a diff rule never sees a call", () => {
     const scoped = repoWith([toolCallRule(["Bash"])]);
     for (const payload of [
