@@ -10,11 +10,13 @@ import {
 } from "oh-my-plumb-schema";
 import { runCheck, type CheckOutcome } from "../lib/checkRunner.js";
 import { fastCheck } from "../lib/tier1.js";
+import { findMcpServer } from "../lib/detect.js";
 import {
   GUARD_TIMEOUT_MS,
   guardRoutes,
   routesForFile,
   runGuard,
+  runMcpGuard,
   type GuardHit,
 } from "../lib/guards.js";
 import { EDIT_CHECK_TIMEOUT_MS, MAX_BLOCKS_PER_RULE_PER_TURN } from "../lib/constants.js";
@@ -95,6 +97,18 @@ export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
                 edit.after ?? "",
                 GUARD_TIMEOUT_MS,
                 root,
+              ).then((hit) => (hit === undefined ? undefined : { relative, hit })),
+            );
+          }
+          if (r.command === undefined && r.server !== undefined && r.tool !== undefined) {
+            jobs.push(
+              runMcpGuard(
+                r.ruleId,
+                findMcpServer(root, r.server),
+                { server: r.server, tool: r.tool },
+                root,
+                relative,
+                edit.after ?? "",
               ).then((hit) => (hit === undefined ? undefined : { relative, hit })),
             );
           }

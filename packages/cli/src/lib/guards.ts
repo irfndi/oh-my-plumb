@@ -3,16 +3,19 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import type { Rule } from "oh-my-plumb-schema";
 import { z } from "zod";
+import { callMcpGuard, type McpLaunch } from "./mcp.js";
+import { debug } from "./output.js";
 
 /**
  * Phase 3: MCP dispatch + skill-as-guardrail execution.
  *
  * Tier 2 routes a file trigger to a guard the user configured:
- * 1. MCP server dispatch — the repo's MCP config maps a trigger to a
- *    server+tool; the hook spawns the configured command with a hard
- *    deadline and parses one JSON line of `{ isError, content }`.
- *    No response (timeout, bad JSON, missing binary) = silent pass + logged
- *    skip. An MCP guard NEVER breaks the agent by failing.
+ * 1. MCP server dispatch: a guard check names a server and a tool; the hook
+ *    starts that server the way the host's own MCP config does and speaks
+ *    real MCP (initialize handshake, then tools/call) under a hard deadline.
+ *    A guard check may instead carry a `command` that prints one JSON line
+ *    of `{ isError, content }`. No answer (timeout, bad output, missing
+ *    server) = silent pass + logged skip. A guard NEVER breaks the agent.
  * 2. Skill guardrail — an executable script under a discovered skills dir
  *    (`<dir>/<name>/guard.{mjs,js,sh}`), run with `$FILE_PATH` in env,
  *    same deadline + silent-pass contract.
@@ -24,7 +27,7 @@ import { z } from "zod";
 // Rejecting an odd content shape would turn an isError hit into a silent pass.
 const guardOutputSchema = z.object({ isError: z.boolean(), content: z.unknown().optional() });
 
-export type McpRoute = { server: string; tool: string; command: string[] };
+export type McpRoute = { server: string; tool: string };
 /** One guard check resolved for routing: where it triggers, what runs, which rule owns it. */
 export type GuardRoute = {
   /** The owning rubric rule: the id a guard hit reports. */
@@ -32,6 +35,7 @@ export type GuardRoute = {
   trigger: string;
   command?: string[];
   server?: string;
+  tool?: string;
   /** Resolved skill guard entry: the absolute path of `<dir>/<name>/guard.*`. */
   skill?: string;
 };
@@ -66,6 +70,25 @@ const matches = (trigger: string, file: string): boolean => {
 export const routesForFile = (routes: readonly GuardRoute[], file: string): GuardRoute[] =>
   routes.filter((r) => matches(r.trigger, file));
 
+/** Narrow one `{ isError, content }` result, shared by the line and MCP paths. */
+export const guardOutputOf = (
+  value: unknown,
+): { isError: boolean; content: string } | undefined => {
+  const result = guardOutputSchema.safeParse(value);
+  if (!result.success) return undefined;
+  const v = result.data;
+  const content = Array.isArray(v.content)
+    ? v.content
+        .flatMap((p: unknown) =>
+          typeof p === "object" && p !== null && "text" in p ? [String(p.text)] : [],
+        )
+        .join("\n")
+    : typeof v.content === "string"
+      ? v.content
+      : JSON.stringify(v.content ?? "");
+  return { isError: v.isError, content };
+};
+
 /** Parse one JSON line of `{ isError, content }` from a guard process. */
 export const parseGuardOutput = (
   text: string,
@@ -73,19 +96,7 @@ export const parseGuardOutput = (
   try {
     const last = text.trim().split("\n").pop() ?? "";
     if (last === "") return undefined;
-    const result = guardOutputSchema.safeParse(JSON.parse(last));
-    if (!result.success) return undefined;
-    const v = result.data;
-    const content = Array.isArray(v.content)
-      ? v.content
-          .flatMap((p: unknown) =>
-            typeof p === "object" && p !== null && "text" in p ? [String(p.text)] : [],
-          )
-          .join("\n")
-      : typeof v.content === "string"
-        ? v.content
-        : JSON.stringify(v.content ?? "");
-    return { isError: v.isError, content };
+    return guardOutputOf(JSON.parse(last));
   } catch {
     return undefined;
   }
@@ -112,7 +123,7 @@ export const SKILL_DIRS = [".pi/skills", "skills", ".claude/skills"];
 export const guardRoutes = (rules: readonly Rule[], root: string): GuardRoute[] =>
   rules.flatMap((rule) => {
     if (rule.status !== "active" || rule.check.type !== "guard") return [];
-    const { command, server, skill, scope } = rule.check;
+    const { command, server, tool, skill, scope } = rule.check;
     const entry = skill === undefined ? undefined : resolveSkillGuard(root, SKILL_DIRS, skill);
     return [
       {
@@ -120,6 +131,7 @@ export const guardRoutes = (rules: readonly Rule[], root: string): GuardRoute[] 
         trigger: scope,
         ...(command === undefined ? {} : { command }),
         ...(server === undefined ? {} : { server }),
+        ...(tool === undefined ? {} : { tool }),
         ...(entry === undefined ? {} : { skill: entry }),
       },
     ];
@@ -136,7 +148,7 @@ const commandFile = (command: readonly string[]): string | undefined => {
 /**
  * Read-only: why a configured guard cannot run here; empty means it resolves.
  * A skill route only parses when its guard file already resolved, so only a
- * guard whose server or script is gone, and one with no command, are missing.
+ * guard whose server or script is gone, and one with nothing to run, are missing.
  */
 export const routeGaps = (
   root: string,
@@ -153,7 +165,7 @@ export const routeGaps = (
       gaps.push(`command "${command.join(" ")}" names no script`);
     else if (file !== undefined && !existsSync(path.resolve(root, file)))
       gaps.push(`${file} does not exist`);
-  } else if (skill === undefined) {
+  } else if (skill === undefined && server === undefined) {
     gaps.push("no guard command resolves here");
   }
   return gaps;
@@ -222,3 +234,33 @@ export const runGuard = (
       done(undefined);
     }
   });
+
+/**
+ * MCP guard: call the tool on a server started from the host's own MCP config.
+ * `launch` is undefined when no config names that server; that, like every
+ * protocol failure, is a silent pass with a logged skip.
+ */
+export const runMcpGuard = async (
+  ruleId: string,
+  launch: McpLaunch | undefined,
+  route: McpRoute,
+  cwd: string,
+  file: string,
+  text: string,
+  timeoutMs = GUARD_TIMEOUT_MS,
+): Promise<GuardHit | undefined> => {
+  if (launch === undefined) {
+    debug(`mcp guard skipped: server "${route.server}" not found in host MCP config`);
+    return undefined;
+  }
+  const result = await callMcpGuard(
+    launch,
+    cwd,
+    route.tool,
+    { file_path: file, content: text },
+    timeoutMs,
+  );
+  const out = result === undefined ? undefined : guardOutputOf(result);
+  if (out?.isError !== true) return undefined;
+  return { ruleId, source: ruleId, reason: `${ruleId}: ${file}: ${out.content.slice(0, 500)}` };
+};

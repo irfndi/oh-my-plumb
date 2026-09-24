@@ -109,9 +109,9 @@ export const guardCheckSchema = z
     command: z.array(z.string().min(1)).min(1).optional(),
     /** Named skill whose guard script runs instead of a command. */
     skill: z.string().min(1).max(200).optional(),
-    /** MCP server that owns the guard; a gap when it is not configured here. */
+    /** MCP server whose tool the guard calls, started the way the host's MCP config says. */
     server: z.string().min(1).max(200).optional(),
-    /** MCP tool the guard mirrors, spelled out for the reader. */
+    /** MCP tool the guard calls with the edited file's path and contents. */
     tool: z.string().min(1).max(200).optional(),
     /** File glob the guard watches: the trigger `init` detected. */
     scope: z.string().min(1).max(500),
@@ -119,8 +119,11 @@ export const guardCheckSchema = z
     text: z.string().min(1).max(600),
   })
   .refine(
-    (c) => c.command !== undefined || c.skill !== undefined,
-    "say which guard command runs, or name the skill",
+    (c) =>
+      c.command !== undefined ||
+      c.skill !== undefined ||
+      (c.server !== undefined && c.tool !== undefined),
+    "say which guard command runs, name the skill, or name the MCP server and tool",
   );
 
 export const deferredCheckSchema = z.object({

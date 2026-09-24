@@ -1,12 +1,14 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+const fakeMcp = path.resolve(import.meta.dirname, "fixtures", "fake-mcp.mjs");
 import { ruleSchema } from "oh-my-plumb-schema";
 import { collectReport } from "../src/commands/report.js";
-import { detectStack, routesFor, type DetectedStack } from "../src/lib/detect.js";
+import { detectStack, findMcpServer, routesFor, type DetectedStack } from "../src/lib/detect.js";
 import { fastCheck } from "../src/lib/tier1.js";
-import { guardRoutes, routeGaps, routesForFile, runGuard } from "../src/lib/guards.js";
+import { guardRoutes, routeGaps, routesForFile, runGuard, runMcpGuard } from "../src/lib/guards.js";
 import { withGuards } from "../src/commands/init.js";
 
 describe("tier1 fast path", () => {
@@ -265,8 +267,6 @@ describe("phase 3 guards", () => {
 describe("init rubric round-trip", () => {
   it("records a detected guard as a rubric rule and reads it back as a route", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-roundtrip-"));
-    mkdirSync(path.join(root, "scripts"), { recursive: true });
-    writeFileSync(path.join(root, "scripts", "validate-migration.mjs"), "");
     const stack: DetectedStack = {
       manifests: ["package.json"],
       lintConfigs: [],
@@ -295,13 +295,18 @@ describe("init rubric round-trip", () => {
     const [route] = guardRoutes(again?.rules ?? [], root);
     if (route === undefined) throw new Error("guard route missing");
     expect(route.trigger).toBe("{prisma/migrations,drizzle}/**");
-    expect(route.command).toEqual(["node", "./scripts/validate-migration.mjs"]);
+    expect(route.command).toBeUndefined();
+    expect({ server: route.server, tool: route.tool }).toEqual({
+      server: "postgres-inspector",
+      tool: "validate_migration",
+    });
     expect(routesForFile([route], "prisma/migrations/001.sql")).toHaveLength(1);
 
-    const hit = await runGuard(
+    const hit = await runMcpGuard(
       route.ruleId,
-      route.ruleId,
-      ["node", "-e", "console.log(JSON.stringify({isError:true,content:'nope'}))"],
+      { command: ["node", fakeMcp, "error"], env: {} },
+      { server: "postgres-inspector", tool: "validate_migration" },
+      root,
       "prisma/migrations/001.sql",
       "text",
       5000,
@@ -319,16 +324,13 @@ describe("init route gating", () => {
     skills: [],
   });
 
-  it("emits no tier-2 route unless the MCP server and the script are both here", () => {
+  it("emits no tier-2 route unless the MCP server is configured here", () => {
     const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-init-route-"));
     const tiers = (stack: DetectedStack): (1 | 2 | 3)[] =>
       routesFor(stack, root).map((r) => r.tier);
 
     expect(tiers(stackWith([]))).not.toContain(2);
-    expect(tiers(stackWith([".pi/mcp.json:postgres-inspector"]))).not.toContain(2);
-
-    mkdirSync(path.join(root, "scripts"), { recursive: true });
-    writeFileSync(path.join(root, "scripts", "validate-migration.mjs"), "");
+    expect(tiers(stackWith([".pi/mcp.json:other-server"]))).not.toContain(2);
     expect(tiers(stackWith([".pi/mcp.json:postgres-inspector"]))).toContain(2);
   });
 });
@@ -395,5 +397,140 @@ describe("report missing routes", () => {
       JSON.stringify({ mcpServers: { "postgres-inspector": {} } }),
     );
     expect(collectReport(root)?.missingRoutes).toEqual([]);
+  });
+});
+
+describe("MCP server lookup", () => {
+  it("reads how each host starts a server, project config first", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-find-"));
+    const home = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-find-home-"));
+    const saved = process.env.OH_MY_PLUMB_HOME_DIR;
+    process.env.OH_MY_PLUMB_HOME_DIR = home;
+    try {
+      writeFileSync(
+        path.join(root, ".mcp.json"),
+        JSON.stringify({
+          mcpServers: {
+            pg: { command: "node", args: ["./pg.mjs"], env: { PGURL: "x" } },
+            remote: { type: "http", url: "https://example.test" },
+          },
+        }),
+      );
+      writeFileSync(
+        path.join(root, "opencode.json"),
+        JSON.stringify({
+          mcp: { oc: { type: "local", command: ["npx", "-y", "oc"], environment: { A: "1" } } },
+        }),
+      );
+      mkdirSync(path.join(home, ".codex"), { recursive: true });
+      writeFileSync(
+        path.join(home, ".codex", "config.toml"),
+        '[mcp_servers.pg]\ncommand = "global-pg"\n[mcp_servers.cx]\ncommand = "cx"\nargs = ["--stdio"]\n',
+      );
+      expect(findMcpServer(root, "pg")).toEqual({
+        command: ["node", "./pg.mjs"],
+        env: { PGURL: "x" },
+      });
+      expect(findMcpServer(root, "oc")).toEqual({ command: ["npx", "-y", "oc"], env: { A: "1" } });
+      expect(findMcpServer(root, "cx")).toEqual({ command: ["cx", "--stdio"], env: {} });
+      expect(findMcpServer(root, "remote")).toBeUndefined();
+      expect(findMcpServer(root, "missing")).toBeUndefined();
+    } finally {
+      if (saved === undefined) delete process.env.OH_MY_PLUMB_HOME_DIR;
+      else process.env.OH_MY_PLUMB_HOME_DIR = saved;
+    }
+  });
+});
+
+describe("MCP JSON-RPC guard", () => {
+  const route = { server: "fakeGuard", tool: "check_migrations" };
+  const run = (mode: string, timeoutMs?: number, env: Record<string, string> = {}) => {
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-mcp-"));
+    const log = path.join(root, "fake-mcp.log");
+    const hit = runMcpGuard(
+      "migration-guard",
+      { command: ["node", fakeMcp, mode], env: { FAKE_MCP_LOG: log, ...env } },
+      route,
+      root,
+      "prisma/migrations/001.sql",
+      "CREATE TABLE x (id INT)",
+      timeoutMs,
+    );
+    return { hit, log };
+  };
+  const sequence = (log: string): number[] => {
+    const seq = readFileSync(log, "utf8");
+    return ["initialize", "notifications/initialized", "tools/call"].map((m) =>
+      seq.indexOf(`"method":"${m}"`),
+    );
+  };
+
+  it("completes initialize, then tools/call, and passes on a clean result", async () => {
+    const started = Date.now();
+    const { hit, log } = run("success", 5000);
+    expect(await hit).toBeUndefined();
+    expect(Date.now() - started).toBeLessThan(1500);
+    const [init = -1, ready = -1, call = -1] = sequence(log);
+    expect(init).toBeGreaterThanOrEqual(0);
+    expect(ready).toBeGreaterThan(init);
+    expect(call).toBeGreaterThan(ready);
+  });
+
+  it("turns an isError tools/call result into a hit that names the rule", async () => {
+    const hit = await run("error", 5000).hit;
+    expect(hit?.ruleId).toBe("migration-guard");
+    expect(hit?.reason).toContain("bad fk");
+  });
+
+  it("passes a server that hangs after initialize, at the deadline", async () => {
+    const started = Date.now();
+    const { hit, log } = run("timeout");
+    expect(await hit).toBeUndefined();
+    expect(Date.now() - started).toBeLessThan(3500);
+    const [init = -1, , call = -1] = sequence(log);
+    expect(call).toBeGreaterThan(init);
+  });
+
+  it("fails closed on malformed output and on a flood, as a silent pass", async () => {
+    const started = Date.now();
+    expect(await run("malformed", 1500).hit).toBeUndefined();
+    expect(await run("flood", 1500).hit).toBeUndefined();
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it("reads framed messages, including a split, lowercase header with extra fields", async () => {
+    expect(await run("framed", 5000).hit).toBeUndefined();
+    const { hit, log } = run("framed-odd", 5000);
+    expect(await hit).toBeUndefined();
+    const [, , call = -1] = sequence(log);
+    expect(call).toBeGreaterThan(0);
+  });
+
+  it("starts the server with the env its config sets", async () => {
+    const hit = await run("env", 5000, { FAKE_MCP_SECRET: "from-config" }).hit;
+    expect(hit?.reason).toContain("env=from-config");
+  });
+
+  it("passes when the server binary is missing, or no config names the server", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-mcp-"));
+    expect(
+      await runMcpGuard(
+        "r",
+        { command: ["/nonexistent-guard-bin"], env: {} },
+        route,
+        root,
+        "f",
+        "t",
+      ),
+    ).toBeUndefined();
+    process.env.OH_MY_PLUMB_DEBUG = "1";
+    const spy = vi.spyOn(process.stderr, "write");
+    try {
+      expect(await runMcpGuard("r", undefined, route, root, "f", "t")).toBeUndefined();
+      expect(spy.mock.calls.join("")).toContain('server "fakeGuard" not found');
+    } finally {
+      spy.mockRestore();
+      delete process.env.OH_MY_PLUMB_DEBUG;
+    }
   });
 });

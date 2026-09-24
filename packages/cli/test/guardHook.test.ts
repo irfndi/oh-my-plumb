@@ -163,3 +163,59 @@ describe("the shipped no-interface guard", () => {
     expect(await runGuard("r", "s", [guard], "notes.md", "interface X {}\n")).toBeUndefined();
   });
 });
+
+describe("an MCP guard through postToolUse, end to end", () => {
+  const fakeMcp = path.resolve(import.meta.dirname, "fixtures", "fake-mcp.mjs");
+
+  it("starts the server from .mcp.json, calls the rule's tool, and blocks on isError", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-mcp-repo-"));
+    process.env.OH_MY_PLUMB_HOME_DIR = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-mcp-home-"));
+    try {
+      writeFileSync(path.join(root, "AGENTS.md"), "- Migrations must pass validate_migration.\n");
+      writeFileSync(
+        path.join(root, ".mcp.json"),
+        JSON.stringify({ mcpServers: { pg: { command: "node", args: [fakeMcp, "error"] } } }),
+      );
+      mkdirSync(path.join(root, ".oh-my-plumb"), { recursive: true });
+      writeFileSync(
+        path.join(root, ".oh-my-plumb", "rubric.json"),
+        JSON.stringify({
+          version: 1,
+          compiledAt: "x",
+          sources: [{ path: ".mcp.json" }],
+          rules: [
+            {
+              id: "migrations-validate",
+              text: "Migrations must pass validate_migration.",
+              source: { path: ".mcp.json" },
+              check: {
+                type: "guard",
+                server: "pg",
+                tool: "validate_migration",
+                scope: "migrations/**",
+                text: "Migrations must pass validate_migration.",
+              },
+            },
+          ],
+        }),
+      );
+      const out = await handlePostToolUse({
+        session_id: "mcp-guard",
+        prompt_id: "p",
+        cwd: root,
+        hook_event_name: "PostToolUse",
+        tool_name: "Write",
+        tool_input: {
+          file_path: path.join(root, "migrations", "001.sql"),
+          content: "CREATE TABLE x;\n",
+        },
+        tool_response: { originalFile: null, structuredPatch: [] },
+      });
+      expect(out.kind).toBe("block");
+      expect(out.kind === "block" ? out.reason : "").toContain("bad fk");
+      expect(out.kind === "block" ? out.reason : "").toContain("migrations-validate");
+    } finally {
+      delete process.env.OH_MY_PLUMB_HOME_DIR;
+    }
+  });
+});

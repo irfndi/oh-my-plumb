@@ -78,7 +78,6 @@ export const withGuards = (
       scope: [guard.trigger],
       check: {
         type: "guard",
-        command: guard.mcp.command,
         server: guard.mcp.server,
         tool: guard.mcp.tool,
         scope: guard.trigger,
