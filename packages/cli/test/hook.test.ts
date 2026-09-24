@@ -1,5 +1,13 @@
 import { execSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -236,6 +244,41 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
     expect(events).toContain('"reason":"no api key"');
   });
 
+  it("a turn that only ran tools is still judged by its turn-phase tool-call rules", () => {
+    const root = repoWith([
+      {
+        id: "docs-before-deps",
+        text: "Look up library docs before changing a dependency",
+        source: { path: "AGENTS.md" },
+        target: "toolCall",
+        when: "turn",
+        check: { type: "model", question: { type: "boolean", instructions: "?" } },
+      },
+    ]);
+    execSync(
+      "git init -q . && git add -A && git -c user.email=a@b -c user.name=a commit -q -m init",
+      { cwd: root },
+    );
+    const base = { session_id: "tools-only", prompt_id: "p", cwd: root };
+    run(
+      "turn-start",
+      JSON.stringify({ ...base, hook_event_name: "UserPromptSubmit", prompt: "go" }),
+    );
+    const call = run(
+      "post-tool-use",
+      JSON.stringify({ ...shellPayload(root, "Bash", { command: "pnpm add zod" }), ...base }),
+    );
+    expect(call.stdout).toBe("");
+    const stop = run(
+      "stop",
+      JSON.stringify({ ...base, hook_event_name: "Stop", stop_hook_active: false }),
+    );
+    expect(stop.status).toBe(0);
+    const events = readFileSync(path.join(root, ".oh-my-plumb", "events.jsonl"), "utf8");
+    expect(events).toContain('"reason":"no api key"');
+    expect(events).toContain("the turn's tool calls");
+  });
+
   it("a shell deletion is part of the turn diff", () => {
     const root = repoWith([
       {
@@ -405,6 +448,99 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
       expect(turnEvents[0].reason).toContain("turn start");
     }
   }, 60_000);
+
+  it("keeps a redacted per-turn tool-call log that stops at the turn boundary", () => {
+    const root = repoWith([]);
+    const body = `NEW_BODY_MARKER${"n".repeat(30_000)}`;
+    const original = `OLD_BODY_MARKER${"o".repeat(30_000)}`;
+    const callsDir = (prompt: string): string =>
+      path.join(home, ".oh-my-plumb", "sessions", "log-turn", prompt, "tool-calls");
+    const readLog = (prompt: string): unknown[] =>
+      readdirSync(callsDir(prompt))
+        .sort()
+        .map((name) => JSON.parse(readFileSync(path.join(callsDir(prompt), name), "utf8")));
+    const first = run(
+      "post-tool-use",
+      JSON.stringify({
+        session_id: "log-turn",
+        prompt_id: "p1",
+        cwd: root,
+        hook_event_name: "PostToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: path.join(root, "big.ts"), content: body },
+        tool_response: {
+          filePath: path.join(root, "big.ts"),
+          originalFile: original,
+          structuredPatch: [],
+        },
+      }),
+    );
+    expect(first.status).toBe(0);
+    expect(first.stdout).toBe("");
+    run(
+      "post-tool-use",
+      JSON.stringify({
+        ...shellPayload(root, "Bash", { command: "ls -la" }),
+        session_id: "log-turn",
+        prompt_id: "p1",
+      }),
+    );
+    const raw = JSON.stringify(readLog("p1"));
+    expect(raw).toContain('"order":1,"name":"Write"');
+    expect(raw).toContain(`[${body.length} chars]`);
+    expect(raw).not.toContain("NEW_BODY_MARKER");
+    expect(raw).not.toContain("OLD_BODY_MARKER");
+    expect(raw).toContain('"order":2,"name":"Bash"');
+
+    run(
+      "post-tool-use",
+      JSON.stringify({
+        ...shellPayload(root, "Bash", { command: "pwd" }),
+        session_id: "log-turn",
+        prompt_id: "p2",
+      }),
+    );
+    expect(JSON.stringify(readLog("p2"))).toBe(
+      '[{"order":1,"name":"Bash","summary":"{command=pwd}"}]',
+    );
+    expect(readLog("p1")).toHaveLength(2);
+  });
+
+  it("a corrupt tool-call log degrades: stop exits 0 and still reaches its check", () => {
+    const root = repoWith([
+      {
+        id: "turn-rule",
+        text: "t",
+        source: { path: "AGENTS.md" },
+        when: "turn",
+        check: { type: "model", question: { type: "boolean", instructions: "?" } },
+      },
+    ]);
+    execSync(
+      "git init -q . && git add -A && git -c user.email=a@b -c user.name=a commit -q -m init",
+      { cwd: root },
+    );
+    const base = { session_id: "stop-corrupt", prompt_id: "p", cwd: root };
+    run(
+      "turn-start",
+      JSON.stringify({ ...base, hook_event_name: "UserPromptSubmit", prompt: "go" }),
+    );
+    const calls = path.join(home, ".oh-my-plumb", "sessions", "stop-corrupt", "p", "tool-calls");
+    mkdirSync(calls, { recursive: true });
+    writeFileSync(path.join(calls, "call.000001"), "{corrupt");
+    writeFileSync(path.join(root, "changed.ts"), "export const x = 1;\n");
+    const stop = run(
+      "stop",
+      JSON.stringify({ ...base, hook_event_name: "Stop", stop_hook_active: false }),
+    );
+    expect(stop.status).toBe(0);
+    expect(stop.stdout).toBe("");
+    const events = readFileSync(path.join(root, ".oh-my-plumb", "events.jsonl"), "utf8");
+    expect(events).toContain('"files":["changed.ts"]');
+    // The check ran to its missing key; a throw from the log itself would be CHECK_FAILED.
+    expect(events).toContain('"code":"NO_API_KEY"');
+    expect(events).not.toContain('"code":"CHECK_FAILED"');
+  });
 
   it("session-start in a repo with an AGENTS.md and no rubric asks for a compile", () => {
     const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-repo-"));

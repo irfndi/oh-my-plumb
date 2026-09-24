@@ -19,6 +19,13 @@ export const MAX_CALL_ARG_CHARS = 200;
 /** The whole argument summary one recorded tool call may carry. */
 export const MAX_CALL_SUMMARY_CHARS = 600;
 
+/** How many tool calls one turn keeps in its log: which tools ran, not every call a long turn makes. */
+export const MAX_TOOL_CALLS_PER_TURN = 50;
+/** Longer argument strings collapse to "[N chars]": the log carries shapes, never content. */
+export const MAX_TOOL_STRING_CHARS = 200;
+/** One log entry's whole summary, cut at this length. */
+export const MAX_TOOL_SUMMARY_CHARS = 400;
+
 /** How many times one rule may block the same file within one turn before it only flags. */
 export const MAX_BLOCKS_PER_RULE_PER_TURN = 2;
 /** How many Stop checks one turn gets: the first, plus one re-check after a repair. */

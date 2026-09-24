@@ -16,6 +16,7 @@ import {
   TYPESAFE_MODEL_ID,
 } from "./constants.js";
 import { credentials, NO_KEY_HINT, type Credentials } from "./credentials.js";
+import type { ToolCallEntry } from "./session.js";
 
 export type ModelRule = Rule & { check: { type: "model" } };
 
@@ -43,6 +44,11 @@ export type CheckState =
       file?: string;
       files?: string[];
       diff: string;
+    }
+  | {
+      task?: string;
+      /** The turn's tool-call log, in call order: what a turn-phase tool-call rule is judged on. */
+      toolCalls: ToolCallEntry[];
     }
   | {
       task?: string;

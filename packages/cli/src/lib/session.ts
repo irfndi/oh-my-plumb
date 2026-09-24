@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { MAX_TASK_CHARS, SESSION_STATE_MAX_AGE_MS } from "./constants.js";
+import {
+  MAX_TASK_CHARS,
+  SESSION_STATE_MAX_AGE_MS,
+  MAX_TOOL_CALLS_PER_TURN,
+  MAX_TOOL_STRING_CHARS,
+  MAX_TOOL_SUMMARY_CHARS,
+} from "./constants.js";
 import { sessionsDir } from "./paths.js";
 
 /**
@@ -128,6 +134,111 @@ export const recordChecked = (dir: string, record: CheckedEdit): void => {
 export const readChecked = (dir: string): CheckedEdit[] =>
   readRecords(path.join(dir, "checked"), checkedSchema);
 
+const toolCallEntrySchema = z.object({
+  order: z.number().int().positive(),
+  name: z.string().min(1).max(100),
+  summary: z.string().max(MAX_TOOL_SUMMARY_CHARS),
+});
+/** One entry of the turn's tool-call log: which tool ran, in what order, with what shape of input. */
+export type ToolCallEntry = z.infer<typeof toolCallEntrySchema>;
+
+/** Fields that carry file text in some host's edit call: always reduced to their length, however short. */
+const CONTENT_KEYS = new Set([
+  "content",
+  "old_string",
+  "new_string",
+  "oldString",
+  "newString",
+  "oldText",
+  "newText",
+]);
+
+const summaryValue = (value: unknown, depth: number, key?: string): string => {
+  if (typeof value === "string") {
+    if (value.length > MAX_TOOL_STRING_CHARS || (key !== undefined && CONTENT_KEYS.has(key)))
+      return `[${value.length} chars]`;
+    return value.replace(/\s+/g, " ").trim();
+  }
+  if (value === null) return "null";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    if (depth <= 0) return `[${value.length} items]`;
+    const head = value.slice(0, 3).map((item) => summaryValue(item, depth - 1));
+    const more = value.length > 3 ? `, +${value.length - 3} more` : "";
+    return `[${head.join(", ")}${more}]`;
+  }
+  if (typeof value === "object") {
+    if (depth <= 0) return "{...}";
+    // Walks at most nine keys, so a huge input costs no more than a small one.
+    const head: string[] = [];
+    let more = false;
+    for (const key in value) {
+      if (!Object.hasOwn(value, key)) continue;
+      if (head.length === 8) {
+        more = true;
+        break;
+      }
+      const item: unknown = Reflect.get(value, key);
+      head.push(`${key}=${summaryValue(item, depth - 1, key)}`);
+    }
+    return `{${head.join(", ")}${more ? ", ..." : ""}}`;
+  }
+  return String(value);
+};
+
+/** Names and argument shapes only: a long string, or any file-text field, collapses to "[N chars]", so no file body lands in the log. */
+export const callSummary = (input: unknown): string => {
+  const rendered = summaryValue(input, 3);
+  return rendered.length <= MAX_TOOL_SUMMARY_CHARS
+    ? rendered
+    : `${rendered.slice(0, MAX_TOOL_SUMMARY_CHARS - 3)}...`;
+};
+
+const toolCallsDir = (dir: string): string => path.join(dir, "tool-calls");
+
+/** One call joins the turn's log, numbered in call order and capped at the turn's bound. First-write-wins files, like the rest of the turn state. */
+export const recordToolCall = (dir: string, name: string, input: unknown): void => {
+  try {
+    const calls = toolCallsDir(dir);
+    const entry = { name: name.slice(0, 100), summary: callSummary(input) };
+    for (let attempt = 0; attempt < 32; attempt += 1) {
+      const order = countWithPrefix(calls, "call.") + 1;
+      if (order > MAX_TOOL_CALLS_PER_TURN) return;
+      if (
+        createOnce(
+          path.join(calls, `call.${String(order).padStart(6, "0")}`),
+          JSON.stringify({ order, ...entry }),
+        )
+      )
+        return;
+    }
+  } catch {
+    // the log is best effort: absent is fine, held is not
+  }
+};
+
+/** The turn's log in call order. A missing or corrupt entry degrades to no log, never a throw. */
+export const readToolCalls = (dir: string): ToolCallEntry[] => {
+  let names: string[];
+  try {
+    names = readdirSync(toolCallsDir(dir));
+  } catch {
+    return [];
+  }
+  const entries: ToolCallEntry[] = [];
+  for (const name of names) {
+    try {
+      const parsed = toolCallEntrySchema.safeParse(
+        JSON.parse(readFileSync(path.join(toolCallsDir(dir), name), "utf8")),
+      );
+      if (parsed.success) entries.push(parsed.data);
+    } catch {
+      // torn or corrupt: that entry is no log
+    }
+  }
+  return entries.sort((a, b) => a.order - b.order).slice(0, MAX_TOOL_CALLS_PER_TURN);
+};
+
 const blockPrefix = (key: string): string => `${shortHash(key)}.`;
 
 export const blockCount = (dir: string, key: string): number =>
@@ -199,6 +310,7 @@ export const readBaselineStatus = (dir: string): BaselineStatus | undefined => {
 
 export const hasTurnState = (dir: string): boolean =>
   readFileStarts(dir).length > 0 ||
+  readToolCalls(dir).length > 0 ||
   readBaseline(dir) !== undefined ||
   readBaselineStatus(dir) !== undefined;
 
