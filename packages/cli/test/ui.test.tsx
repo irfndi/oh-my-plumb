@@ -141,6 +141,28 @@ describe("views", () => {
     expect(frame).toContain("scripts/v.mjs does not exist");
   });
 
+  it("report counts payloads it skipped as unknown", () => {
+    const { lastFrame } = render(
+      <ReportView
+        data={{
+          root: "/r",
+          rules,
+          events: [
+            { kind: "unknown_payload", at: "t1", tool: "MysteryTool" },
+            { kind: "unknown_payload", at: "t2", tool: "Write" },
+          ],
+          stats: new Map(),
+          dead: [],
+          problems: [],
+          missingRoutes: [],
+          piTrust: null,
+        }}
+      />,
+    );
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("2 payloads skipped as unknown (possible host version drift)");
+  });
+
   it("report warns only while Pi has not approved this project", () => {
     const base = {
       root: "/r",

@@ -24,6 +24,8 @@ const shortHash = (value: string): string =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
 
 export const NO_PROMPT_TURN = "turn";
+/** Where a payload that never named a session keeps its turn state; hosts mint opaque session ids, so this name is theirs alone. */
+export const NO_SESSION_ID = "_no-session";
 
 export const turnDir = (sessionId: string, promptId: string | undefined): string =>
   path.join(sessionsDir(), safe(sessionId), safe(promptId ?? NO_PROMPT_TURN));
@@ -262,6 +264,14 @@ export const stopCheckCount = (dir: string): number =>
 
 export const incrementStopChecks = (dir: string): number =>
   increment(path.join(dir, "stops"), "stop.");
+
+const unknownPayloadPrefix = "unknown-payload.";
+
+export const unknownPayloadCount = (dir: string): number =>
+  countWithPrefix(path.join(dir, "unknown"), unknownPayloadPrefix);
+
+export const incrementUnknownPayloads = (dir: string): number =>
+  increment(path.join(dir, "unknown"), unknownPayloadPrefix);
 
 /** The prompt that started the turn, for hosts that send it instead of a transcript. */
 export const writePrompt = (dir: string, prompt: string): void => {

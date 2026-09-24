@@ -57,6 +57,7 @@ export {
   multiEditToolInputSchema,
   applyPatchToolInputSchema,
   toolCallSchema,
+  toolNameSchema,
   turnIdOf,
   type SessionStartInput,
   type TurnStartInput,

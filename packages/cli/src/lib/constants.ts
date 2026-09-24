@@ -30,6 +30,8 @@ export const MAX_TOOL_SUMMARY_CHARS = 400;
 export const MAX_BLOCKS_PER_RULE_PER_TURN = 2;
 /** How many Stop checks one turn gets: the first, plus one re-check after a repair. */
 export const MAX_STOP_CHECKS_PER_TURN = 2;
+/** How many payloads a host may send unrecognized in one turn before we stop logging them: enough to name the drift, not enough to fill the log. */
+export const MAX_UNKNOWN_PAYLOADS_PER_TURN = 5;
 
 export const SESSION_STATE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 

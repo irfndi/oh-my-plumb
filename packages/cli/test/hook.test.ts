@@ -12,6 +12,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vite-plus/test";
+import { MAX_UNKNOWN_PAYLOADS_PER_TURN } from "../src/lib/constants.js";
+import { readEvents } from "../src/lib/events.js";
 
 const script = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -152,7 +154,8 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
     );
     expect(r.status).toBe(0);
     expect(r.stdout).toBe("");
-    expect(existsSync(path.join(root, ".oh-my-plumb", "events.jsonl"))).toBe(false);
+    // Nothing is judged; the payload is only counted, by tool name, as drift.
+    expect(readEvents(root).map((e) => e.kind)).toEqual(["unknown_payload"]);
   });
 
   it("pre-tool-use for an MCP call without a key lets it run and logs the skip", () => {
@@ -195,15 +198,18 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
         check: { type: "model", question: { type: "boolean", instructions: "?" } },
       },
     ]);
-    for (const name of ["pre-tool-use", "post-tool-use"]) {
-      const r = run(name, JSON.stringify(shellPayload(diffRoot, "Bash", { command: "ls" })));
+    for (const [name, payload] of [
+      ["pre-tool-use", prePayload(diffRoot, "Bash", { command: "ls" })],
+      ["post-tool-use", shellPayload(diffRoot, "Bash", { command: "ls" })],
+    ] as const) {
+      const r = run(name, JSON.stringify(payload));
       expect(r.status).toBe(0);
       expect(r.stdout).toBe("");
     }
     expect(existsSync(path.join(diffRoot, ".oh-my-plumb", "events.jsonl"))).toBe(false);
   });
 
-  it("rejects malformed and schema-invalid payloads: exit 0, empty stdout, no event", () => {
+  it("rejects malformed and schema-invalid payloads: exit 0, empty stdout, nothing judged", () => {
     const root = repoWith([toolCallRule(["Bash"])]);
     for (const input of [
       "not json",
@@ -224,9 +230,41 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
         const r = run(name, input);
         expect(r.status).toBe(0);
         expect(r.stdout).toBe("");
-        expect(existsSync(path.join(root, ".oh-my-plumb", "events.jsonl"))).toBe(false);
       }
     }
+    // Only the drift counter writes, and only for payloads that named a tool and a repo.
+    expect(readEvents(root).every((e) => e.kind === "unknown_payload")).toBe(true);
+  });
+
+  it("a rejected payload lands in the log by name only, and a repeat stops at the cap", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-repo-"));
+    const marker = "SECRET-MARKER-DO-NOT-LOG";
+    const base = {
+      session_id: "u",
+      cwd: root,
+      hook_event_name: "PostToolUse",
+      tool_name: "Write",
+      tool_input: { file_path: path.join(root, "a.ts") },
+    };
+    // A payload that matches the schema never writes an event, secret or not.
+    const valid = { ...base, tool_input: { ...base.tool_input, content: marker } };
+    const ok = run("post-tool-use", JSON.stringify(valid));
+    expect(ok.status).toBe(0);
+    expect(ok.stdout).toBe("");
+    expect(existsSync(path.join(root, ".oh-my-plumb", "events.jsonl"))).toBe(false);
+    // Rejected the 0.1.0 way (content is not a string): still exit 0 with
+    // nothing on stdout, one name-only event per payload until the cap holds.
+    const rejected = { ...base, tool_input: { ...base.tool_input, content: { marker } } };
+    for (let i = 0; i < MAX_UNKNOWN_PAYLOADS_PER_TURN + 3; i += 1) {
+      const r = run("post-tool-use", JSON.stringify(rejected));
+      expect(r.status).toBe(0);
+      expect(r.stdout).toBe("");
+    }
+    const raw = readFileSync(path.join(root, ".oh-my-plumb", "events.jsonl"), "utf8");
+    expect(raw).not.toContain(marker);
+    const unknown = readEvents(root).filter((e) => e.kind === "unknown_payload");
+    expect(unknown).toHaveLength(MAX_UNKNOWN_PAYLOADS_PER_TURN);
+    expect(unknown[0]).toMatchObject({ kind: "unknown_payload", tool: "Write", sessionId: "u" });
   });
 
   it("a diff that cannot be computed in time is skipped, logged, and never holds the hook", () => {

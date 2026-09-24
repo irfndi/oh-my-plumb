@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { PlumbEvent } from "oh-my-plumb-schema";
@@ -271,12 +279,13 @@ describe("one recorded payload per host, end to end (needs `pnpm build` first)",
     expectFastCheck(check, "src/codex.ts");
   }, 30_000);
 
-  it("silence is explicit: the 0.1.0 payload shape is rejected and logs nothing", () => {
+  it("the 0.1.0 payload shape is rejected: silent to the agent, one name-only event in the log", () => {
     const root = repoWith([patternRule]);
     installHost("claude", root, true);
     const command = ourCommand(path.join(root, ".claude", "settings.json"));
-    // 0.1.0 sent a path with no content. The schema must reject it, and the
-    // hook stays silent by design: no event, no stdout, exit 0.
+    // 0.1.0 sent a path with no content. The schema must reject it; the hook
+    // stays silent to the agent (exit 0, no stdout) and the rejection is
+    // counted instead of swallowed — by tool name only, never the path it carried.
     const r = run(
       command,
       JSON.stringify({
@@ -289,6 +298,14 @@ describe("one recorded payload per host, end to end (needs `pnpm build` first)",
     );
     expect(r.status).toBe(0);
     expect(r.stdout).toBe("");
-    expect(existsSync(eventsPath(root))).toBe(false);
+    const raw = readFileSync(eventsPath(root), "utf8");
+    expect(raw).not.toContain("ghost");
+    const events = readEvents(root);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      kind: "unknown_payload",
+      tool: "Write",
+      sessionId: "silent-e2e",
+    });
   }, 30_000);
 });

@@ -76,10 +76,14 @@ export const applyPatchToolInputSchema = z.object({
   command: z.string(),
 });
 
+/** A tool name is one token; the bound keeps a forged name out of the judge and the repair message. */
+export const toolNameSchema = z
+  .string()
+  .regex(/^\S{1,200}$/, "a tool name is one word of at most 200 characters");
+
 /** One recorded tool call: the tool's name plus the input it was called with. */
 export const toolCallSchema = z.object({
-  // A tool name is one token; this bound keeps a forged name out of the judge and the repair message.
-  tool: z.string().regex(/^\S{1,200}$/, "a tool name is one word of at most 200 characters"),
+  tool: toolNameSchema,
   input: z.unknown().optional(),
 });
 export type ToolCall = z.infer<typeof toolCallSchema>;
