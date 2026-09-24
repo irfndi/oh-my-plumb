@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { PlumbError, postToolUseInputSchema } from "oh-my-plumb-schema";
 import { MAX_TASK_CHARS } from "./constants.js";
-import type { ReplaySession, ReplayTurn } from "./replay.js";
+import { callInput, type ReplaySession, type ReplayTurn } from "./replay.js";
 
 /** Sessions live in SQLite. The `sqlite3` binary reads it so the CLI needs no driver. */
 export const opencodeDbPath = (): string =>
@@ -33,7 +33,9 @@ const query = (db: string, sql: string): unknown[] => {
   if (result.error !== undefined)
     throw new PlumbError(
       "GIT_UNAVAILABLE",
-      "sqlite3 is not on PATH, and OpenCode sessions live in a SQLite database",
+      "code" in result.error && result.error.code === "ENOENT"
+        ? "sqlite3 is not on PATH, and OpenCode sessions live in a SQLite database"
+        : `sqlite3 could not read ${db}: ${result.error.message}`,
       {
         cause: result.error,
       },
@@ -48,7 +50,10 @@ const query = (db: string, sql: string): unknown[] => {
   return Array.isArray(parsed) ? parsed : [];
 };
 
-export const readOpencodeRows = (db: string): OpencodeRow[] =>
+const sqlText = (text: string): string => `'${text.replaceAll("'", "''")}'`;
+
+/** Rows for sessions run in `root` or below it; the database holds every project's sessions, so the filter runs in SQL. */
+export const readOpencodeRows = (db: string, root: string): OpencodeRow[] =>
   query(
     db,
     `select s.id as sessionId, s.directory as directory, m.id as messageId,
@@ -56,6 +61,8 @@ export const readOpencodeRows = (db: string): OpencodeRow[] =>
        from part p
        join message m on m.id = p.message_id
        join session s on s.id = m.session_id
+      where s.directory = ${sqlText(root)}
+         or substr(s.directory, 1, ${root.length + 1}) = ${sqlText(`${root}/`)}
       order by s.id, m.time_created, m.id, p.id`,
   ).flatMap((row) => {
     const r = asRecord(row);
@@ -132,7 +139,7 @@ export const opencodeSessionsFromRows = (
     if (rel !== "" && (rel.startsWith("..") || path.isAbsolute(rel))) continue;
     let session = sessions.get(row.sessionId);
     if (session === undefined) {
-      session = { file: row.sessionId, cwd: row.directory, turns: [], turnIndex: 0 };
+      session = { file: row.sessionId, cwd: row.directory, turns: [], calls: [], turnIndex: 0 };
       sessions.set(row.sessionId, session);
     }
     let part: Record<string, unknown> | undefined;
@@ -162,6 +169,8 @@ export const opencodeSessionsFromRows = (
     if (part.type !== "tool" || typeof part.tool !== "string" || typeof part.callID !== "string")
       continue;
     const state = asRecord(part.state);
+    if (state?.input !== undefined)
+      session.calls.push({ tool: part.tool, input: callInput(state.input) });
     const input = asRecord(state?.input);
     if (state?.status !== "completed" || input === undefined) continue;
     const payload = editPayload(row.sessionId, row.directory, part.callID, part.tool, input);
@@ -176,11 +185,16 @@ export const opencodeSessionsFromRows = (
     turn.edits.push({ turn: turn.index, input: parsed.data });
   }
   return [...sessions.values()]
-    .map(({ file, cwd, turns }) => ({ file, cwd, turns: turns.filter((t) => t.edits.length > 0) }))
-    .filter((s) => s.turns.length > 0);
+    .map(({ file, cwd, turns, calls }) => ({
+      file,
+      cwd,
+      turns: turns.filter((t) => t.edits.length > 0),
+      calls,
+    }))
+    .filter((s) => s.turns.length > 0 || s.calls.length > 0);
 };
 
 export const opencodeSessionsFor = (root: string, db = opencodeDbPath()): ReplaySession[] => {
   if (!existsSync(db)) throw new PlumbError("RUBRIC_MISSING", `no OpenCode database at ${db}`);
-  return opencodeSessionsFromRows(root, readOpencodeRows(db));
+  return opencodeSessionsFromRows(root, readOpencodeRows(db, root));
 };

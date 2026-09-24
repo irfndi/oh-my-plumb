@@ -39,13 +39,17 @@ const inside = (root: string, dir: string): boolean => {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 };
 
-const sessionsFor = (host: Host, root: string, paths: readonly string[]): ReplaySession[] => {
+export const sessionsFor = (
+  host: Host,
+  root: string,
+  paths: readonly string[],
+): ReplaySession[] => {
   switch (host) {
     case "claude":
       return (paths.length > 0 ? paths : [claudeProjectDir(root)])
         .flatMap(transcriptFiles)
         .map(parseTranscript)
-        .filter((s) => s.turns.length > 0 && inside(root, s.cwd));
+        .filter((s) => (s.turns.length > 0 || s.calls.length > 0) && inside(root, s.cwd));
     case "codex":
       return codexSessionsFor(root, paths[0] ?? codexSessionsDir());
     case "opencode":

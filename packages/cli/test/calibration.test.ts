@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vite-plus/test";
-import { summarizeCalibration } from "../src/lib/calibration.js";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import type { Rule } from "oh-my-plumb-schema";
+import {
+  collectToolCallSamples,
+  summarizeCalibration,
+  type ToolCallJudge,
+} from "../src/lib/calibration.js";
+import { MAX_CALL_SUMMARY_CHARS } from "../src/lib/constants.js";
+import { callInput, parseTranscript } from "../src/lib/replay.js";
 
 const t = { act: 0.8, flag: 0.5 };
 
@@ -22,5 +32,111 @@ describe("calibration verdicts", () => {
     expect(s.verdict).toBe("decisive");
     expect(s.fired).toBe(1);
     expect(s.max).toBe(0.97);
+  });
+});
+
+/** A transcript whose assistant message calls each input in order: the first as Write, the rest as Bash. */
+const transcriptWith = (inputs: readonly Record<string, unknown>[]): string => {
+  const dir = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-calibrate-"));
+  const file = path.join(dir, "t.jsonl");
+  writeFileSync(
+    file,
+    [
+      JSON.stringify({ cwd: dir, type: "user", message: { content: "do the work" } }),
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          content: inputs.map((input, i) => ({
+            type: "tool_use",
+            id: `t${i}`,
+            name: i === 0 ? "Write" : "Bash",
+            input,
+          })),
+        },
+      }),
+    ].join("\n"),
+  );
+  return file;
+};
+
+const callRule: Rule = {
+  id: "declare-new-deps",
+  text: "Add a dependency only after checking it is already installed",
+  source: { path: "AGENTS.md" },
+  target: "toolCall",
+  when: "edit",
+  status: "active",
+  check: { type: "model", question: { type: "boolean", instructions: "?" } },
+};
+
+/** A judge that scores the rule with the next probability in the list, call by call. */
+const judgeWith = (ruleId: string, probabilities: readonly number[]): ToolCallJudge => {
+  let seen = 0;
+  return async () => {
+    const probability = probabilities[Math.min(seen, probabilities.length - 1)] ?? 0;
+    seen += 1;
+    return [{ ruleId, probability }];
+  };
+};
+
+const verdictForCalls = async (
+  inputs: readonly Record<string, unknown>[],
+  probabilities: readonly number[],
+) => {
+  const { calls } = parseTranscript(transcriptWith(inputs));
+  const samples = await collectToolCallSamples(
+    calls,
+    [callRule],
+    judgeWith(callRule.id, probabilities),
+    () => {},
+  );
+  return { calls, verdict: summarizeCalibration(samples.get(callRule.id) ?? [], t).verdict };
+};
+
+describe("tool-call calibration from transcripts", () => {
+  const bash = (n: number): Record<string, unknown>[] =>
+    Array.from({ length: n }, () => ({ command: "pnpm test" }));
+
+  it("scores a tool-call rule against recorded calls, bounded and redacted", async () => {
+    const marker = "FILE_BODY_MARKER ".repeat(30);
+    const { calls, verdict } = await verdictForCalls(
+      [{ file_path: "/r/src/a.ts", content: marker }, ...bash(5)],
+      [0.02, 0.95, 0.05, 0.9, 0.1, 0.85],
+    );
+    expect(calls).toHaveLength(6);
+    expect(calls[0]?.tool).toBe("Write");
+    const texts = calls.map((c) => JSON.stringify(c.input));
+    expect(texts.every((t) => t.length <= MAX_CALL_SUMMARY_CHARS)).toBe(true);
+    expect(texts.some((t) => t.includes("FILE_BODY_MARKER"))).toBe(false);
+    // The judge gets the arguments as an object, once encoded, not a JSON string.
+    expect(calls[1]?.input).toEqual({ command: "pnpm test" });
+    expect(verdict).toBe("decisive");
+  });
+
+  it("calls a tool-call rule with middling scores weak", async () => {
+    const { verdict } = await verdictForCalls(bash(6), [0.38, 0.42, 0.55, 0.47, 0.51, 0.6]);
+    expect(verdict).toBe("weak");
+  });
+
+  it("calls a tool-call rule that fires on most calls noisy", async () => {
+    const { verdict } = await verdictForCalls(bash(6), [0.9, 0.85, 0.95, 0.82, 0.88, 0.91]);
+    expect(verdict).toBe("noisy");
+  });
+
+  it("skips a tool-call rule with too few recorded calls", async () => {
+    const { calls, verdict } = await verdictForCalls(bash(2), [0.1, 0.9]);
+    expect(calls).toHaveLength(2);
+    expect(verdict).toBe("skipped");
+  });
+});
+
+describe("recorded call arguments", () => {
+  it("reads Codex's JSON-text arguments back into fields before redacting", () => {
+    const long = "x".repeat(300);
+    expect(callInput(JSON.stringify({ cmd: ["pnpm", "test"], note: long }))).toEqual({
+      cmd: ["pnpm", "test"],
+      note: "[300 chars]",
+    });
+    expect(callInput("not json")).toBe("not json");
   });
 });

@@ -100,7 +100,7 @@ Every file is judged as if it had just been written. You get a table by rule and
 | `oh-my-plumb report`            | your rules, what fired, what never fires                                    |
 | `oh-my-plumb replay <agent>`    | judge this repo's past sessions in any of the three agents                  |
 | `oh-my-plumb compile`           | compile the rubric now instead of at the next session                       |
-| `oh-my-plumb calibrate`         | score every rule against your recent git history                            |
+| `oh-my-plumb calibrate`         | score every rule against your recent git history and recorded tool calls    |
 | `oh-my-plumb tune`              | rewrite the rules that never fire                                           |
 | `oh-my-plumb bench`             | latency and spend, measured on your machine                                 |
 | `oh-my-plumb uninstall [agent]` | remove the hooks                                                            |

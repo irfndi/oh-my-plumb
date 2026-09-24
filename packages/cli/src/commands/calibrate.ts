@@ -1,22 +1,29 @@
 import { parseArgs } from "node:util";
-import { PlumbError, DEFAULT_THRESHOLDS, type Rule, type RuleStatus } from "oh-my-plumb-schema";
-import { summarizeCalibration } from "../lib/calibration.js";
-import { judgesDiff, runCheck } from "../lib/checkRunner.js";
+import {
+  PlumbError,
+  DEFAULT_THRESHOLDS,
+  type CalibrationVerdict,
+  type Host,
+  type Rule,
+  type RuleStatus,
+} from "oh-my-plumb-schema";
+import { collectToolCallSamples, summarizeCalibration } from "../lib/calibration.js";
+import { runCheck, runToolCallCheck } from "../lib/checkRunner.js";
 import { EDIT_CHECK_TIMEOUT_MS, TURN_CHECK_TIMEOUT_MS } from "../lib/constants.js";
 import { recentHistory } from "../lib/git.js";
 import { hasApiKey, NO_KEY_HINT } from "../lib/credentials.js";
 import { findRepoRoot, globalRubricPath, homeDir, rubricPath } from "../lib/paths.js";
+import { ruleAppliesToTool } from "../lib/scope.js";
+import type { ReplayCall } from "../lib/replay.js";
 import { readRubric, writeRubric } from "../lib/rubricFile.js";
 import { say } from "../lib/ui.js";
 import { Header } from "../ui/components/Header.js";
 import { showLive, showStatic } from "../ui/render.js";
 import { CalibrateView, type CalibrateData, type CalibrateRow } from "../ui/views/CalibrateView.js";
 import { Callout } from "../ui/components/Callout.js";
+import { sessionsFor } from "./replay.js";
 
-const statusAfter = (
-  rule: Rule,
-  verdict: ReturnType<typeof summarizeCalibration>["verdict"],
-): RuleStatus => {
+const statusAfter = (rule: Rule, verdict: CalibrationVerdict): RuleStatus => {
   if (rule.status === "disabled") return "disabled";
   switch (verdict) {
     case "weak":
@@ -32,7 +39,20 @@ const statusAfter = (
   }
 };
 
-/** Runs every model rule against the repo's own recent hunks and marks the ones that never decide. */
+/** The hosts whose session transcripts replay already reads. pi joins with its own replay wiring. */
+const SESSION_HOSTS: readonly Host[] = ["claude", "codex", "opencode"];
+
+const recordedCallsFor = (root: string): ReplayCall[] =>
+  SESSION_HOSTS.flatMap((host) => {
+    try {
+      return sessionsFor(host, root, []).flatMap((session) => session.calls);
+    } catch {
+      // a host with nothing recorded there contributes no calls
+      return [];
+    }
+  });
+
+/** Runs every model rule against the repo's own recent hunks and recorded tool calls and marks the ones that never decide. */
 export const runCalibrate = async (argv: string[]): Promise<number> => {
   const { values } = parseArgs({
     args: argv,
@@ -40,6 +60,7 @@ export const runCalibrate = async (argv: string[]): Promise<number> => {
       global: { type: "boolean", default: false },
       hunks: { type: "string", default: "20" },
       commits: { type: "string", default: "8" },
+      calls: { type: "string", default: "40" },
       json: { type: "boolean", default: false },
     },
   });
@@ -55,16 +76,22 @@ export const runCalibrate = async (argv: string[]): Promise<number> => {
   const thresholds = rubric.thresholds ?? DEFAULT_THRESHOLDS;
   const where = values.global ? homeDir() : repoRoot;
 
+  // both targets calibrate: diff rules against hunks, tool-call rules against recorded calls
   const modelRules = rubric.rules.filter(
-    (r) => judgesDiff(r) && r.check.type === "model" && r.status !== "disabled",
+    (r) => r.check.type === "model" && r.status !== "disabled",
   );
   if (modelRules.length === 0) {
     await showStatic(Callout({ tone: "ok", title: "No model-checked rules to calibrate" }));
     return 0;
   }
   const rulesToRun = modelRules.map((r) => ({ ...r, status: "active" as const }));
+  const toolCallRules = rulesToRun.filter((r) => r.target === "toolCall");
+  // Only calls some rule could judge, and at most --calls of them, the most recently recorded.
+  const recordedCalls = (toolCallRules.length === 0 ? [] : recordedCallsFor(repoRoot))
+    .filter((call) => toolCallRules.some((rule) => ruleAppliesToTool(rule, call.tool)))
+    .slice(-Number(values.calls));
   const history = recentHistory(repoRoot, Number(values.hunks), Number(values.commits));
-  if (history.hunks.length === 0 && history.commits.length === 0) {
+  if (history.hunks.length === 0 && history.commits.length === 0 && recordedCalls.length === 0) {
     await showStatic(
       Callout({
         tone: "warn",
@@ -123,11 +150,32 @@ export const runCalibrate = async (argv: string[]): Promise<number> => {
         // as above
       }
     }
+    if (recordedCalls.length > 0) {
+      const callSamples = await collectToolCallSamples(
+        recordedCalls,
+        toolCallRules,
+        async (call, phase) => {
+          const out = await runToolCallCheck({
+            phase,
+            call,
+            rules: toolCallRules,
+            thresholds,
+            timeoutMs: phase === "edit" ? EDIT_CHECK_TIMEOUT_MS : TURN_CHECK_TIMEOUT_MS,
+            retries: 2,
+          });
+          spendUsd += out.usage.costUsd ?? 0;
+          calls += out.calls;
+          return out.verdicts;
+        },
+        progress,
+      );
+      for (const [id, probabilities] of callSamples)
+        samples.set(id, [...(samples.get(id) ?? []), ...probabilities]);
+    }
     const at = new Date().toISOString();
     const rows: CalibrateRow[] = [];
     const rules = rubric.rules.map((rule) => {
-      if (!judgesDiff(rule) || rule.check.type !== "model" || rule.status === "disabled")
-        return rule;
+      if (rule.check.type !== "model" || rule.status === "disabled") return rule;
       const summary = summarizeCalibration(samples.get(rule.id) ?? [], thresholds);
       rows.push({ id: rule.id, when: rule.when ?? "", ...summary, states: summary.hunks });
       return {
@@ -158,7 +206,7 @@ export const runCalibrate = async (argv: string[]): Promise<number> => {
     header: Header({
       command: "calibrate",
       where,
-      note: `${modelRules.length} rules against ${history.hunks.length} hunks and ${history.commits.length} commits from git history`,
+      note: `${modelRules.length} rules against ${history.hunks.length} hunks and ${history.commits.length} commits from git history${recordedCalls.length > 0 ? ` and ${recordedCalls.length} recorded tool calls` : ""}`,
     }),
     run,
     done: (data) => CalibrateView({ data }),

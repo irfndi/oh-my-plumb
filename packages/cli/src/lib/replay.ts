@@ -9,7 +9,13 @@ import {
 } from "oh-my-plumb-schema";
 import { pool } from "./audit.js";
 import { runCheck } from "./checkRunner.js";
-import { EDIT_CHECK_TIMEOUT_MS, MAX_TASK_CHARS, TURN_CHECK_TIMEOUT_MS } from "./constants.js";
+import {
+  EDIT_CHECK_TIMEOUT_MS,
+  MAX_CALL_ARG_CHARS,
+  MAX_CALL_SUMMARY_CHARS,
+  MAX_TASK_CHARS,
+  TURN_CHECK_TIMEOUT_MS,
+} from "./constants.js";
 import { boundState, editsFromPostToolUse } from "./diff.js";
 import type { FileDiff } from "./git.js";
 import { findRepoRoot, isExcludedPath, relativeToRoot } from "./paths.js";
@@ -21,7 +27,37 @@ import { findRepoRoot, isExcludedPath, relativeToRoot } from "./paths.js";
  */
 export type ReplayEdit = { turn: number; input: PostToolUseInput };
 export type ReplayTurn = { index: number; prompt: string | undefined; edits: ReplayEdit[] };
-export type ReplaySession = { file: string; cwd: string; turns: ReplayTurn[] };
+/** A tool call as calibration sees it: the tool's name plus its bounded arguments, never its output or file contents. */
+export type ReplayCall = { tool: string; input: unknown };
+export type ReplaySession = { file: string; cwd: string; turns: ReplayTurn[]; calls: ReplayCall[] };
+
+const redact = (_key: string, value: unknown): unknown =>
+  typeof value === "string" && value.length > MAX_CALL_ARG_CHARS
+    ? `[${value.length} chars]`
+    : value;
+
+const jsonOrText = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+};
+
+/**
+ * The arguments a call was made with, bounded. Strings too long to be arguments
+ * (file bodies, patches, captured output pasted in) are replaced by their length,
+ * so what survives is names and short argument values only. Codex records its
+ * arguments as JSON text, which is read back into the object it encodes so every
+ * host redacts field by field.
+ */
+export const callInput = (input: unknown): unknown => {
+  const text = JSON.stringify(typeof input === "string" ? jsonOrText(input) : input, redact);
+  if (text === undefined) return undefined;
+  return text.length <= MAX_CALL_SUMMARY_CHARS
+    ? JSON.parse(text)
+    : `${text.slice(0, MAX_CALL_SUMMARY_CHARS)} [cut at ${MAX_CALL_SUMMARY_CHARS} characters]`;
+};
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit"]);
 
@@ -48,6 +84,7 @@ const promptText = (content: unknown): string | undefined => {
 
 export const parseTranscript = (file: string): ReplaySession => {
   const turns: ReplayTurn[] = [];
+  const calls: ReplayCall[] = [];
   const uses = new Map<string, ToolUse>();
   let cwd: string | undefined;
   let turnIndex = 0;
@@ -101,12 +138,19 @@ export const parseTranscript = (file: string): ReplaySession => {
       for (const p of asList(message?.content)) {
         const part = asRecord(p);
         if (part?.type !== "tool_use" || typeof part.id !== "string") continue;
-        if (typeof part.name !== "string" || !EDIT_TOOLS.has(part.name)) continue;
+        if (typeof part.name !== "string") continue;
+        calls.push({ tool: part.name, input: callInput(part.input) });
+        if (!EDIT_TOOLS.has(part.name)) continue;
         uses.set(part.id, { id: part.id, name: part.name, input: part.input, turn: turnIndex });
       }
     }
   }
-  return { file, cwd: cwd ?? process.cwd(), turns: turns.filter((t) => t.edits.length > 0) };
+  return {
+    file,
+    cwd: cwd ?? process.cwd(),
+    turns: turns.filter((t) => t.edits.length > 0),
+    calls,
+  };
 };
 
 export type ReplayEditResult = {

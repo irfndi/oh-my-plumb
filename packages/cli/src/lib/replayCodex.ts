@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { postToolUseInputSchema } from "oh-my-plumb-schema";
 import { MAX_TASK_CHARS } from "./constants.js";
-import type { ReplaySession, ReplayTurn } from "./replay.js";
+import { callInput, type ReplayCall, type ReplaySession, type ReplayTurn } from "./replay.js";
 
 /** One rollout file per session, one JSON object per line. An `apply_patch` call carries the same patch text the live hook receives. */
 export const codexSessionsDir = (): string => path.join(homedir(), ".codex", "sessions");
@@ -40,6 +40,7 @@ const FAILED_OUTPUT = /^apply_patch (verification )?failed|^error/i;
 
 export const parseCodexRollout = (file: string): ReplaySession => {
   const turns: ReplayTurn[] = [];
+  const calls: ReplayCall[] = [];
   const pending = new Map<string, { turn: ReplayTurn; command: string }>();
   let cwd: string | undefined;
   let turnIndex = 0;
@@ -71,6 +72,12 @@ export const parseCodexRollout = (file: string): ReplaySession => {
       turns.push({ index: turnIndex, prompt, edits: [] });
       continue;
     }
+    if (payload.type === "custom_tool_call" && typeof payload.name === "string") {
+      calls.push({ tool: payload.name, input: callInput(payload.input) });
+    }
+    if (payload.type === "function_call" && typeof payload.name === "string") {
+      calls.push({ tool: payload.name, input: callInput(payload.arguments) });
+    }
     if (
       payload.type === "custom_tool_call" &&
       payload.name === "apply_patch" &&
@@ -97,7 +104,12 @@ export const parseCodexRollout = (file: string): ReplaySession => {
       if (parsed.success) call.turn.edits.push({ turn: call.turn.index, input: parsed.data });
     }
   }
-  return { file, cwd: cwd ?? process.cwd(), turns: turns.filter((t) => t.edits.length > 0) };
+  return {
+    file,
+    cwd: cwd ?? process.cwd(),
+    turns: turns.filter((t) => t.edits.length > 0),
+    calls,
+  };
 };
 
 const rolloutFiles = (dir: string): string[] => {
@@ -127,4 +139,4 @@ export const codexSessionsFor = (root: string, dir = codexSessionsDir()): Replay
   rolloutFiles(dir)
     .sort()
     .map(parseCodexRollout)
-    .filter((s) => inside(root, s.cwd) && s.turns.length > 0);
+    .filter((s) => inside(root, s.cwd) && (s.turns.length > 0 || s.calls.length > 0));
