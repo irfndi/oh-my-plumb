@@ -1,6 +1,11 @@
 import { assertNever, type HookOutput } from "oh-my-plumb-schema";
 
-export type HookEventName = "SessionStart" | "UserPromptSubmit" | "PostToolUse" | "Stop";
+export type HookEventName =
+  | "SessionStart"
+  | "UserPromptSubmit"
+  | "PreToolUse"
+  | "PostToolUse"
+  | "Stop";
 
 const write = (payload: Record<string, unknown>, done: () => void): void => {
   process.stdout.write(`${JSON.stringify(payload)}\n`, () => done());
@@ -22,6 +27,22 @@ export const emit = (output: HookOutput, event: HookEventName, done: () => void)
       );
       return;
     case "block":
+      // Before a call runs, Claude and Codex both read the hook-specific deny;
+      // after it runs, the legacy block shape carries the repair request.
+      if (event === "PreToolUse") {
+        write(
+          {
+            hookSpecificOutput: {
+              hookEventName: "PreToolUse",
+              permissionDecision: "deny",
+              permissionDecisionReason: output.reason,
+            },
+            ...(output.systemMessage === undefined ? {} : { systemMessage: output.systemMessage }),
+          },
+          done,
+        );
+        return;
+      }
       write(
         {
           decision: "block",

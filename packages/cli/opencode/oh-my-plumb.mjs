@@ -8,8 +8,9 @@
 // message. The checks, the rubric and the messages are the same as on every
 // other host.
 //
-// Nothing here may throw into OpenCode. Every path catches, and the script has
-// its own deadline.
+// Nothing here may throw into OpenCode — a deny is the one exception: throwing
+// is how tool.execute.before keeps the call from running. Every other path
+// catches, and the script has its own deadline.
 
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -135,6 +136,32 @@ export const toolCallPayload = ({ tool, args, sessionID, turnId, directory, call
   tool_use_id: callID,
 });
 
+export const preToolCallPayload = ({ tool, args, sessionID, turnId, directory, callID }) => ({
+  tool_name: tool,
+  tool_input: args ?? {},
+  session_id: sessionID,
+  prompt_id: turnId,
+  cwd: directory,
+  hook_event_name: "PreToolUse",
+  tool_use_id: callID,
+});
+
+/** What the hook's answer means before a call runs: a deny stops it, a note is shown to the user. */
+export const preToolCallResult = (out) => {
+  const decision = out?.hookSpecificOutput;
+  if (
+    decision?.permissionDecision === "deny" &&
+    typeof decision.permissionDecisionReason === "string" &&
+    decision.permissionDecisionReason !== ""
+  ) {
+    return { block: true, reason: decision.permissionDecisionReason };
+  }
+  if (typeof out?.systemMessage === "string" && out.systemMessage !== "") {
+    return { note: out.systemMessage };
+  }
+  return undefined;
+};
+
 export default async ({ client, directory }) => {
   const log = (message) => {
     try {
@@ -150,6 +177,34 @@ export default async ({ client, directory }) => {
     typeof file !== "string" ? "" : path.isAbsolute(file) ? file : path.join(directory, file);
 
   return {
+    "tool.execute.before": async (input, output) => {
+      let deny;
+      try {
+        const tool = input?.tool;
+        if (typeof tool !== "string" || tool === "edit" || tool === "write" || READ_TOOLS.has(tool))
+          return;
+        const s = sessions.get(input.sessionID);
+        if (!s || !toolCallRulesFor(directory)) return;
+        const out = await runHook(
+          "pre-tool-use",
+          preToolCallPayload({
+            tool,
+            args: output.args,
+            sessionID: input.sessionID,
+            turnId: s.turnId,
+            directory,
+            callID: input.callID,
+          }),
+          20_000,
+        );
+        const result = preToolCallResult(out);
+        if (result?.note !== undefined) log(result.note);
+        if (result?.block) deny = result.reason;
+      } catch {}
+      // A throw is OpenCode's documented way to keep tool.execute.before from running the call.
+      if (typeof deny === "string") throw new Error(deny);
+    },
+
     "chat.message": async (input, output) => {
       try {
         const sessionID = input?.sessionID;

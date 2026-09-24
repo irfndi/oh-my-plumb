@@ -2,11 +2,15 @@ import type { HookOutput } from "oh-my-plumb-schema";
 import { debug, emit } from "./output.js";
 import { readStdin } from "./stdin.js";
 
-export type HookName = "session-start" | "turn-start" | "post-tool-use" | "stop";
+export type HookName = "session-start" | "turn-start" | "pre-tool-use" | "post-tool-use" | "stop";
 
-const EVENT: Record<HookName, "SessionStart" | "UserPromptSubmit" | "PostToolUse" | "Stop"> = {
+const EVENT: Record<
+  HookName,
+  "SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "Stop"
+> = {
   "session-start": "SessionStart",
   "turn-start": "UserPromptSubmit",
+  "pre-tool-use": "PreToolUse",
   "post-tool-use": "PostToolUse",
   stop: "Stop",
 };

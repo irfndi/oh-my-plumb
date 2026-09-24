@@ -18,7 +18,7 @@ type HookGroup = z.infer<typeof hookGroupSchema>;
 
 export const OH_MY_PLUMB_HOOK_MARKER = "oh-my-plumb-hook.js";
 
-export type HookEvent = "SessionStart" | "UserPromptSubmit" | "PostToolUse" | "Stop";
+export type HookEvent = "SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "Stop";
 
 export type HookSpec = { event: HookEvent; matcher?: string; command: string; timeout: number };
 
@@ -30,18 +30,28 @@ export const hookSpecs = (
   const editMatcher = "Edit|Write|MultiEdit|apply_patch";
   // A rubric with a tool-call rule needs shell and MCP calls delivered too:
   // Claude names them Bash and mcp__server__tool, Codex shell.
-  const matcher =
-    opts === undefined || !opts.toolCallRules
-      ? editMatcher
-      : opts.host === "claude"
-        ? `${editMatcher}|Bash|mcp__.*`
-        : `${editMatcher}|shell`;
-  return [
+  const toolCallRules = opts?.toolCallRules ?? false;
+  const toolMatcher = opts?.host === "claude" ? "Bash|mcp__.*" : "shell";
+  const matcher = toolCallRules ? `${editMatcher}|${toolMatcher}` : editMatcher;
+  const specs: HookSpec[] = [
     { event: "SessionStart", command: cmd("session-start"), timeout: 10 },
     { event: "UserPromptSubmit", command: cmd("turn-start"), timeout: 10 },
+  ];
+  // The pre-execution hook exists only while something can judge a call; a
+  // rubric without a tool-call rule gives it nothing to decide.
+  if (toolCallRules) {
+    specs.push({
+      event: "PreToolUse",
+      matcher: toolMatcher,
+      command: cmd("pre-tool-use"),
+      timeout: 20,
+    });
+  }
+  specs.push(
     { event: "PostToolUse", matcher, command: cmd("post-tool-use"), timeout: 20 },
     { event: "Stop", command: cmd("stop"), timeout: 30 },
-  ];
+  );
+  return specs;
 };
 
 const isOurs = (entry: HookEntry): boolean =>
@@ -88,9 +98,15 @@ export const readSettings = (file: string): Settings => {
 
 export const installHooks = (file: string, specs: readonly HookSpec[]): void => {
   const settings = readSettings(file);
-  const hooks = { ...(settings.hooks ?? {}) };
+  // Ours are rewritten whole: an event the specs no longer name (PreToolUse after the
+  // rubric lost its tool-call rules) must not keep a stale entry.
+  const hooks: Record<string, HookGroup[]> = {};
+  for (const [event, groups] of Object.entries(settings.hooks ?? {})) {
+    const { kept } = withoutOurs(groups ?? []);
+    if (kept.length > 0) hooks[event] = kept;
+  }
   for (const spec of specs) {
-    const { kept } = withoutOurs(hooks[spec.event] ?? []);
+    const kept = hooks[spec.event] ?? [];
     const group: HookGroup = {
       ...(spec.matcher === undefined ? {} : { matcher: spec.matcher }),
       hooks: [{ type: "command", command: spec.command, timeout: spec.timeout }],
@@ -121,6 +137,7 @@ export const installedHookEvents = (file: string): HookEvent[] => {
   for (const event of [
     "SessionStart",
     "UserPromptSubmit",
+    "PreToolUse",
     "PostToolUse",
     "Stop",
   ] satisfies HookEvent[]) {
