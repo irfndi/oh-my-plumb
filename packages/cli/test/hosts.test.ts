@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
@@ -10,7 +17,7 @@ import {
   syncToolCallMatchers,
   uninstallHost,
 } from "../src/lib/hosts.js";
-import { OPENCODE_PLUGIN_MARKER } from "../src/lib/opencodePlugin.js";
+import { OPENCODE_PLUGIN_MARKER, opencodeIsV2 } from "../src/lib/opencodePlugin.js";
 import { PI_PLUGIN_MARKER } from "../src/lib/piPlugin.js";
 
 let home: string;
@@ -180,6 +187,25 @@ describe("hosts", () => {
     writeFileSync(target, "export default async () => ({});\n");
     expect(uninstallHost("opencode", root, false)).toBe(0);
     expect(existsSync(target)).toBe(true);
+  });
+
+  it("installs the v2 module when the version probe reports v2", () => {
+    const bin = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-bin-"));
+    const fake = path.join(bin, "opencode");
+    writeFileSync(fake, "#!/bin/sh\necho 'opencode 2.0.15'\n");
+    chmodSync(fake, 0o755);
+    const savedPath = process.env.PATH;
+    process.env.PATH = bin;
+    try {
+      expect(opencodeIsV2()).toBe(true);
+      const target = installTarget("opencode", root, false);
+      installHost("opencode", root, false);
+      expect(readFileSync(target, "utf8")).toMatch(
+        /export \{ default \} from "file:\/\/.*opencode\/oh-my-plumb-v2\.js"/,
+      );
+    } finally {
+      process.env.PATH = savedPath;
+    }
   });
 
   it("installs Pi as an extension file it can recognise, and leaves a stranger's file alone", () => {
