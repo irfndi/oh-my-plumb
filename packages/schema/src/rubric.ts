@@ -236,6 +236,11 @@ export const rubricSchema = z
     compiledBy: z.string().optional(),
     sources: z.array(rubricSourceSchema),
     thresholds: thresholdsSchema.optional(),
+    /**
+     * MCP servers whose `initialize` instructions compile as rule sources,
+     * scoped to that server's tool calls. Absent means none: opt-in only.
+     */
+    mcpInstructions: z.array(z.string().min(1).max(200)).optional(),
     rules: z.array(ruleSchema),
   })
   .superRefine((rubric, ctx) => {

@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import { PlumbError } from "oh-my-plumb-schema";
 import { findRepoRoot, globalRubricPath, homeDir, rubricPath } from "../lib/paths.js";
 import { fillSourceShas, readRubric, writeRubric } from "../lib/rubricFile.js";
+import { discoverMcpSources } from "../lib/mcpSources.js";
 import { showStatic } from "../ui/render.js";
 import { RubricView } from "../ui/views/RubricView.js";
 
@@ -28,7 +29,8 @@ export const runRubric = async (argv: string[]): Promise<number> => {
       await showStatic(RubricView({ data: { kind: "invalid", root, file, issues: read.issues } }));
       return 1;
     case "ok": {
-      const { rubric, missing } = fillSourceShas(read.rubric, root);
+      const mcp = await discoverMcpSources(root, read.rubric);
+      const { rubric, missing } = fillSourceShas(read.rubric, root, mcp);
       const listed = new Set(rubric.sources.map((s) => s.path));
       const orphaned = rubric.rules
         .filter((r) => !listed.has(r.source.path))

@@ -71,6 +71,53 @@ describe("source discovery", () => {
   });
 });
 
+describe("MCP source staleness", () => {
+  const captured = (root: string, text: string) => ({
+    path: "fakeGuard",
+    absolute: path.resolve(root, "fakeGuard"),
+    scope: "mcp__fakeGuard__*",
+    required: false,
+    origin: "mcp" as const,
+    text,
+  });
+
+  it("stays fresh with no capture and follows the captured hash when one exists", () => {
+    const root = repo();
+    const base = rubricFor(root);
+    const rubric: Rubric = {
+      ...base,
+      sources: [
+        ...base.sources,
+        { path: "fakeGuard", scope: "mcp__fakeGuard__*", sha: createSourceSha("first words") },
+      ],
+    };
+    // No capture means nothing to compare against: the check stays quiet.
+    expect(checkStaleness(rubric, discoverProjectSources(root), root)).toEqual({
+      status: "fresh",
+    });
+    expect(
+      checkStaleness(
+        rubric,
+        [...discoverProjectSources(root), captured(root, "first words")],
+        root,
+      ),
+    ).toEqual({ status: "fresh" });
+    expect(
+      checkStaleness(
+        rubric,
+        [...discoverProjectSources(root), captured(root, "second words")],
+        root,
+      ),
+    ).toMatchObject({ status: "stale", changed: ["fakeGuard"] });
+    const neverHashed = checkStaleness(
+      { ...rubric, sources: [...base.sources, { path: "fakeGuard", scope: "mcp__fakeGuard__*" }] },
+      [...discoverProjectSources(root), captured(root, "first words")],
+      root,
+    );
+    expect(neverHashed).toMatchObject({ status: "stale", unhashed: ["fakeGuard"] });
+  });
+});
+
 describe("global sources", () => {
   it("accepts home-relative spellings and canonicalizes them to ~/", () => {
     const home = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-home-"));

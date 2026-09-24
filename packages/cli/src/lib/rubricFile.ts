@@ -7,7 +7,7 @@ import {
   type Rule,
   type RuleStatus,
 } from "oh-my-plumb-schema";
-import { hashFile } from "./sources.js";
+import { capturedMcpShas, hashFile, isMcpSource, type SourceCandidate } from "./sources.js";
 import { canonicalSourcePath, resolveSourcePath } from "./paths.js";
 import { readRegularText } from "./regularFile.js";
 
@@ -46,10 +46,19 @@ export const writeRubric = (file: string, rubric: Rubric): void => {
 export const fillSourceShas = (
   rubric: Rubric,
   root: string,
+  mcp: readonly SourceCandidate[] = [],
 ): { rubric: Rubric; missing: string[] } => {
   const missing: string[] = [];
+  const captured = capturedMcpShas(root, mcp);
   const sources = rubric.sources.map((source) => {
     const canonical = canonicalSourcePath(root, source.path);
+    if (isMcpSource(source)) {
+      // MCP sources hash the instructions captured this run; without a capture the stored sha stays.
+      const capturedSha = captured.get(canonical);
+      return capturedSha === undefined
+        ? { ...source, path: canonical }
+        : { ...source, path: canonical, sha: capturedSha };
+    }
     const sha = hashFile(resolveSourcePath(root, source.path));
     if (sha === undefined) {
       missing.push(source.path);
