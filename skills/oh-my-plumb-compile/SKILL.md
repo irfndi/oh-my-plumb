@@ -65,6 +65,36 @@ The judge is a small, fast model that answers typed questions with a probability
   - `choice` when the rule names a closed set of shapes and only some are wrong: `criteria` maps each option to a description, `violating` lists the wrong ones. Example: a service must be a class with static methods, so options are `class-static`, `loose-functions`, `eager-init` and `violating` is the last two.
   - `score` when the rule is a matter of degree: `criteria` is an ordered list of levels from compliant (index 0) to worst, and `violatingFrom` is the first level that counts as broken. Example for "minimum code that solves the problem": levels "as short as it can be", "somewhat longer than needed", "about twice as long", "several times longer", with `violatingFrom: 2`.
 
+### A rule about a tool call, not a change
+
+Some rules judge what a call does rather than what a diff looks like: "never `DROP` or `TRUNCATE` through the postgres MCP", "read-only queries in production", "don't post to Slack without asking". For those set `"target": "toolCall"`, put tool names in `scope` instead of file globs, and use `"when": "edit"`: the judge sees the call before it runs, and stops it only in the act band. (A rule about which tools a whole turn used is the `"turn"` kind described above.)
+
+```json
+{
+  "id": "no-drop-through-postgres",
+  "text": "Never DROP or TRUNCATE a table through the postgres MCP.",
+  "source": { "path": "AGENTS.md", "line": 42 },
+  "target": "toolCall",
+  "scope": ["mcp__postgres__*"],
+  "when": "edit",
+  "check": {
+    "type": "model",
+    "question": {
+      "type": "boolean",
+      "instructions": "Does this call's SQL text contain a DROP or TRUNCATE statement?",
+      "criteria": {
+        "true": "DROP TABLE users",
+        "false": "SELECT id FROM users LIMIT 10"
+      }
+    }
+  }
+}
+```
+
+- Scope matches the tool's name, ignoring case: `["mcp__postgres__*"]` covers that one server's tools (`mcp__postgres__query`), and a server boundary is exact, so it does not cover `mcp__postgres-inspector__query`. `["Bash"]` covers the shell. OpenCode names MCP tools `<server>_<tool>` (`postgres_query`), so add that spelling when the repo uses OpenCode.
+- Ask about the command and the arguments, never the output or the conversation. The judge sees only what the call is about to do: "Does this call's SQL text contain an INSERT, UPDATE, DELETE, DROP or TRUNCATE statement?" A question that needs the result or the chat to answer can only land midrange, and midrange never fires.
+- Flag by default, act only for absolute wording. "Read-only queries in production" is absolute, so a question on the statement text may stop the call outright. "Don't post to Slack without asking" hinges on what happened outside the arguments, so write it to flag ("Do this call's arguments post a new message?") and let the note reach the person.
+
 ## Step 5. Decide when each model rule runs
 
 Every model rule carries `when`: `"edit"` or `"turn"`. Get this right; the wrong phase produces false violations and each one costs the agent a repair turn.
