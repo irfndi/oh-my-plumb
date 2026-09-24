@@ -1,7 +1,14 @@
 import { readdirSync, existsSync, realpathSync, type Dirent } from "node:fs";
 import path from "node:path";
 import { createSourceSha, type Rubric } from "oh-my-plumb-schema";
-import { expandHome, homeDir, isExcludedPath, resolveSourcePath, toSourcePath } from "./paths.js";
+import {
+  canonicalSourcePath,
+  expandHome,
+  homeDir,
+  isExcludedPath,
+  resolveSourcePath,
+  toSourcePath,
+} from "./paths.js";
 import { readRegularFile, readRegularText } from "./regularFile.js";
 
 export type SourceCandidate = {
@@ -12,7 +19,31 @@ export type SourceCandidate = {
   scope: string;
   /** Required candidates must appear in the rubric for it to be fresh. */
   required: boolean;
-  origin: "root" | "nested" | "global" | "contributing";
+  origin: "root" | "nested" | "global" | "contributing" | "mcp";
+  /** The server's `initialize` instructions, captured at compile time (origin "mcp"). */
+  text?: string;
+};
+
+/** An MCP source always carries the instructions it was captured from. */
+export type McpSourceCandidate = SourceCandidate & { origin: "mcp"; text: string };
+
+/** The scope glob tying a rule source to one MCP server's tool calls. */
+export const mcpSourceScope = (server: string): string => `mcp__${server}__*`;
+
+/** A rubric source backed by MCP server instructions instead of a file. */
+export const isMcpSource = (source: { kind?: "mcp" | undefined }): boolean => source.kind === "mcp";
+
+/** sha256 of each captured MCP source's instructions, keyed by canonical source path. */
+export const capturedMcpShas = (
+  root: string,
+  candidates: readonly SourceCandidate[],
+): Map<string, string> => {
+  const captured = new Map<string, string>();
+  for (const c of candidates) {
+    if (c.origin === "mcp" && c.text !== undefined)
+      captured.set(canonicalSourcePath(root, c.path), createSourceSha(c.text));
+  }
+  return captured;
 };
 
 const ROOT_NAMES = [
@@ -277,10 +308,25 @@ export const checkStaleness = (
   root: string,
 ): Staleness => {
   if (rubric === undefined) return { status: "missing" };
+  const captured = capturedMcpShas(root, candidates);
   const changed: string[] = [];
   const removed: string[] = [];
   const unhashed: string[] = [];
   for (const source of rubric.sources) {
+    if (isMcpSource(source)) {
+      // A server taken off the opt-in list leaves a dead source behind.
+      if (!(rubric.mcpInstructions ?? []).includes(source.path)) {
+        removed.push(source.path);
+        continue;
+      }
+      // Instructions are captured only when a compile may be due; with nothing
+      // captured there is no hash to compare against, and silence beats a false alarm.
+      const now = captured.get(canonicalSourcePath(root, source.path));
+      if (now === undefined) continue;
+      if (source.sha === undefined) unhashed.push(source.path);
+      else if (source.sha !== now) changed.push(source.path);
+      continue;
+    }
     const now = hashFile(resolveSourcePath(root, source.path));
     if (now === undefined) removed.push(source.path);
     else if (source.sha === undefined) unhashed.push(source.path);

@@ -1,5 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { assertNever } from "oh-my-plumb-schema";
 import { z } from "zod";
+import { MAX_FILE_READ_BYTES } from "./constants.js";
 import { debug } from "./output.js";
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -15,7 +17,11 @@ const wireMessage = z.object({
   error: z.unknown().optional(),
 });
 
-const initializeResult = z.object({ protocolVersion: z.string() });
+const initializeResult = z.object({
+  protocolVersion: z.string(),
+  // Empty or oversized instructions count as none: silence, not a failure.
+  instructions: z.string().min(1).max(MAX_FILE_READ_BYTES).optional().catch(undefined),
+});
 
 const toolsCallResult = z
   .object({ content: z.unknown().optional(), isError: z.boolean().optional() })
@@ -42,8 +48,37 @@ const killTree = (child: ChildProcess): void => {
   }
 };
 
+/** What one session asks of a server: call a tool, or only read the instructions it sends on initialize. */
+type McpRequest =
+  | { kind: "tool"; tool: string; args: Record<string, string> }
+  | { kind: "instructions" };
+
+type McpAnswer = { kind: "tool"; result: McpCallResult } | { kind: "instructions"; text: string };
+
+/** Call one tool on the server: the guard path. */
+export const callMcpGuard = async (
+  launch: McpLaunch,
+  cwd: string,
+  tool: string,
+  args: Record<string, string>,
+  timeoutMs: number,
+): Promise<McpCallResult | undefined> => {
+  const answer = await mcpSession(launch, cwd, { kind: "tool", tool, args }, timeoutMs);
+  return answer?.kind === "tool" ? answer.result : undefined;
+};
+
+/** The instructions the server sends on initialize, read without calling any tool. */
+export const readMcpInstructions = async (
+  launch: McpLaunch,
+  cwd: string,
+  timeoutMs: number,
+): Promise<string | undefined> => {
+  const answer = await mcpSession(launch, cwd, { kind: "instructions" }, timeoutMs);
+  return answer?.kind === "instructions" ? answer.text : undefined;
+};
+
 /**
- * Minimal stdio MCP client for guard dispatch.
+ * Minimal stdio MCP client for guard dispatch and instruction capture.
  *
  * Real MCP over the server's stdin/stdout: `initialize` handshake,
  * `notifications/initialized`, then `tools/call`, under one shared deadline.
@@ -56,13 +91,12 @@ const killTree = (child: ChildProcess): void => {
  * oversized output) logs a skip and resolves `undefined`. This function
  * never throws or rejects, so an MCP guard can never break or hold the agent.
  */
-export const callMcpGuard = (
+const mcpSession = (
   launch: McpLaunch,
   cwd: string,
-  tool: string,
-  args: Record<string, string>,
+  request: McpRequest,
   timeoutMs: number,
-): Promise<McpCallResult | undefined> =>
+): Promise<McpAnswer | undefined> =>
   new Promise((resolve) => {
     const [bin, ...spawnArgs] = launch.command;
     if (bin === undefined) {
@@ -73,7 +107,7 @@ export const callMcpGuard = (
     let settled = false;
     let timer: NodeJS.Timeout | undefined;
     let child: ChildProcess | undefined;
-    const done = (value: McpCallResult | undefined): void => {
+    const done = (value: McpAnswer | undefined): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -135,17 +169,31 @@ export const callMcpGuard = (
         return;
       }
       if (msg.id === 1) {
-        if (!initializeResult.safeParse(msg.result).success) {
+        const init = initializeResult.safeParse(msg.result);
+        if (!init.success) {
           done(skip("invalid initialize result"));
           return;
         }
-        post({ jsonrpc: "2.0", method: "notifications/initialized" });
-        post({
-          jsonrpc: "2.0",
-          id: 2,
-          method: "tools/call",
-          params: { name: tool, arguments: args },
-        });
+        switch (request.kind) {
+          case "instructions":
+            done(
+              init.data.instructions === undefined
+                ? skip("server sent no instructions")
+                : { kind: "instructions", text: init.data.instructions },
+            );
+            return;
+          case "tool":
+            post({ jsonrpc: "2.0", method: "notifications/initialized" });
+            post({
+              jsonrpc: "2.0",
+              id: 2,
+              method: "tools/call",
+              params: { name: request.tool, arguments: request.args },
+            });
+            return;
+          default:
+            assertNever(request);
+        }
         return;
       }
       const result = toolsCallResult.safeParse(msg.result);
@@ -153,7 +201,7 @@ export const callMcpGuard = (
         done(skip("invalid tools/call result"));
         return;
       }
-      done(result.data);
+      done({ kind: "tool", result: result.data });
     };
     let buf = Buffer.alloc(0);
     /** One framed message off the front of the buffer: "wait" until its header and body are all here. */

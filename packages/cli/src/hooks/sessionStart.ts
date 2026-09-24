@@ -7,25 +7,50 @@ import { placeCompileSkill } from "../lib/packageRoot.js";
 import { findRepoRoot, globalRubricPath, homeDir, rubricPath } from "../lib/paths.js";
 import { readRubric } from "../lib/rubricFile.js";
 import { pruneOldTurns } from "../lib/session.js";
-import { checkStaleness, discoverGlobalSources, discoverProjectSources } from "../lib/sources.js";
+import {
+  checkStaleness,
+  discoverGlobalSources,
+  discoverProjectSources,
+  type McpSourceCandidate,
+} from "../lib/sources.js";
+import { discoverMcpSources } from "../lib/mcpSources.js";
 
 export type CompilePlan = {
   targets: CompileTarget[];
   invalid: string[];
+  /** Opted-in MCP instructions captured during this plan; staleness itself never fetches. */
+  mcp: McpSourceCandidate[];
   noSources: boolean;
 };
 
-/** What, if anything, needs compiling for this repository and this machine. */
-export const planCompile = (root: string): CompilePlan => {
+/**
+ * What, if anything, needs compiling for this repository and this machine.
+ * Opted-in MCP servers are started only when a compile may be due ("when-due"):
+ * the rubric is missing, its files changed, or a listed server has no source
+ * yet. A session on a fresh rubric starts none. "always" is for explicit compiles.
+ */
+export const planCompile = async (
+  root: string,
+  capture: "always" | "when-due" = "when-due",
+): Promise<CompilePlan> => {
   const targets: CompileTarget[] = [];
   const invalid: string[] = [];
 
-  const project = discoverProjectSources(root);
+  const files = discoverProjectSources(root);
   const projectRead = readRubric(rubricPath(root));
   if (projectRead.kind === "invalid") {
     invalid.push(`${projectRead.path}: ${projectRead.issues.slice(0, 3).join("; ")}`);
   }
   const projectRubric = projectRead.kind === "ok" ? projectRead.rubric : undefined;
+  const optedIn = projectRubric?.mcpInstructions ?? [];
+  const listed = new Set(projectRubric?.sources.map((source) => source.path) ?? []);
+  const due =
+    capture === "always" ||
+    (optedIn.length > 0 &&
+      (checkStaleness(projectRubric, files, root).status !== "fresh" ||
+        optedIn.some((server) => !listed.has(server))));
+  const mcp = due ? await discoverMcpSources(root, projectRubric) : [];
+  const project = [...files, ...mcp];
   const projectStale = checkStaleness(projectRubric, project, root);
   if (
     project.some((c) => c.required) &&
@@ -58,7 +83,7 @@ export const planCompile = (root: string): CompilePlan => {
     });
   }
 
-  return { targets, invalid, noSources: project.length === 0 && global.length === 0 };
+  return { targets, invalid, mcp, noSources: project.length === 0 && global.length === 0 };
 };
 
 export const handleSessionStart = async (raw: unknown): Promise<HookOutput> => {
@@ -68,7 +93,7 @@ export const handleSessionStart = async (raw: unknown): Promise<HookOutput> => {
   const root = findRepoRoot(input.cwd);
   pruneOldTurns();
 
-  const plan = planCompile(root);
+  const plan = await planCompile(root);
   const notices: string[] = [];
   if (!hasApiKey(root)) {
     notices.push(

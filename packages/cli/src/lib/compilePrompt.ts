@@ -20,7 +20,9 @@ export type TuneStats = {
 };
 
 const sourceLine = (c: SourceCandidate): string =>
-  `${c.path} (rules apply to ${c.scope}${c.required ? "" : "; include only if it carries imperative rules"})`;
+  c.text === undefined
+    ? `${c.path} (rules apply to ${c.scope}${c.required ? "" : "; include only if it carries imperative rules"})`
+    : `${c.path} (rules apply to ${c.scope}; MCP server instructions captured at compile time, quoted here because this source is not a file; list it in sources with "kind": "mcp" and give its rules no line: ${JSON.stringify(c.text)})`;
 
 const targetBlock = (t: CompileTarget): string => {
   const file = t.which === "project" ? rubricPath(t.root) : globalRubricPath();

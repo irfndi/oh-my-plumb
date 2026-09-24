@@ -1,7 +1,7 @@
 // Fake stdio MCP server for tests: no network, mode via argv.
 // Logs every message it receives to $FAKE_MCP_LOG so tests can assert the
 // exact call sequence (initialize -> notifications/initialized -> tools/call).
-// Modes: success | error | timeout | malformed | framed | framed-odd | env | flood
+// Modes: success | error | timeout | malformed | framed | framed-odd | env | flood | instructions
 import { appendFileSync } from "node:fs";
 
 const mode = process.argv[2] ?? "success";
@@ -33,6 +33,9 @@ const initializeResult = {
   protocolVersion: "2025-06-18",
   capabilities: {},
   serverInfo: { name: "fake-mcp", version: "0" },
+  ...(mode === "instructions"
+    ? { instructions: "Use fake-mcp only for demo rules; never for production." }
+    : {}),
 };
 const toolsResult = { content: [{ type: "text", text: "ok" }], isError: false };
 const toolsError = { content: [{ type: "text", text: "bad fk" }], isError: true };

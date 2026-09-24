@@ -216,6 +216,8 @@ export const rubricSourceSchema = z.object({
     .optional(),
   /** Glob the file's rules apply to. Defaults to the file's directory. */
   scope: z.string().optional(),
+  /** "mcp" when the source is an opted-in MCP server's instructions, named by `path`; absent for a file. */
+  kind: z.literal("mcp").optional(),
 });
 export type RubricSource = z.infer<typeof rubricSourceSchema>;
 
@@ -236,6 +238,11 @@ export const rubricSchema = z
     compiledBy: z.string().optional(),
     sources: z.array(rubricSourceSchema),
     thresholds: thresholdsSchema.optional(),
+    /**
+     * MCP servers whose `initialize` instructions compile as rule sources,
+     * scoped to that server's tool calls. Absent means none: opt-in only.
+     */
+    mcpInstructions: z.array(z.string().min(1).max(200)).optional(),
     rules: z.array(ruleSchema),
   })
   .superRefine((rubric, ctx) => {

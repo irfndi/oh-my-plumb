@@ -18,6 +18,7 @@ The hook that sent you here listed the instruction files it found and where the 
 
 - Follow pointer files. A file whose whole content is "Read instructions from X" or "Read ./AGENTS.md" is a pointer. Read X and treat X as a source in its own right: list it under `sources` with its own path so it gets its own hash.
 - Files under a subdirectory apply only there. The hook gave each one a scope glob. Rules from that file carry that glob.
+- A source listed as MCP server instructions is not a file: its text is quoted in the list the hook gave you. Its rules are about that server's tools, so they are tool-call rules (step 3, question 1) scoped to the glob the list names, such as `["mcp__postgres__*"]`. List the source with `"kind": "mcp"`, and leave `source.line` out of its rules: the text has no lines to point at.
 - Read `CONTRIBUTING.md` only when it was listed, and keep only sentences that give an instruction. Prose about how to open a pull request is not a rule.
 - If a lint config was listed (`eslint.config.*`, `.eslintrc*`, `biome.json`, stylelint config), skim it for rule names. When a rule you extract is already enforced there, keep the rule and record the lint rule name in `check.overlaps`. It stays in the rubric because lint runs later than an edit and the convention still binds; the label keeps it from being reported as a new finding.
 

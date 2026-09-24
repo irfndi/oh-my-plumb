@@ -51,7 +51,7 @@ export const runCompile = async (argv: string[], tune: boolean): Promise<number>
     },
   });
   const root = findRepoRoot(process.cwd());
-  const plan = planCompile(root);
+  const plan = await planCompile(root, "always");
   if (plan.invalid.length > 0) {
     await showStatic(
       Callout({
@@ -73,6 +73,7 @@ export const runCompile = async (argv: string[], tune: boolean): Promise<number>
     const stats = tuneStats(root, values.global ? globalRubricPath() : rubricPath(root));
     if (stats === undefined)
       throw new PlumbError("RUBRIC_MISSING", "nothing to tune yet; compile first");
+    const project = [...discoverProjectSources(root), ...plan.mcp];
     const target = values.global
       ? {
           which: "global" as const,
@@ -84,8 +85,8 @@ export const runCompile = async (argv: string[], tune: boolean): Promise<number>
       : {
           which: "project" as const,
           root,
-          candidates: discoverProjectSources(root),
-          staleness: checkStaleness(stats.rubric, discoverProjectSources(root), root),
+          candidates: project,
+          staleness: checkStaleness(stats.rubric, project, root),
           lintConfigs: findLintConfigs(root),
         };
     prompt = compilePrompt(placeCompileSkill(root), [target], stats);
