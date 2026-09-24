@@ -5,7 +5,7 @@ description: Compile a repository's instruction files (AGENTS.md, CLAUDE.md and 
 
 # Compile an oh-my-plumb rubric
 
-You are turning the rules a person wrote for coding agents into a rubric that a checker outside your context window can enforce on every edit. The checker sees only one rule and one diff at a time. Nothing else. Every decision below follows from that.
+You are turning the rules a person wrote for coding agents into a rubric that a checker outside your context window can enforce on every edit. The checker sees one rule and one diff, or one recorded tool call, at a time. Nothing else. Every decision below follows from that.
 
 Two facts before you start:
 
@@ -37,21 +37,23 @@ Do not merge two rules into one because they sit under one heading. Do not split
 
 Ask the questions in this order and stop at the first yes.
 
-1. Can a linter enforce it exactly? Then `check.type` is `lint`. Examples: `interface Foo` when the rule says use `type`; `as` casts; `fetch(`; `process.env.`; `Date.now()`; `console.log`; `npm install`. Put the linter rule that enforces it in `how` (`@typescript-eslint/consistent-type-definitions`, `no-restricted-syntax`, a stylelint rule) or, failing that, the AST or grep shape, and a `pattern` as a hint when one is obvious. oh-my-plumb records these and reports them for the user's own linter; it never runs them and never sends them to the model. The judge is for what a linter cannot express.
-2. Does the rule need counting or measuring: line lengths, line counts, selector counts, nesting depth, alphabetical or length order (imports or props ordered by line length is the common one)? That is mechanical work, and the judge cannot count. If step 1 found no regex for it, `check.type` is `deferred` with reason "needs a script, not a judge". Do not turn it into a model question; it will score about 0.4 on everything.
-3. Can a judge answer it by looking at a change and nothing else? Then `check.type` is `model`. Most style, structure, comment, error handling, naming, and "do not do X" rules land here.
-4. Does answering need the rest of the repository? "Reuse existing error codes", "follow existing patterns", "any visual pattern in two places becomes a shared component", "check whether a helper already exists". Then `check.type` is `deferred` with a one line `reason`. These are real rules that this version cannot check on a diff, and the report says so.
-5. Is it about the conversation or the process rather than the code? "Ask when unsure", "state a plan", "run the tests before you finish", "clean up processes you started". Then `check.type` is `unenforceable` with a `reason`.
+1. Is the rule about how you call a tool: which command you run, with which arguments, rather than anything written in a file? Then `check.type` is `model`, `target` is `toolCall`, and `scope` holds tool names instead of file globs, for example `["Bash"]`. Tool names match without regard to case, so `Bash` also covers the `bash` that pi and OpenCode send; add any other name a host gives the same tool. The judge reads one recorded call: the tool's name plus the input it was called with. Worked examples: "Always prefix shell commands with `rtk`" is a tool-call rule scoped to `["Bash"]`, and "Use pnpm, not npm" is a tool-call rule scoped to `["Bash"]`. A rule about what a file contains ("no `npm install` in package.json scripts") is not this bucket; it keeps going down the list.
+2. Can a linter enforce it exactly? Then `check.type` is `lint`. Examples: `interface Foo` when the rule says use `type`; `as` casts; `fetch(`; `process.env.`; `Date.now()`; `console.log`; `npm install`. Put the linter rule that enforces it in `how` (`@typescript-eslint/consistent-type-definitions`, `no-restricted-syntax`, a stylelint rule) or, failing that, the AST or grep shape, and a `pattern` as a hint when one is obvious. oh-my-plumb records these and reports them for the user's own linter; it never runs them and never sends them to the model. The judge is for what a linter cannot express.
+3. Does the rule need counting or measuring: line lengths, line counts, selector counts, nesting depth, alphabetical or length order (imports or props ordered by line length is the common one)? That is mechanical work, and the judge cannot count. If question 2 found no regex for it, `check.type` is `deferred` with reason "needs a script, not a judge". Do not turn it into a model question; it will score about 0.4 on everything.
+4. Can a judge answer it by looking at a change and nothing else? Then `check.type` is `model`. Most style, structure, comment, error handling, naming, and "do not do X" rules land here.
+5. Does answering need the rest of the repository? "Reuse existing error codes", "follow existing patterns", "any visual pattern in two places becomes a shared component", "check whether a helper already exists". Then `check.type` is `deferred` with a one line `reason`. These are real rules that this version cannot check on a diff, and the report says so.
+6. Is it about the conversation or the process rather than the code? "Ask when unsure", "state a plan", "run the tests before you finish", "clean up processes you started". Then `check.type` is `unenforceable` with a `reason`. These rules govern how a whole session is run, and no single diff or recorded call settles them. "Ask when unsure" is about the conversation itself, so there is nothing in front of the checker to score.
 
-Every statement lands somewhere. Count them: the summary you give the user is the four bucket counts.
+Every statement lands somewhere. Count them: the summary you give the user is the bucket counts `validate` prints, where tool-call rules count under "checked by Jev" with the other model rules.
 
 ## Step 4. Write the question for each model rule
 
-The judge is a small, fast model that answers typed questions with a probability. It is good at narrow, concrete questions and bad at vague ones. A vague question scores about 0.4 on everything and never fires, and the user reads that silence as good news. Write every question so that a violating diff scores near 1 and a clean diff scores near 0.
+The judge is a small, fast model that answers typed questions with a probability. It is good at narrow, concrete questions and bad at vague ones. A vague question scores about 0.4 on everything and never fires, and the user reads that silence as good news. Write every question so that a violating diff or call scores near 1 and a clean one scores near 0.
 
 - One idea per question. If the rule has two parts, make two rules.
 - Ask about the diff: "Does this change add ...", "Does this change put ...". Name the concrete shape you want caught: the identifier, the call, the syntax, the position. "Does this change add a comment that restates what the line below it does?" beats "Are comments sparing?".
-- Never put scope in the text. "For a file under apps/web/src/server" belongs in the `scope` field, not in the question. Scope is a list of globs relative to the repo root, for example `["apps/web/src/server/**/*.service.ts"]`. Omit it when the rule applies everywhere.
+- A rule with `target: "toolCall"` gets a question about the command and its arguments, never about the conversation or the agent's reasoning. "Does this command run without the `rtk` prefix?" is answerable from the recorded call; "Did you explain what you were about to run?" asks about a conversation the judge cannot see. The judge sees the tool's name and its input as JSON, and that is all.
+- Never put scope in the text. "For a file under apps/web/src/server" belongs in the `scope` field, not in the question. Scope is a list of globs relative to the repo root for a diff rule, for example `["apps/web/src/server/**/*.service.ts"]`, or the tool names a tool-call rule applies to, for example `["Bash"]`. Omit it when a diff rule applies to every file. A tool-call rule always names its tools: without a scope it would be sent, and billed, for every call the agent makes.
 - Keep instructions under about 60 words. Every word is billed on every edit whether or not the rule fires.
 - Ask for existence, not for a judgment of the whole: "Among the added lines, is there at least one comment whose content a reader could reconstruct from the code directly below it?" fires on the first offending line, while "Are the comments appropriate?" averages over the hunk and never leaves the middle.
 - A rule about volume or restraint ("comment sparingly", "keep it short", "minimal code") needs two questions: an existence question for the concrete offence, and a `score` question for the amount, with levels the judge can point at ("no such comments", "one or two", "several, or a multi-line block", "most lines"). Do not collapse "sparingly" into a single narrow case and lose the volume.
@@ -71,6 +73,8 @@ Every model rule carries `when`: `"edit"` or `"turn"`. Get this right; the wrong
 The test: if a careful reviewer would want to see the whole change before answering, it is `"turn"`.
 
 Lint rules always run per edit and do not need `when`.
+
+A tool-call rule carries `when` like any model rule. One recorded call is all the judge sees, so a question that call can answer is `"edit"`.
 
 ## Step 6. Write the rubric file
 
@@ -130,6 +134,21 @@ Write the file the hook named (`.oh-my-plumb/rubric.json` for the project, `~/.o
       }
     },
     {
+      "id": "shell-rtk-prefix",
+      "text": "Always prefix shell commands with `rtk`.",
+      "source": { "path": "AGENTS.md", "line": 88 },
+      "target": "toolCall",
+      "scope": ["Bash"],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this command run without the `rtk` prefix?"
+        }
+      }
+    },
+    {
       "id": "reuse-error-codes",
       "text": "Reuse existing codes; don't invent near-duplicates.",
       "source": { "path": "AGENTS.md", "line": 131 },
@@ -148,6 +167,7 @@ Write the file the hook named (`.oh-my-plumb/rubric.json` for the project, `~/.o
 Rules of the file:
 
 - `id` is a short kebab-case name that says what the rule catches. Ids must be unique within the file.
+- `target` defaults to `diff`. Only a tool-call rule sets `target` to `toolCall`, and then `scope` names tools (`["Bash"]`) instead of file globs.
 - Leave `sha` out of `sources`; the CLI computes it in the next step.
 - Every rule's `source.path` must appear in `sources`.
 - No `status` field on new rules; it defaults to `active`. Do not write `calibration`; the CLI does.
@@ -164,10 +184,10 @@ oh-my-plumb calibrate                  (same flag)
 
 `validate` parses the file, fills in the source hashes, and prints the bucket table. Fix every issue it prints and run it again until it is clean.
 
-`calibrate` runs every model rule against about twenty real hunks from the repository's git history and marks rules whose scores never get near 0 or near 1 as `weak`, and rules that fire on most historic hunks as `noisy`. Both are switched off until rewritten. When it reports any, rewrite those questions once using step 4 (make them more concrete, split them, add a criteria example, or move them to the other phase), run `validate` and `calibrate` again, and stop there whatever the result. Do not loop more than once. A repository with no history skips calibration; that is fine.
+`calibrate` runs every model rule that targets a diff against about twenty real hunks from the repository's git history and marks rules whose scores never get near 0 or near 1 as `weak`, and rules that fire on most historic hunks as `noisy`. Both are switched off until rewritten. When it reports any, rewrite those questions once using step 4 (make them more concrete, split them, add a criteria example, or move them to the other phase), run `validate` and `calibrate` again, and stop there whatever the result. Do not loop more than once. A repository with no history skips calibration; that is fine. Calibration works from hunks, so it skips `toolCall` rules. They stay active, and `oh-my-plumb check --tool-call <file>` judges a recorded call against them.
 
 If the hook said a rule is being tuned, it attached statistics. Rewrite only the rules it named. Keep every other rule byte for byte.
 
 ## Step 8. Report and move on
 
-Tell the user, in two or three plain sentences: how many rules, split across the four buckets; which rules are weak or noisy and switched off, if any; and that the rubric is at `.oh-my-plumb/rubric.json` for them to read and edit. Then continue with whatever they asked for. Do not paste the rubric into the conversation.
+Tell the user, in two or three plain sentences: how many rules, split across the buckets `validate` printed; which rules are weak or noisy and switched off, if any; and that the rubric is at `.oh-my-plumb/rubric.json` for them to read and edit. Then continue with whatever they asked for. Do not paste the rubric into the conversation.
