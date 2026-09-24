@@ -1,4 +1,4 @@
-import { readdirSync, existsSync, realpathSync, type Dirent } from "node:fs";
+import { readFileSync, readdirSync, existsSync, realpathSync, type Dirent } from "node:fs";
 import path from "node:path";
 import { createSourceSha, type Rubric } from "oh-my-plumb-schema";
 import {
@@ -10,6 +10,7 @@ import {
   toSourcePath,
 } from "./paths.js";
 import { readRegularFile, readRegularText } from "./regularFile.js";
+import { SKILL_DIRS } from "./guards.js";
 
 export type SourceCandidate = {
   /** Rubric spelling: repo-relative or "~/...". */
@@ -19,7 +20,7 @@ export type SourceCandidate = {
   scope: string;
   /** Required candidates must appear in the rubric for it to be fresh. */
   required: boolean;
-  origin: "root" | "nested" | "global" | "contributing" | "mcp";
+  origin: "root" | "nested" | "global" | "contributing" | "mcp" | "skill";
   /** The server's `initialize` instructions, captured at compile time (origin "mcp"). */
   text?: string;
 };
@@ -251,6 +252,37 @@ const walkNested = (root: string, dir: string, depth: number, out: SourceCandida
   }
 };
 
+/** Every `<dir>/<skill>/SKILL.md` below dir, bounded by the same skip list and depth as file discovery. */
+const walkSkills = (
+  dir: string,
+  depth: number,
+  spell: (absolute: string) => string,
+  out: SourceCandidate[],
+): void => {
+  if (depth > MAX_DEPTH) return;
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || SKIP_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
+    const sub = path.join(dir, entry.name);
+    const file = path.join(sub, "SKILL.md");
+    if (existsSync(file)) {
+      out.push({
+        path: spell(file),
+        absolute: file,
+        scope: "**/*",
+        required: false,
+        origin: "skill",
+      });
+    }
+    walkSkills(sub, depth + 1, spell, out);
+  }
+};
+
 export const discoverProjectSources = (root: string): SourceCandidate[] => {
   const found: SourceCandidate[] = [];
   for (const name of ROOT_NAMES) {
@@ -277,8 +309,43 @@ export const discoverProjectSources = (root: string): SourceCandidate[] => {
       origin: "contributing",
     });
   }
+  for (const dir of SKILL_DIRS) {
+    walkSkills(path.join(root, dir), 1, (f) => toSourcePath(root, f), found);
+  }
   followImports(root, found);
   return onePerFile(found);
+};
+
+const GLOBAL_SKILL_DIRS = ["~/.claude/skills", "~/.pi/agent/skills"];
+
+/** Installed plugin roots per Claude Code's own record; a missing or reshaped file yields none. */
+const pluginSkillRoots = (): string[] => {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(
+      readFileSync(path.join(homeDir(), ".claude", "plugins", "installed_plugins.json"), "utf8"),
+    );
+  } catch {
+    return [];
+  }
+  if (typeof raw !== "object" || raw === null || !("plugins" in raw)) return [];
+  const plugins: unknown = raw.plugins;
+  if (typeof plugins !== "object" || plugins === null) return [];
+  const roots: string[] = [];
+  for (const group of Object.values(plugins)) {
+    if (!Array.isArray(group)) continue;
+    for (const entry of group) {
+      if (
+        typeof entry === "object" &&
+        entry !== null &&
+        "installPath" in entry &&
+        typeof entry.installPath === "string"
+      ) {
+        roots.push(entry.installPath);
+      }
+    }
+  }
+  return [...new Set(roots)];
 };
 
 export const discoverGlobalSources = (): SourceCandidate[] => {
@@ -288,6 +355,12 @@ export const discoverGlobalSources = (): SourceCandidate[] => {
       ? [{ path: p, absolute, scope: "**/*", required: true, origin: "global" as const }]
       : [];
   });
+  for (const dir of GLOBAL_SKILL_DIRS) {
+    walkSkills(path.join(homeDir(), dir.slice(2)), 1, (f) => toSourcePath(homeDir(), f), found);
+  }
+  for (const rootDir of pluginSkillRoots()) {
+    walkSkills(path.join(rootDir, "skills"), 1, (f) => toSourcePath(homeDir(), f), found);
+  }
   followImports(homeDir(), found);
   return onePerFile(found);
 };

@@ -31,6 +31,7 @@ import { debug } from "../lib/output.js";
 import { findRepoRoot, isExcludedPath, relativeToRoot } from "../lib/paths.js";
 import { readRegularFile, readRegularText } from "../lib/regularFile.js";
 import { flagNotice, repairReason, turnToolCallReason } from "../lib/reason.js";
+import { filterToLoadedSkills } from "../lib/skillScope.js";
 import {
   clearTurn,
   hasTurnState,
@@ -157,7 +158,10 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
 
   const loaded = loadRubric(root);
   for (const problem of loaded.problems) debug(problem);
-  if (loaded.rules.length === 0) return finish({ kind: "silent" });
+  const log = readToolCalls(dir);
+  // A skill's rules bind only a turn that loaded the skill.
+  const judged = filterToLoadedSkills(loaded.rules, log);
+  if (judged.length === 0) return finish({ kind: "silent" });
 
   const turn = turnDiff(root, dir);
   if (turn.kind === "incomplete") {
@@ -172,7 +176,6 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
     return finish({ kind: "silent" });
   }
   const { files, fileDiffs } = turn;
-  const log = readToolCalls(dir);
   // A turn that only ran tools still answers to the rules about which tools it ran.
   if (files.length === 0 && log.length === 0) return finish({ kind: "silent" });
   const subjects = files.length > 0 ? files : ["the turn's tool calls"];
@@ -217,14 +220,14 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
         phase: "turn",
         fileDiffs: bounded,
         task,
-        rules: loaded.rules,
+        rules: judged,
         thresholds: loaded.thresholds,
         timeoutMs: TURN_CHECK_TIMEOUT_MS,
       }),
       runTurnToolCallCheck({
         log,
         task,
-        rules: loaded.rules,
+        rules: judged,
         thresholds: loaded.thresholds,
         timeoutMs: TURN_CHECK_TIMEOUT_MS,
       }),
@@ -235,7 +238,7 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
           phase: "edit",
           fileDiffs: [f],
           task,
-          rules: loaded.rules,
+          rules: judged,
           thresholds: loaded.thresholds,
           timeoutMs: TURN_CHECK_TIMEOUT_MS,
         }),
