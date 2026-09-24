@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { postToolUseInputSchema } from "oh-my-plumb-schema";
 import { MAX_TASK_CHARS } from "./constants.js";
-import { callSummary, type ReplayCall, type ReplaySession, type ReplayTurn } from "./replay.js";
+import { callInput, type ReplayCall, type ReplaySession, type ReplayTurn } from "./replay.js";
 
 /** One rollout file per session, one JSON object per line. An `apply_patch` call carries the same patch text the live hook receives. */
 export const codexSessionsDir = (): string => path.join(homedir(), ".codex", "sessions");
@@ -73,10 +73,10 @@ export const parseCodexRollout = (file: string): ReplaySession => {
       continue;
     }
     if (payload.type === "custom_tool_call" && typeof payload.name === "string") {
-      calls.push({ tool: payload.name, args: callSummary(payload.input) });
+      calls.push({ tool: payload.name, input: callInput(payload.input) });
     }
     if (payload.type === "function_call" && typeof payload.name === "string") {
-      calls.push({ tool: payload.name, args: callSummary(payload.arguments) });
+      calls.push({ tool: payload.name, input: callInput(payload.arguments) });
     }
     if (
       payload.type === "custom_tool_call" &&

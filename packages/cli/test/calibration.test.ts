@@ -9,7 +9,7 @@ import {
   type ToolCallJudge,
 } from "../src/lib/calibration.js";
 import { MAX_CALL_SUMMARY_CHARS } from "../src/lib/constants.js";
-import { parseTranscript } from "../src/lib/replay.js";
+import { callInput, parseTranscript } from "../src/lib/replay.js";
 
 const t = { act: 0.8, flag: 0.5 };
 
@@ -105,8 +105,11 @@ describe("tool-call calibration from transcripts", () => {
     );
     expect(calls).toHaveLength(6);
     expect(calls[0]?.tool).toBe("Write");
-    expect(calls.every((c) => c.args.length <= MAX_CALL_SUMMARY_CHARS)).toBe(true);
-    expect(calls.some((c) => c.args.includes("FILE_BODY_MARKER"))).toBe(false);
+    const texts = calls.map((c) => JSON.stringify(c.input));
+    expect(texts.every((t) => t.length <= MAX_CALL_SUMMARY_CHARS)).toBe(true);
+    expect(texts.some((t) => t.includes("FILE_BODY_MARKER"))).toBe(false);
+    // The judge gets the arguments as an object, once encoded, not a JSON string.
+    expect(calls[1]?.input).toEqual({ command: "pnpm test" });
     expect(verdict).toBe("decisive");
   });
 
@@ -124,5 +127,16 @@ describe("tool-call calibration from transcripts", () => {
     const { calls, verdict } = await verdictForCalls(bash(2), [0.1, 0.9]);
     expect(calls).toHaveLength(2);
     expect(verdict).toBe("skipped");
+  });
+});
+
+describe("recorded call arguments", () => {
+  it("reads Codex's JSON-text arguments back into fields before redacting", () => {
+    const long = "x".repeat(300);
+    expect(callInput(JSON.stringify({ cmd: ["pnpm", "test"], note: long }))).toEqual({
+      cmd: ["pnpm", "test"],
+      note: "[300 chars]",
+    });
+    expect(callInput("not json")).toBe("not json");
   });
 });

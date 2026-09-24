@@ -13,6 +13,7 @@ import { EDIT_CHECK_TIMEOUT_MS, TURN_CHECK_TIMEOUT_MS } from "../lib/constants.j
 import { recentHistory } from "../lib/git.js";
 import { hasApiKey, NO_KEY_HINT } from "../lib/credentials.js";
 import { findRepoRoot, globalRubricPath, homeDir, rubricPath } from "../lib/paths.js";
+import { ruleAppliesToTool } from "../lib/scope.js";
 import type { ReplayCall } from "../lib/replay.js";
 import { readRubric, writeRubric } from "../lib/rubricFile.js";
 import { say } from "../lib/ui.js";
@@ -59,6 +60,7 @@ export const runCalibrate = async (argv: string[]): Promise<number> => {
       global: { type: "boolean", default: false },
       hunks: { type: "string", default: "20" },
       commits: { type: "string", default: "8" },
+      calls: { type: "string", default: "40" },
       json: { type: "boolean", default: false },
     },
   });
@@ -84,7 +86,10 @@ export const runCalibrate = async (argv: string[]): Promise<number> => {
   }
   const rulesToRun = modelRules.map((r) => ({ ...r, status: "active" as const }));
   const toolCallRules = rulesToRun.filter((r) => r.target === "toolCall");
-  const recordedCalls = toolCallRules.length === 0 ? [] : recordedCallsFor(repoRoot);
+  // Only calls some rule could judge, and at most --calls of them, the most recently recorded.
+  const recordedCalls = (toolCallRules.length === 0 ? [] : recordedCallsFor(repoRoot))
+    .filter((call) => toolCallRules.some((rule) => ruleAppliesToTool(rule, call.tool)))
+    .slice(-Number(values.calls));
   const history = recentHistory(repoRoot, Number(values.hunks), Number(values.commits));
   if (history.hunks.length === 0 && history.commits.length === 0 && recordedCalls.length === 0) {
     await showStatic(
@@ -155,11 +160,11 @@ export const runCalibrate = async (argv: string[]): Promise<number> => {
             call,
             rules: toolCallRules,
             thresholds,
-            timeoutMs: EDIT_CHECK_TIMEOUT_MS,
+            timeoutMs: phase === "edit" ? EDIT_CHECK_TIMEOUT_MS : TURN_CHECK_TIMEOUT_MS,
             retries: 2,
           });
           spendUsd += out.usage.costUsd ?? 0;
-          calls += 1;
+          calls += out.calls;
           return out.verdicts;
         },
         progress,

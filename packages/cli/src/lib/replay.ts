@@ -27,21 +27,37 @@ import { findRepoRoot, isExcludedPath, relativeToRoot } from "./paths.js";
  */
 export type ReplayEdit = { turn: number; input: PostToolUseInput };
 export type ReplayTurn = { index: number; prompt: string | undefined; edits: ReplayEdit[] };
-/** A tool call as calibration sees it: the tool's name plus a bounded argument summary, never its output or file contents. */
-export type ReplayCall = { tool: string; args: string };
+/** A tool call as calibration sees it: the tool's name plus its bounded arguments, never its output or file contents. */
+export type ReplayCall = { tool: string; input: unknown };
 export type ReplaySession = { file: string; cwd: string; turns: ReplayTurn[]; calls: ReplayCall[] };
 
+const redact = (_key: string, value: unknown): unknown =>
+  typeof value === "string" && value.length > MAX_CALL_ARG_CHARS
+    ? `[${value.length} chars]`
+    : value;
+
+const jsonOrText = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+};
+
 /**
- * The arguments a call was made with, as a short summary. Strings too long to be
- * arguments — file bodies, patches, captured output pasted in — are replaced by
- * their length, so what survives is names and short argument values only.
+ * The arguments a call was made with, bounded. Strings too long to be arguments
+ * (file bodies, patches, captured output pasted in) are replaced by their length,
+ * so what survives is names and short argument values only. Codex records its
+ * arguments as JSON text, which is read back into the object it encodes so every
+ * host redacts field by field.
  */
-export const callSummary = (input: unknown): string =>
-  JSON.stringify(input, (_key, value: unknown) =>
-    typeof value === "string" && value.length > MAX_CALL_ARG_CHARS
-      ? `[${value.length} chars]`
-      : value,
-  )?.slice(0, MAX_CALL_SUMMARY_CHARS) ?? "";
+export const callInput = (input: unknown): unknown => {
+  const text = JSON.stringify(typeof input === "string" ? jsonOrText(input) : input, redact);
+  if (text === undefined) return undefined;
+  return text.length <= MAX_CALL_SUMMARY_CHARS
+    ? JSON.parse(text)
+    : `${text.slice(0, MAX_CALL_SUMMARY_CHARS)} [cut at ${MAX_CALL_SUMMARY_CHARS} characters]`;
+};
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit"]);
 
@@ -123,7 +139,7 @@ export const parseTranscript = (file: string): ReplaySession => {
         const part = asRecord(p);
         if (part?.type !== "tool_use" || typeof part.id !== "string") continue;
         if (typeof part.name !== "string") continue;
-        calls.push({ tool: part.name, args: callSummary(part.input) });
+        calls.push({ tool: part.name, input: callInput(part.input) });
         if (!EDIT_TOOLS.has(part.name)) continue;
         uses.set(part.id, { id: part.id, name: part.name, input: part.input, turn: turnIndex });
       }

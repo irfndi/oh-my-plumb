@@ -69,7 +69,7 @@ export const collectToolCallSamples = async (
   const total = calls.length * phases.length;
   let n = 0;
   for (const call of calls) {
-    const recorded: ToolCall = { tool: call.tool, input: call.args };
+    const recorded: ToolCall = { tool: call.tool, input: call.input };
     for (const phase of phases) {
       progress(`call ${(n += 1)} of ${total}  ${call.tool}`);
       try {
