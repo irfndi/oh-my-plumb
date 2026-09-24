@@ -3,7 +3,6 @@ import { describe, expect, it } from "vite-plus/test";
 import { ruleSchema } from "oh-my-plumb-schema";
 import { detectStack, routesFor } from "../src/lib/detect.js";
 import { fastCheck } from "../src/lib/tier1.js";
-import { tier2Check } from "../src/lib/tier2.js";
 
 describe("tier1 fast path", () => {
   const rule = (overrides: object) =>
@@ -83,28 +82,6 @@ describe("tier1 fast path", () => {
     expect(
       fastCheck(rules, "edit", [{ file: "src/b.ts", text: diffB }], thresholds).verdicts,
     ).toHaveLength(0);
-  });
-});
-
-describe("tier2 migration guard", () => {
-  it("blocks a foreign key to an unknown table", () => {
-    const hit = tier2Check(
-      "Write",
-      "prisma/migrations/001_init.sql",
-      "CREATE TABLE users (id INT, workspace_id INT REFERENCES workspaces(id));",
-    );
-    expect(hit?.ruleId).toBe("db-schema-guard");
-  });
-
-  it("passes self-contained migrations and non-migration files", () => {
-    expect(
-      tier2Check(
-        "Write",
-        "prisma/migrations/001_init.sql",
-        "CREATE TABLE workspaces (id INT); CREATE TABLE users (id INT, workspace_id INT REFERENCES workspaces(id));",
-      ),
-    ).toBeUndefined();
-    expect(tier2Check("Edit", "src/a.ts", "REFERENCES whatever")).toBeUndefined();
   });
 });
 

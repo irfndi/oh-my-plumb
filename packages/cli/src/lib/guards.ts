@@ -6,14 +6,13 @@ import { z } from "zod";
 /**
  * Phase 3: MCP dispatch + skill-as-guardrail execution.
  *
- * Tier 2 routes a file trigger to an external guard in priority order:
- * 1. Local validator (tier2.ts) — sync, microsecond, no spawn. Always first.
- * 2. MCP server dispatch — the repo's MCP config maps a trigger to a
+ * Tier 2 routes a file trigger to a guard the user configured:
+ * 1. MCP server dispatch — the repo's MCP config maps a trigger to a
  *    server+tool; the hook spawns the configured command with a hard
  *    deadline and parses one JSON line of `{ isError, content }`.
  *    No response (timeout, bad JSON, missing binary) = silent pass + logged
  *    skip. An MCP guard NEVER breaks the agent by failing.
- * 3. Skill guardrail — an executable script under a discovered skills dir
+ * 2. Skill guardrail — an executable script under a discovered skills dir
  *    (`<dir>/<name>/guard.{mjs,js,sh}`), run with `$FILE_PATH` in env,
  *    same deadline + silent-pass contract.
  *
