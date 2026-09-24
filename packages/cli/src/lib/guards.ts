@@ -150,7 +150,8 @@ const commandTarget = (command: readonly string[]): CommandTarget => {
   const first = command[0];
   if (first === "node") {
     const args = command.slice(1);
-    if (args.some((arg) => NODE_INLINE.has(arg))) return { kind: "inline" };
+    if (args.some((arg) => NODE_INLINE.has(arg) || /^--(eval|print)=/.test(arg)))
+      return { kind: "inline" };
     const file = args.find((arg) => !arg.startsWith("-"));
     return file === undefined ? { kind: "none" } : { kind: "script", file };
   }

@@ -21,5 +21,6 @@ export const filterToLoadedSkills = <T extends Rule>(
     // A whole-word match, so a skill named "e" or "read" is not loaded by every call that contains the letters.
     const escaped = skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const named = new RegExp(`(^|[^A-Za-z0-9_-])${escaped}([^A-Za-z0-9_-]|$)`);
-    return calls.some((call) => named.test(`${call.name} ${call.summary}`));
+    // Only the arguments name a skill: a skill called "bash" is not loaded by every bash call.
+    return calls.some((call) => named.test(call.summary));
   });

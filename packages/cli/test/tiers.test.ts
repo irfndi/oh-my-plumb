@@ -352,6 +352,7 @@ describe("route gaps", () => {
     ]);
     // An inline script has no file to look for.
     expect(routeGaps(root, { command: ["node", "-e", "console.log(1)"] }, [])).toEqual([]);
+    expect(routeGaps(root, { command: ["node", "--eval=console.log(1)"] }, [])).toEqual([]);
   });
 });
 

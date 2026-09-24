@@ -16,6 +16,8 @@ export type RubricData =
       rules: Rule[];
       missing: string[];
       orphaned: string[];
+      /** Opted-in MCP servers that sent no instructions this time: a typo, or a server that is down. */
+      quiet: string[];
     };
 
 export function RubricView({ data }: { data: RubricData }) {
@@ -51,6 +53,14 @@ export function RubricView({ data }: { data: RubricData }) {
           title='Rules whose source is not listed under "sources". Add it or fix the path.'
         >
           <Text color={palette.cloud}>{data.orphaned.join(", ")}</Text>
+        </Callout>
+      ) : null}
+      {data.quiet.length > 0 ? (
+        <Callout
+          tone="warn"
+          title="MCP servers listed in mcpInstructions that sent no instructions. Check the name, or start the server."
+        >
+          <Text color={palette.cloud}>{data.quiet.join(", ")}</Text>
         </Callout>
       ) : null}
       <Box marginTop={1}>

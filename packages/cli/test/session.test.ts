@@ -197,6 +197,12 @@ describe("turn state on disk", () => {
     expect(long.endsWith("...")).toBe(true);
   });
 
+  it("logs only the length of an apply_patch, however short", () => {
+    const dir = turnDir("s", "patch-log");
+    recordToolCall(dir, "apply_patch", { command: "*** Begin Patch\n+KEY=1\n*** End Patch" });
+    expect(readToolCalls(dir)[0]?.summary).toMatch(/^\{command=\[\d+ chars\]\}$/);
+  });
+
   it("counts a turn that only ran tools as turn state", () => {
     const dir = turnDir("s", "tools-only");
     expect(hasTurnState(dir)).toBe(false);
