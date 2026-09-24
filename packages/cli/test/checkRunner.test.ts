@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { Rule, Verdict } from "oh-my-plumb-schema";
+import { DEFAULT_THRESHOLDS, rubricSchema, type Rule, type Verdict } from "oh-my-plumb-schema";
+import { bandFor, violationProbability } from "../src/lib/band.js";
 import {
   mergeOutcomes,
   renderToolInput,
   runTurnToolCallCheck,
+  selectRules,
+  selectToolCallRules,
   selectTurnToolCallRules,
   stateFor,
   type CheckOutcome,
@@ -88,6 +91,47 @@ describe("turn-phase tool-call rules", () => {
       timeoutMs: 1,
     });
     expect(out.calls).toBe(0);
+  });
+});
+
+describe("a rule that requires a tool", () => {
+  const parsed = rubricSchema.parse({
+    version: 1,
+    compiledAt: "2026-09-17T00:00:00.000Z",
+    sources: [{ path: "AGENTS.md" }],
+    rules: [
+      {
+        id: "use-context7-for-docs",
+        text: "Use context7 for library docs; never answer library questions from memory.",
+        source: { path: "AGENTS.md", line: 42 },
+        target: "toolCall",
+        when: "turn",
+        check: {
+          type: "model",
+          question: {
+            type: "boolean",
+            instructions:
+              "Answer only from the turn's tool-call log: did this turn change a dependency with no call whose name contains context7 before it?",
+          },
+        },
+      },
+    ],
+  });
+  const rule = parsed.rules[0];
+  if (rule === undefined || rule.check.type !== "model")
+    throw new Error("fixture must be a model rule");
+  const question = rule.check.question;
+
+  it("is judged on the turn's log, never on a diff or a single call", () => {
+    const log = [{ order: 1, name: "Bash", summary: "{command=pnpm add zod}" }];
+    expect(selectTurnToolCallRules(parsed.rules, log)).toHaveLength(1);
+    expect(selectRules(parsed.rules, "turn", ["package.json"])).toHaveLength(0);
+    expect(selectToolCallRules(parsed.rules, "edit", "Bash")).toHaveLength(0);
+  });
+
+  it("bands an unsure answer as a flag, not a block", () => {
+    const { probability } = violationProbability(question, { type: "boolean", probability: 0.65 });
+    expect(bandFor(probability, DEFAULT_THRESHOLDS)).toBe("flag");
   });
 });
 
