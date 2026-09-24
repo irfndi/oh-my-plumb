@@ -173,6 +173,7 @@ export const runGuard = (
   file: string,
   text: string,
   timeoutMs = GUARD_TIMEOUT_MS,
+  cwd?: string,
 ): Promise<GuardHit | undefined> =>
   new Promise((resolve) => {
     const [bin, ...args] = command;
@@ -191,6 +192,7 @@ export const runGuard = (
     try {
       child = spawn(bin, args, {
         env: { ...process.env, FILE_PATH: file },
+        cwd,
         stdio: ["pipe", "pipe", "ignore"],
       });
     } catch {

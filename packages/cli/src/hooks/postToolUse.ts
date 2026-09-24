@@ -10,7 +10,13 @@ import {
 } from "oh-my-plumb-schema";
 import { runCheck, type CheckOutcome } from "../lib/checkRunner.js";
 import { fastCheck } from "../lib/tier1.js";
-import { guardRoutes, routesForFile, runGuard, type GuardHit } from "../lib/guards.js";
+import {
+  GUARD_TIMEOUT_MS,
+  guardRoutes,
+  routesForFile,
+  runGuard,
+  type GuardHit,
+} from "../lib/guards.js";
 import { EDIT_CHECK_TIMEOUT_MS, MAX_BLOCKS_PER_RULE_PER_TURN } from "../lib/constants.js";
 import { hasApiKey } from "../lib/credentials.js";
 import { boundState, editsFromPostToolUse, type EditHunk } from "../lib/diff.js";
@@ -81,16 +87,28 @@ export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
           const jobs: Promise<{ relative: string; hit: GuardHit } | undefined>[] = [];
           if (r.command !== undefined) {
             jobs.push(
-              runGuard(r.ruleId, r.ruleId, r.command, relative, edit.after ?? "").then((hit) =>
-                hit === undefined ? undefined : { relative, hit },
-              ),
+              runGuard(
+                r.ruleId,
+                r.ruleId,
+                r.command,
+                relative,
+                edit.after ?? "",
+                GUARD_TIMEOUT_MS,
+                root,
+              ).then((hit) => (hit === undefined ? undefined : { relative, hit })),
             );
           }
           if (r.skill !== undefined) {
             jobs.push(
-              runGuard(r.ruleId, r.ruleId, [r.skill], relative, edit.after ?? "").then((hit) =>
-                hit === undefined ? undefined : { relative, hit },
-              ),
+              runGuard(
+                r.ruleId,
+                r.ruleId,
+                [r.skill],
+                relative,
+                edit.after ?? "",
+                GUARD_TIMEOUT_MS,
+                root,
+              ).then((hit) => (hit === undefined ? undefined : { relative, hit })),
             );
           }
           return jobs;
