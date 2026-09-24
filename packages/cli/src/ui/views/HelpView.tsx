@@ -4,7 +4,10 @@ import { palette } from "../theme.js";
 
 const COMMANDS: [string, string][] = [
   ["login [--gateway]", "store your TypeSafe key in ~/.oh-my-plumb/.env, owner-only"],
-  ["init [agent] [--project]", "hook into claude, codex, opencode, pi, omp, or every one found here"],
+  [
+    "init [agent] [--project]",
+    "hook into claude, codex, opencode, pi, omp, or every one found here",
+  ],
   ["compile", "compile the rubric now, in a headless Claude Code turn"],
   ["tune [--global]", "rewrite rules that never fire, with their statistics attached"],
   ["rubric validate [--global]", "check .oh-my-plumb/rubric.json and fill in source hashes"],
