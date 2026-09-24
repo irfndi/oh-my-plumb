@@ -1,7 +1,8 @@
-import { mkdtempSync, readdirSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { MAX_TOOL_CALLS_PER_TURN, MAX_TOOL_SUMMARY_CHARS } from "../src/lib/constants.js";
 import {
   markBaseline,
   readBaselineStatus,
@@ -13,8 +14,10 @@ import {
   readBaseline,
   readChecked,
   readFileStarts,
+  readToolCalls,
   recordChecked,
   recordFileStart,
+  recordToolCall,
   stopCheckCount,
   turnDir,
   writeBaseline,
@@ -103,5 +106,61 @@ describe("turn state on disk", () => {
     recordFileStart(turnDir("s", "p1"), "/r/a.ts", null);
     expect(readFileStarts(turnDir("s", "p2"))).toEqual([]);
     expect(readFileStarts(turnDir("t", "p1"))).toEqual([]);
+  });
+
+  it("logs each call in order with a redacted summary, never file contents", () => {
+    const dir = turnDir("s", "log-p1");
+    const body = "F".repeat(5_000);
+    recordToolCall(dir, "Write", { file_path: "/r/a.ts", content: body, replace_all: false });
+    recordToolCall(dir, "Bash", { command: "ls -la" });
+    const log = readToolCalls(dir);
+    expect(log).toEqual([
+      {
+        order: 1,
+        name: "Write",
+        summary: expect.stringContaining("file_path=/r/a.ts"),
+      },
+      { order: 2, name: "Bash", summary: "{command=ls -la}" },
+    ]);
+    expect(log[0]?.summary).toContain(`[${body.length} chars]`);
+    expect(JSON.stringify(log)).not.toContain(body);
+  });
+
+  it("caps the turn's log on disk and as read", () => {
+    const dir = turnDir("s", "log-cap");
+    for (let i = 0; i < MAX_TOOL_CALLS_PER_TURN + 10; i += 1) {
+      recordToolCall(dir, "Bash", { command: `c${i}` });
+    }
+    expect(readToolCalls(dir)).toHaveLength(MAX_TOOL_CALLS_PER_TURN);
+    expect(readdirSync(path.join(dir, "tool-calls"))).toHaveLength(MAX_TOOL_CALLS_PER_TURN);
+    expect(readToolCalls(dir)[0]?.order).toBe(1);
+    expect(readToolCalls(dir).at(-1)?.order).toBe(MAX_TOOL_CALLS_PER_TURN);
+  });
+
+  it("keeps one turn's log out of the next turn's", () => {
+    const first = turnDir("s", "log-rot");
+    recordToolCall(first, "Bash", { command: "ls" });
+    expect(readToolCalls(turnDir("s", "log-rot2"))).toEqual([]);
+    expect(readToolCalls(turnDir("other", "log-rot"))).toEqual([]);
+    // A host with no turn id shares one directory; turn-start clears it between turns.
+    const shared = turnDir("s", undefined);
+    recordToolCall(shared, "Bash", { command: "ls" });
+    clearTurn(shared);
+    recordToolCall(shared, "Bash", { command: "pwd" });
+    expect(readToolCalls(shared).map((e) => e.summary)).toEqual(["{command=pwd}"]);
+    expect(readToolCalls(first)).toHaveLength(1);
+  });
+
+  it("degrades a missing or corrupt log to no log, never a throw", () => {
+    const dir = turnDir("s", "log-corrupt");
+    expect(readToolCalls(dir)).toEqual([]);
+    const calls = path.join(dir, "tool-calls");
+    mkdirSync(calls, { recursive: true });
+    writeFileSync(path.join(calls, "call.000001"), "{not json");
+    writeFileSync(
+      path.join(calls, "call.000002"),
+      JSON.stringify({ order: 1, name: "Bash", summary: "x".repeat(MAX_TOOL_SUMMARY_CHARS + 1) }),
+    );
+    expect(readToolCalls(dir)).toEqual([]);
   });
 });

@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { MAX_TASK_CHARS, SESSION_STATE_MAX_AGE_MS } from "./constants.js";
+import {
+  MAX_TASK_CHARS,
+  SESSION_STATE_MAX_AGE_MS,
+  MAX_TOOL_CALLS_PER_TURN,
+  MAX_TOOL_STRING_CHARS,
+  MAX_TOOL_SUMMARY_CHARS,
+} from "./constants.js";
 import { sessionsDir } from "./paths.js";
 
 /**
@@ -127,6 +133,92 @@ export const recordChecked = (dir: string, record: CheckedEdit): void => {
 
 export const readChecked = (dir: string): CheckedEdit[] =>
   readRecords(path.join(dir, "checked"), checkedSchema);
+
+const toolCallEntrySchema = z.object({
+  order: z.number().int().positive(),
+  name: z.string().min(1).max(100),
+  summary: z.string().max(MAX_TOOL_SUMMARY_CHARS),
+});
+/** One entry of the turn's tool-call log: which tool ran, in what order, with what shape of input. */
+export type ToolCallEntry = z.infer<typeof toolCallEntrySchema>;
+
+const summaryValue = (value: unknown, depth: number): string => {
+  if (typeof value === "string") {
+    if (value.length > MAX_TOOL_STRING_CHARS) return `[${value.length} chars]`;
+    return value.replace(/\s+/g, " ").trim();
+  }
+  if (value === null) return "null";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    if (depth <= 0) return `[${value.length} items]`;
+    const head = value.slice(0, 3).map((item) => summaryValue(item, depth - 1));
+    const more = value.length > 3 ? `, +${value.length - 3} more` : "";
+    return `[${head.join(", ")}${more}]`;
+  }
+  if (typeof value === "object") {
+    if (depth <= 0) return "{...}";
+    const entries = Object.entries(value);
+    const head = entries
+      .slice(0, 8)
+      .map(([key, item]) => `${key}=${summaryValue(item, depth - 1)}`);
+    const more = entries.length > 8 ? `, +${entries.length - 8} more` : "";
+    return `{${head.join(", ")}${more}}`;
+  }
+  return String(value);
+};
+
+/** Names and argument shapes only: a string past the bound collapses to "[N chars]", so a file body never lands in the log. */
+export const callSummary = (input: unknown): string => {
+  const rendered = summaryValue(input, 3);
+  return rendered.length <= MAX_TOOL_SUMMARY_CHARS
+    ? rendered
+    : `${rendered.slice(0, MAX_TOOL_SUMMARY_CHARS - 3)}...`;
+};
+
+const toolCallsDir = (dir: string): string => path.join(dir, "tool-calls");
+
+/** One call joins the turn's log, numbered in call order and capped at the turn's bound. First-write-wins files, like the rest of the turn state. */
+export const recordToolCall = (dir: string, name: string, input: unknown): void => {
+  try {
+    const calls = toolCallsDir(dir);
+    const entry = { name: name.slice(0, 100), summary: callSummary(input) };
+    for (let attempt = 0; attempt < 32; attempt += 1) {
+      const order = countWithPrefix(calls, "call.") + 1;
+      if (order > MAX_TOOL_CALLS_PER_TURN) return;
+      if (
+        createOnce(
+          path.join(calls, `call.${String(order).padStart(6, "0")}`),
+          JSON.stringify({ order, ...entry }),
+        )
+      )
+        return;
+    }
+  } catch {
+    // the log is best effort: absent is fine, held is not
+  }
+};
+
+/** The turn's log in call order. A missing or corrupt entry degrades to no log, never a throw. */
+export const readToolCalls = (dir: string): ToolCallEntry[] => {
+  let names: string[];
+  try {
+    names = readdirSync(toolCallsDir(dir));
+  } catch {
+    return [];
+  }
+  const entries: ToolCallEntry[] = [];
+  for (const name of names) {
+    try {
+      const parsed = toolCallEntrySchema.safeParse(
+        JSON.parse(readFileSync(path.join(toolCallsDir(dir), name), "utf8")),
+      );
+      if (parsed.success) entries.push(parsed.data);
+    } catch {
+      // torn or corrupt: that entry is no log
+    }
+  }
+  return entries.sort((a, b) => a.order - b.order).slice(0, MAX_TOOL_CALLS_PER_TURN);
+};
 
 const blockPrefix = (key: string): string => `${shortHash(key)}.`;
 

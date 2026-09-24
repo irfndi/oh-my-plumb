@@ -2,9 +2,10 @@ import { assertNever } from "oh-my-plumb-schema";
 import type { CheckPhase, Rule, RuleTarget, Thresholds, Usage, Verdict } from "oh-my-plumb-schema";
 import type { ToolCall } from "oh-my-plumb-schema";
 import type { FileDiff } from "./git.js";
-import { checkWithModel, isModelRule, type ModelRule } from "./jev.js";
+import { checkWithModel, isModelRule, type CheckState, type ModelRule } from "./jev.js";
 import { ruleAppliesTo, ruleAppliesToTool } from "./scope.js";
 import { MAX_STATE_CHARS } from "./constants.js";
+import type { ToolCallEntry } from "./session.js";
 
 export type CheckRequest = {
   phase: CheckPhase;
@@ -14,6 +15,8 @@ export type CheckRequest = {
   rules: readonly Rule[];
   thresholds: Thresholds;
   timeoutMs: number;
+  /** The turn's tool-call log, judged with a turn-phase diff so a rule can ask what ran. */
+  toolCalls?: readonly ToolCallEntry[];
   /** Transient gateway failures to retry. Hooks leave it at zero. */
   retries?: number;
 };
@@ -125,6 +128,17 @@ export const mergeOutcomes = (outcomes: readonly CheckOutcome[]): CheckOutcome =
   };
 };
 
+/** What the judge sees: the turn's change, and alongside it the turn's tool-call log when Stop has one. */
+export const stateFor = (request: CheckRequest, fileDiffs: readonly FileDiff[]): CheckState => ({
+  ...(request.task === undefined ? {} : { task: request.task }),
+  ...(request.phase === "edit" && fileDiffs.length === 1 && fileDiffs[0] !== undefined
+    ? { file: fileDiffs[0].file, diff: fileDiffs[0].text }
+    : { files: fileDiffs.map((f) => f.file), diff: renderFiles(fileDiffs) }),
+  ...(request.toolCalls === undefined || request.toolCalls.length === 0
+    ? {}
+    : { toolCalls: [...request.toolCalls] }),
+});
+
 export const runCheck = async (request: CheckRequest): Promise<CheckOutcome> => {
   const files = request.fileDiffs.map((f) => f.file);
   const modelRules = selectRules(request.rules, request.phase, files).filter(isModelRule);
@@ -139,14 +153,7 @@ export const runCheck = async (request: CheckRequest): Promise<CheckOutcome> => 
     groups.map((group) =>
       checkWithModel(
         group.rules,
-        {
-          ...(request.task === undefined ? {} : { task: request.task }),
-          ...(request.phase === "edit" &&
-          group.fileDiffs.length === 1 &&
-          group.fileDiffs[0] !== undefined
-            ? { file: group.fileDiffs[0].file, diff: group.fileDiffs[0].text }
-            : { files: group.fileDiffs.map((f) => f.file), diff: renderFiles(group.fileDiffs) }),
-        },
+        stateFor(request, group.fileDiffs),
         request.thresholds,
         request.timeoutMs,
         request.retries ?? 0,

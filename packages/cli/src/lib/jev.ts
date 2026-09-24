@@ -16,6 +16,7 @@ import {
   TYPESAFE_MODEL_ID,
 } from "./constants.js";
 import { credentials, NO_KEY_HINT, type Credentials } from "./credentials.js";
+import type { ToolCallEntry } from "./session.js";
 
 export type ModelRule = Rule & { check: { type: "model" } };
 
@@ -43,6 +44,8 @@ export type CheckState =
       file?: string;
       files?: string[];
       diff: string;
+      /** Stop's per-turn tool-call log, next to the diff, so a turn question can ask what ran. */
+      toolCalls?: ToolCallEntry[];
     }
   | {
       task?: string;

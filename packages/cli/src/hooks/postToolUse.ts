@@ -42,6 +42,7 @@ import {
   recordBlockedFile,
   recordChecked,
   recordFileStart,
+  recordToolCall,
   turnDir,
 } from "../lib/session.js";
 import { lastUserPrompt } from "../lib/transcript.js";
@@ -52,11 +53,25 @@ type Checked = { edit: EditHunk; relative: string; outcome: CheckOutcome };
 
 export const handlePostToolUse = async (raw: unknown): Promise<HookOutput> => {
   const edit = postToolUseInputSchema.safeParse(raw);
-  if (edit.success) return handleEdit(edit.data);
+  if (edit.success) {
+    rememberCall(edit.data);
+    return handleEdit(edit.data);
+  }
   const call = toolCallPostToolUseSchema.safeParse(raw);
   if (!call.success) return { kind: "silent" };
+  rememberCall(call.data);
   return handleToolCall(call.data);
 };
+
+/** The log records what ran before anything judges whether it mattered, so the turn sees every observed call. */
+const rememberCall = (input: {
+  session_id: string;
+  prompt_id?: string;
+  turn_id?: string;
+  tool_name: string;
+  tool_input: unknown;
+}): void =>
+  recordToolCall(turnDir(input.session_id, turnIdOf(input)), input.tool_name, input.tool_input);
 
 const handleEdit = async (input: PostToolUseInput): Promise<HookOutput> => {
   const started = performance.now();

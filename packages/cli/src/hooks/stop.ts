@@ -36,6 +36,7 @@ import {
   readChecked,
   readFileStarts,
   readPrompt,
+  readToolCalls,
   stopCheckCount,
   turnDir,
 } from "../lib/session.js";
@@ -207,6 +208,7 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
       phase: "turn",
       fileDiffs: bounded,
       task,
+      toolCalls: readToolCalls(dir),
       rules: loaded.rules,
       thresholds: loaded.thresholds,
       timeoutMs: TURN_CHECK_TIMEOUT_MS,
