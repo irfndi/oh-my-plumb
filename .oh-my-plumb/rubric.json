@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "compiledAt": "2026-09-23T00:00:00.000Z",
+  "compiledAt": "2026-09-24T00:00:00.000Z",
   "compiledBy": "claude",
   "sources": [
     {
       "path": "AGENTS.md",
-      "sha": "8bc675e28634bf49c413585fde68c2102dfc6ee5246dade9a9c87db941fa55cf",
+      "sha": "0f1f04b82ced33e70e6517a1c0026a6974d4031ebd8b14b80adbc167c2e1e157",
       "scope": "**/*"
     }
   ],
@@ -17,6 +17,7 @@
         "path": "AGENTS.md",
         "line": 7
       },
+      "target": "diff",
       "scope": [
         "packages/cli/src/hooks/**",
         "packages/cli/src/bin/oh-my-plumb-hook.ts",
@@ -36,11 +37,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
-        "hunks": 3,
-        "median": 0.1,
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 2,
+        "median": 0.05500000000000001,
         "min": 0.04,
-        "max": 0.11,
+        "max": 0.07,
         "fired": 0,
         "verdict": "skipped"
       }
@@ -52,6 +53,7 @@
         "path": "AGENTS.md",
         "line": 7
       },
+      "target": "diff",
       "scope": [
         "packages/cli/src/hooks/**",
         "packages/cli/src/bin/oh-my-plumb-hook.ts",
@@ -71,11 +73,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
-        "hunks": 3,
-        "median": 0.08,
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 2,
+        "median": 0.045000000000000005,
         "min": 0.02,
-        "max": 0.66,
+        "max": 0.07,
         "fired": 0,
         "verdict": "skipped"
       }
@@ -87,6 +89,7 @@
         "path": "AGENTS.md",
         "line": 7
       },
+      "target": "diff",
       "scope": [
         "packages/cli/src/hooks/**",
         "packages/cli/src/bin/oh-my-plumb-hook.ts",
@@ -106,11 +109,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
-        "hunks": 3,
-        "median": 0.13,
-        "min": 0.05,
-        "max": 0.13,
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 2,
+        "median": 0.09,
+        "min": 0.07,
+        "max": 0.11,
         "fired": 0,
         "verdict": "skipped"
       }
@@ -122,6 +125,7 @@
         "path": "AGENTS.md",
         "line": 8
       },
+      "target": "diff",
       "check": {
         "type": "lint",
         "how": "secret scanner (gitleaks) or grep for key-shaped literals",
@@ -136,6 +140,7 @@
         "path": "AGENTS.md",
         "line": 8
       },
+      "target": "diff",
       "scope": [
         "packages/cli/**"
       ],
@@ -153,11 +158,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
-        "hunks": 13,
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 14,
         "median": 0.02,
-        "min": 0.02,
-        "max": 0.03,
+        "min": 0.01,
+        "max": 0.02,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -169,6 +174,7 @@
         "path": "AGENTS.md",
         "line": 8
       },
+      "target": "diff",
       "scope": [
         "packages/**/*.ts"
       ],
@@ -186,11 +192,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
-        "hunks": 10,
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 11,
         "median": 0.02,
         "min": 0.02,
-        "max": 0.04,
+        "max": 0.03,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -202,6 +208,7 @@
         "path": "AGENTS.md",
         "line": 8
       },
+      "target": "diff",
       "scope": [
         "packages/**/*.ts"
       ],
@@ -215,11 +222,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
-        "hunks": 10,
-        "median": 0.025,
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 11,
+        "median": 0.02,
         "min": 0.02,
-        "max": 0.04,
+        "max": 0.05,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -231,6 +238,7 @@
         "path": "AGENTS.md",
         "line": 9
       },
+      "target": "diff",
       "check": {
         "type": "unenforceable",
         "reason": "about the process before finishing, not the code"
@@ -244,6 +252,7 @@
         "path": "AGENTS.md",
         "line": 10
       },
+      "target": "diff",
       "check": {
         "type": "unenforceable",
         "reason": "lives in commit messages and PR text, which edits do not show"
@@ -257,6 +266,7 @@
         "path": "AGENTS.md",
         "line": 11
       },
+      "target": "diff",
       "check": {
         "type": "unenforceable",
         "reason": "about a process step, not something visible in a diff"
@@ -270,6 +280,7 @@
         "path": "AGENTS.md",
         "line": 25
       },
+      "target": "diff",
       "check": {
         "type": "unenforceable",
         "reason": "about the conversation, not the code"
@@ -283,6 +294,7 @@
         "path": "AGENTS.md",
         "line": 26
       },
+      "target": "diff",
       "check": {
         "type": "unenforceable",
         "reason": "about the conversation, not the code"
@@ -296,6 +308,7 @@
         "path": "AGENTS.md",
         "line": 27
       },
+      "target": "diff",
       "check": {
         "type": "unenforceable",
         "reason": "about the conversation, not the code"
@@ -309,6 +322,7 @@
         "path": "AGENTS.md",
         "line": 28
       },
+      "target": "diff",
       "check": {
         "type": "unenforceable",
         "reason": "about the conversation, not the code"
@@ -322,6 +336,7 @@
         "path": "AGENTS.md",
         "line": 34
       },
+      "target": "diff",
       "when": "turn",
       "check": {
         "type": "model",
@@ -332,11 +347,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 8,
-        "median": 0.045,
+        "median": 0.04,
         "min": 0.03,
-        "max": 0.08,
+        "max": 0.1,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -348,6 +363,7 @@
         "path": "AGENTS.md",
         "line": 35
       },
+      "target": "diff",
       "when": "turn",
       "check": {
         "type": "model",
@@ -362,11 +378,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 8,
-        "median": 0.02,
-        "min": 0.02,
-        "max": 0.04,
+        "median": 0.03,
+        "min": 0.01,
+        "max": 0.43,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -378,6 +394,7 @@
         "path": "AGENTS.md",
         "line": 36
       },
+      "target": "diff",
       "when": "turn",
       "check": {
         "type": "model",
@@ -388,11 +405,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 8,
-        "median": 0.17,
+        "median": 0.060000000000000005,
         "min": 0.03,
-        "max": 0.34,
+        "max": 0.29,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -404,6 +421,7 @@
         "path": "AGENTS.md",
         "line": 37
       },
+      "target": "diff",
       "scope": [
         "**/*.ts",
         "**/*.tsx"
@@ -418,11 +436,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 11,
-        "median": 0.08,
+        "median": 0.07,
         "min": 0.03,
-        "max": 0.29,
+        "max": 0.26,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -434,6 +452,7 @@
         "path": "AGENTS.md",
         "line": 38
       },
+      "target": "diff",
       "when": "turn",
       "check": {
         "type": "model",
@@ -451,11 +470,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 8,
-        "median": 0.04,
-        "min": 0.02,
-        "max": 0.19,
+        "median": 0.08499999999999999,
+        "min": 0.03,
+        "max": 0.12,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -467,6 +486,7 @@
         "path": "AGENTS.md",
         "line": 40
       },
+      "target": "diff",
       "when": "turn",
       "check": {
         "type": "model",
@@ -477,11 +497,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 8,
-        "median": 0.10500000000000001,
-        "min": 0.04,
-        "max": 0.35,
+        "median": 0.095,
+        "min": 0.05,
+        "max": 0.28,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -493,6 +513,7 @@
         "path": "AGENTS.md",
         "line": 48
       },
+      "target": "diff",
       "when": "turn",
       "check": {
         "type": "model",
@@ -503,11 +524,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 8,
-        "median": 0.05,
-        "min": 0.03,
-        "max": 0.34,
+        "median": 0.305,
+        "min": 0.05,
+        "max": 0.77,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -519,6 +540,7 @@
         "path": "AGENTS.md",
         "line": 49
       },
+      "target": "diff",
       "when": "edit",
       "check": {
         "type": "model",
@@ -529,11 +551,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 20,
-        "median": 0.065,
+        "median": 0.06,
         "min": 0.03,
-        "max": 0.36,
+        "max": 0.13,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -545,6 +567,7 @@
         "path": "AGENTS.md",
         "line": 50
       },
+      "target": "diff",
       "when": "turn",
       "check": {
         "type": "model",
@@ -555,11 +578,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 8,
-        "median": 0.05,
+        "median": 0.075,
         "min": 0.02,
-        "max": 0.1,
+        "max": 0.19,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -571,6 +594,7 @@
         "path": "AGENTS.md",
         "line": 51
       },
+      "target": "diff",
       "check": {
         "type": "deferred",
         "reason": "needs the rest of the file or repository to know the existing style"
@@ -584,6 +608,7 @@
         "path": "AGENTS.md",
         "line": 52
       },
+      "target": "diff",
       "when": "turn",
       "check": {
         "type": "model",
@@ -594,11 +619,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 8,
-        "median": 0.05,
+        "median": 0.04,
         "min": 0.03,
-        "max": 0.08,
+        "max": 0.06,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -610,6 +635,7 @@
         "path": "AGENTS.md",
         "line": 56
       },
+      "target": "diff",
       "scope": [
         "**/*.ts",
         "**/*.tsx"
@@ -627,6 +653,7 @@
         "path": "AGENTS.md",
         "line": 57
       },
+      "target": "diff",
       "check": {
         "type": "unenforceable",
         "reason": "'unless asked' depends on the conversation; the diff side is covered by delete-unrelated-dead-code"
@@ -640,6 +667,7 @@
         "path": "AGENTS.md",
         "line": 65
       },
+      "target": "diff",
       "check": {
         "type": "unenforceable",
         "reason": "about how the agent plans, not the code"
@@ -653,6 +681,7 @@
         "path": "AGENTS.md",
         "line": 67
       },
+      "target": "diff",
       "when": "turn",
       "check": {
         "type": "model",
@@ -667,11 +696,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 8,
         "median": 0.02,
         "min": 0.02,
-        "max": 0.05,
+        "max": 0.04,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -683,6 +712,7 @@
         "path": "AGENTS.md",
         "line": 68
       },
+      "target": "diff",
       "when": "turn",
       "check": {
         "type": "model",
@@ -693,11 +723,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 8,
-        "median": 0.5800000000000001,
-        "min": 0.08,
-        "max": 0.73,
+        "median": 0.035,
+        "min": 0.02,
+        "max": 0.16,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -709,6 +739,7 @@
         "path": "AGENTS.md",
         "line": 69
       },
+      "target": "diff",
       "check": {
         "type": "unenforceable",
         "reason": "about running tests, not the code"
@@ -722,6 +753,7 @@
         "path": "AGENTS.md",
         "line": 71
       },
+      "target": "diff",
       "check": {
         "type": "unenforceable",
         "reason": "about the conversation, not the code"
@@ -735,6 +767,7 @@
         "path": "AGENTS.md",
         "line": 83
       },
+      "target": "diff",
       "when": "edit",
       "check": {
         "type": "model",
@@ -752,12 +785,12 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 20,
-        "median": 0.01,
+        "median": 0,
         "min": 0,
-        "max": 0.99,
-        "fired": 4,
+        "max": 0.30000000000000004,
+        "fired": 0,
         "verdict": "decisive"
       }
     },
@@ -768,6 +801,7 @@
         "path": "AGENTS.md",
         "line": 85
       },
+      "target": "diff",
       "when": "edit",
       "check": {
         "type": "model",
@@ -782,12 +816,12 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 20,
-        "median": 0.22,
+        "median": 0.14,
         "min": 0.06,
-        "max": 0.81,
-        "fired": 2,
+        "max": 0.78,
+        "fired": 0,
         "verdict": "decisive"
       }
     },
@@ -798,6 +832,7 @@
         "path": "AGENTS.md",
         "line": 86
       },
+      "target": "diff",
       "when": "edit",
       "check": {
         "type": "model",
@@ -812,11 +847,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 20,
-        "median": 0.195,
-        "min": 0.06,
-        "max": 0.69,
+        "median": 0.14500000000000002,
+        "min": 0.07,
+        "max": 0.72,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -828,6 +863,7 @@
         "path": "AGENTS.md",
         "line": 87
       },
+      "target": "diff",
       "when": "edit",
       "check": {
         "type": "model",
@@ -842,11 +878,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 20,
-        "median": 0.035,
+        "median": 0.025,
         "min": 0.01,
-        "max": 0.28,
+        "max": 0.36,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -858,6 +894,7 @@
         "path": "AGENTS.md",
         "line": 88
       },
+      "target": "diff",
       "check": {
         "type": "deferred",
         "reason": "asks to remove comments that already exist; a diff of new lines cannot show what was left in place"
@@ -871,9 +908,257 @@
         "path": "AGENTS.md",
         "line": 89
       },
+      "target": "diff",
       "check": {
         "type": "unenforceable",
         "reason": "a self-test for the author; the diff side is covered by comment-without-why"
+      },
+      "status": "active"
+    },
+    {
+      "id": "backward-compat-layer",
+      "text": "Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 93
+      },
+      "target": "diff",
+      "scope": [
+        "**/*.ts",
+        "**/*.tsx"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add code whose only job is to keep an old shape or behavior working: a deprecated alias, a legacy-format fallback, a shim, or a migration from an older format?",
+          "criteria": {
+            "true": "const cfg = parsed.rules ?? parsed.legacyRules // support old files",
+            "false": "renaming a field and updating every reader"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 11,
+        "median": 0.08,
+        "min": 0.03,
+        "max": 0.31,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "speculative-indirection",
+      "text": "Choose the simplest implementation that fully meets the current requirements. Avoid speculative abstractions, configuration, and indirection.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 94
+      },
+      "target": "diff",
+      "when": "turn",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add a layer of indirection (registry, factory, adapter, plugin hook, strategy map) that currently has only one implementation behind it?",
+          "criteria": {
+            "true": "a providers map with one entry, looked up by name",
+            "false": "calling the one implementation directly"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 8,
+        "median": 0.02,
+        "min": 0.02,
+        "max": 0.27,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "unfinished-complexity",
+      "text": "Grow the system in layers. Never trade a working product for unfinished complexity.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 95
+      },
+      "target": "diff",
+      "when": "turn",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change leave half-built code in the product path: a stub that throws 'not implemented', an unwired module, or a branch that replaces working behavior with something incomplete?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 8,
+        "median": 0.03,
+        "min": 0.02,
+        "max": 0.56,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "separated-concerns",
+      "text": "Keep components modular and concerns clearly separated.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 96
+      },
+      "target": "diff",
+      "check": {
+        "type": "deferred",
+        "reason": "needs the module layout of the rest of the repository"
+      },
+      "status": "active"
+    },
+    {
+      "id": "hand-rolled-common-utility",
+      "text": "Prefer established, well-maintained libraries when they reduce overall complexity or improve reliability. Do not reimplement common functionality without a clear reason.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 97
+      },
+      "target": "diff",
+      "scope": [
+        "**/*.ts",
+        "**/*.tsx"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change hand-write common functionality a well-known library provides: a retry or backoff loop, debounce, deep clone or deep equal, glob matching, argument parsing, semver comparison, or a schema validator?",
+          "criteria": {
+            "true": "a hand-written glob-to-regex converter",
+            "false": "importing picomatch to match globs"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 11,
+        "median": 0.03,
+        "min": 0.02,
+        "max": 0.1,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "lean-on-existing-deps",
+      "text": "Lean on the dependencies already in the project before writing your own implementation or adding packages.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 98
+      },
+      "target": "diff",
+      "check": {
+        "type": "deferred",
+        "reason": "needs the project's installed dependencies and their APIs"
+      },
+      "status": "active"
+    },
+    {
+      "id": "stopgap-code",
+      "text": "Make architectural decisions for the long term. Do not accept a stopgap that only works for now and is meant to be replaced later.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 99
+      },
+      "target": "diff",
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add code that says it is temporary: a TODO, FIXME or HACK to replace it later, or a comment or name saying 'for now', 'temporary', 'quick fix' or 'workaround until'?",
+          "criteria": {
+            "true": "// TODO: replace with real cache, in-memory for now",
+            "false": "a comment explaining why a timeout is 800 ms"
+          }
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 20,
+        "median": 0.02,
+        "min": 0.02,
+        "max": 0.08,
+        "fired": 0,
+        "verdict": "decisive"
+      }
+    },
+    {
+      "id": "prefer-e2e-tests",
+      "text": "Highly prefer E2E tests as the sole testing mechanism. Use them to verify complex features work.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 100
+      },
+      "target": "diff",
+      "scope": [
+        "**/test/**",
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "when": "edit",
+      "check": {
+        "type": "model",
+        "question": {
+          "type": "boolean",
+          "instructions": "Does this change add a test that mocks or stubs the project's own modules (vi.mock, jest.mock, spyOn on an internal function) instead of running the real code path end to end?"
+        }
+      },
+      "status": "active",
+      "calibration": {
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 4,
+        "median": 0.04,
+        "min": 0.03,
+        "max": 0.11,
+        "fired": 0,
+        "verdict": "skipped"
+      }
+    },
+    {
+      "id": "e2e-artifact",
+      "text": "At the end of E2E tests, produce a verifiable and repeatable artifact.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 100
+      },
+      "target": "diff",
+      "check": {
+        "type": "deferred",
+        "reason": "needs the whole test harness to see whether an artifact is produced"
+      },
+      "status": "active"
+    },
+    {
+      "id": "failure-modes-first",
+      "text": "If you must test a system in isolation, FIRST write all the ways it could fail, THEN write the code.",
+      "source": {
+        "path": "AGENTS.md",
+        "line": 101
+      },
+      "target": "diff",
+      "check": {
+        "type": "unenforceable",
+        "reason": "about the order of work, not the code"
       },
       "status": "active"
     },
@@ -882,8 +1167,9 @@
       "text": "Never use if/else-if chains for mutually-exclusive variants.",
       "source": {
         "path": "AGENTS.md",
-        "line": 95
+        "line": 107
       },
+      "target": "diff",
       "scope": [
         "**/*.ts",
         "**/*.tsx"
@@ -902,11 +1188,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 11,
-        "median": 0.05,
+        "median": 0.03,
         "min": 0.02,
-        "max": 0.28,
+        "max": 0.09,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -916,8 +1202,9 @@
       "text": "Closed sets use an exhaustive switch + assertNever ... end with default: return assertNever(value).",
       "source": {
         "path": "AGENTS.md",
-        "line": 95
+        "line": 107
       },
+      "target": "diff",
       "scope": [
         "**/*.ts",
         "**/*.tsx"
@@ -936,11 +1223,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 11,
-        "median": 0.05,
+        "median": 0.04,
         "min": 0.03,
-        "max": 0.13,
+        "max": 0.16,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -950,8 +1237,9 @@
       "text": "When behavior depends on several related status checks, derive one closed decision/status type and switch over that — don't scatter conditionals through a method.",
       "source": {
         "path": "AGENTS.md",
-        "line": 95
+        "line": 107
       },
+      "target": "diff",
       "scope": [
         "**/*.ts",
         "**/*.tsx"
@@ -966,11 +1254,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 11,
         "median": 0.03,
-        "min": 0.01,
-        "max": 0.63,
+        "min": 0.02,
+        "max": 0.06,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -980,8 +1268,9 @@
       "text": "Define assertNever once in the schema package's utils and import it everywhere.",
       "source": {
         "path": "AGENTS.md",
-        "line": 95
+        "line": 107
       },
+      "target": "diff",
       "scope": [
         "packages/cli/**"
       ],
@@ -997,8 +1286,9 @@
       "text": "Use type, not interface.",
       "source": {
         "path": "AGENTS.md",
-        "line": 103
+        "line": 115
       },
+      "target": "diff",
       "scope": [
         "**/*.ts",
         "**/*.tsx"
@@ -1015,8 +1305,9 @@
       "text": "Discriminated unions for state — every multi-shape value carries a type/kind discriminant. No optional-field soup where one shape is meant.",
       "source": {
         "path": "AGENTS.md",
-        "line": 104
+        "line": 116
       },
+      "target": "diff",
       "scope": [
         "**/*.ts",
         "**/*.tsx"
@@ -1035,11 +1326,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 11,
-        "median": 0.07,
+        "median": 0.04,
         "min": 0.03,
-        "max": 0.31,
+        "max": 0.27,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -1049,8 +1340,9 @@
       "text": "No type casting. as is a bug until proven otherwise. (as const and zod .parse() outputs are fine.)",
       "source": {
         "path": "AGENTS.md",
-        "line": 105
+        "line": 117
       },
+      "target": "diff",
       "scope": [
         "**/*.ts",
         "**/*.tsx"
@@ -1067,8 +1359,9 @@
       "text": "Expected failures use typed domain errors with a stable machine-readable code (SCREAMING_SNAKE_CASE) callers can switch on exhaustively.",
       "source": {
         "path": "AGENTS.md",
-        "line": 106
+        "line": 118
       },
+      "target": "diff",
       "scope": [
         "**/*.ts",
         "**/*.tsx"
@@ -1087,11 +1380,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 11,
-        "median": 0.03,
+        "median": 0.02,
         "min": 0.02,
-        "max": 0.04,
+        "max": 0.05,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -1101,8 +1394,9 @@
       "text": "Concise messages, no terminal punctuation.",
       "source": {
         "path": "AGENTS.md",
-        "line": 106
+        "line": 118
       },
+      "target": "diff",
       "scope": [
         "**/*.ts",
         "**/*.tsx"
@@ -1119,8 +1413,9 @@
       "text": "Deterministic ID/key formats have a single owner: one named creation function per format. Never inline-format the same ID in two places.",
       "source": {
         "path": "AGENTS.md",
-        "line": 107
+        "line": 119
       },
+      "target": "diff",
       "check": {
         "type": "deferred",
         "reason": "needs the rest of the repository to know whether the format already has an owner"
@@ -1132,8 +1427,9 @@
       "text": "Anything crossing a process/API boundary is zod-parsed at the edge.",
       "source": {
         "path": "AGENTS.md",
-        "line": 108
+        "line": 120
       },
+      "target": "diff",
       "scope": [
         "**/*.ts",
         "**/*.tsx"
@@ -1152,12 +1448,12 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
+        "at": "2026-09-24T04:47:08.787Z",
         "hunks": 11,
-        "median": 0.09,
+        "median": 0.08,
         "min": 0.02,
-        "max": 0.96,
-        "fired": 2,
+        "max": 0.24,
+        "fired": 0,
         "verdict": "decisive"
       }
     },
@@ -1166,8 +1462,9 @@
       "text": "Internal code trusts parsed types, never re-validates ad hoc.",
       "source": {
         "path": "AGENTS.md",
-        "line": 108
+        "line": 120
       },
+      "target": "diff",
       "check": {
         "type": "deferred",
         "reason": "needs to know whether the value was already parsed upstream"
@@ -1179,8 +1476,9 @@
       "text": "Zero Coldtea dependency. Nothing here may require Coldtea to be installed, running, or reachable.",
       "source": {
         "path": "AGENTS.md",
-        "line": 113
+        "line": 125
       },
+      "target": "diff",
       "check": {
         "type": "lint",
         "how": "no-restricted-imports / grep",
@@ -1193,8 +1491,9 @@
       "text": "Every verdict must trace to a named rule a person can read and rewrite.",
       "source": {
         "path": "AGENTS.md",
-        "line": 114
+        "line": 126
       },
+      "target": "diff",
       "scope": [
         "packages/**/*.ts"
       ],
@@ -1208,11 +1507,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
-        "hunks": 10,
-        "median": 0.16,
-        "min": 0.07,
-        "max": 0.5,
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 11,
+        "median": 0.15,
+        "min": 0.06,
+        "max": 0.25,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -1222,8 +1521,9 @@
       "text": "No default rules. Rules come only from the user's own instruction files.",
       "source": {
         "path": "AGENTS.md",
-        "line": 115
+        "line": 127
       },
+      "target": "diff",
       "scope": [
         "packages/**/*.ts"
       ],
@@ -1232,17 +1532,21 @@
         "type": "model",
         "question": {
           "type": "boolean",
-          "instructions": "Does this change add a rule, ruleset, or check that ships with the tool itself rather than coming from a user's instruction file?"
+          "instructions": "Does this change add a hardcoded rule definition to the tool's source: a literal object or array with a rule id and rule text or question, used when the user's rubric does not supply it?",
+          "criteria": {
+            "true": "const DEFAULT_RULES = [{ id: 'no-console', text: 'Do not use console.log' }]",
+            "false": "reading rules from the parsed rubric.json"
+          }
         }
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
-        "hunks": 10,
-        "median": 0.5700000000000001,
-        "min": 0.04,
-        "max": 0.93,
-        "fired": 2,
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 11,
+        "median": 0.02,
+        "min": 0.02,
+        "max": 0.03,
+        "fired": 0,
         "verdict": "decisive"
       }
     },
@@ -1251,8 +1555,9 @@
       "text": "Band verdicts, never threshold at 0.5. Act above a high score, flag the middle, ignore below.",
       "source": {
         "path": "AGENTS.md",
-        "line": 116
+        "line": 128
       },
+      "target": "diff",
       "scope": [
         "packages/**/*.ts"
       ],
@@ -1270,11 +1575,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
-        "hunks": 10,
-        "median": 0.03,
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 11,
+        "median": 0.02,
         "min": 0.02,
-        "max": 0.08,
+        "max": 0.03,
         "fired": 0,
         "verdict": "decisive"
       }
@@ -1284,8 +1589,9 @@
       "text": "Trim instructions for tokens as well as for readability, and use scope globs to keep out-of-scope questions out of the request entirely.",
       "source": {
         "path": "AGENTS.md",
-        "line": 117
+        "line": 129
       },
+      "target": "diff",
       "check": {
         "type": "unenforceable",
         "reason": "guidance for writing rubric text, not code"
@@ -1297,8 +1603,9 @@
       "text": "A rule a linter can enforce exactly, for free, must never be sent to a model.",
       "source": {
         "path": "AGENTS.md",
-        "line": 118
+        "line": 130
       },
+      "target": "diff",
       "scope": [
         "packages/**/*.ts"
       ],
@@ -1312,11 +1619,11 @@
       },
       "status": "active",
       "calibration": {
-        "at": "2026-09-22T23:41:21.837Z",
-        "hunks": 10,
-        "median": 0.095,
-        "min": 0.05,
-        "max": 0.27,
+        "at": "2026-09-24T04:47:08.787Z",
+        "hunks": 11,
+        "median": 0.07,
+        "min": 0.03,
+        "max": 0.14,
         "fired": 0,
         "verdict": "decisive"
       }
