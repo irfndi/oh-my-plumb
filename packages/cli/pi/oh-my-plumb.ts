@@ -149,7 +149,44 @@ export const preToolCallResult = (out) => {
   return undefined;
 };
 
-export default function ohMyPlumb(pi) {
+const readJson = (file) => {
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return undefined;
+  }
+};
+
+const listsPiPackage = (settings) => {
+  const packages = readJson(settings)?.packages;
+  return (
+    Array.isArray(packages) &&
+    packages.some((entry) =>
+      /^npm:oh-my-plumb(@.+)?$/.test(typeof entry === "string" ? entry : String(entry?.source)),
+    )
+  );
+};
+
+const listsOmpPlugin = (pluginsDir) =>
+  typeof readJson(path.join(pluginsDir, "package.json"))?.dependencies?.["oh-my-plumb"] ===
+  "string";
+
+/** Keep in step with `packageInstall` in src/lib/piPlugin.ts. */
+export const packageInstalled = (host, cwd) => {
+  const home = process.env.OH_MY_PLUMB_HOME_DIR ?? homedir();
+  return host === "omp"
+    ? listsOmpPlugin(path.join(home, ".omp", "plugins")) ||
+        listsOmpPlugin(path.join(cwd, ".omp", "plugins"))
+    : listsPiPackage(path.join(home, ".pi", "agent", "settings.json")) ||
+        listsPiPackage(path.join(cwd, ".pi", "settings.json"));
+};
+
+export default function ohMyPlumb(pi, options) {
+  // The file `oh-my-plumb init` writes passes shimFor. When the host also loads
+  // oh-my-plumb as a package, that copy runs and this one stays out of the way.
+  try {
+    if (options?.shimFor !== undefined && packageInstalled(options.shimFor, process.cwd())) return;
+  } catch {}
   const originals = new Map();
 
   pi.on("tool_call", async (event, ctx) => {
