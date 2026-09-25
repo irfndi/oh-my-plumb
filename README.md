@@ -201,7 +201,7 @@ Shell and MCP calls reach the hook only while your rubric has a tool-call rule, 
 npx oh-my-plumb@latest init      # or, for a global install: npm i -g oh-my-plumb@latest && oh-my-plumb init
 ```
 
-The hooks point at the copy of oh-my-plumb that ran `init`, so running `init` from the new version moves every agent onto it. It also picks up anything the new release changes about how it hooks in, such as a new hook event or the right plugin for the OpenCode version you now run. Your rubric and key are left as they are.
+The hooks point at the copy of oh-my-plumb that ran `init`, so running `init` from the new version moves every agent onto it. npm can clear its npx cache at any time, so when `init` runs through npx it first copies itself to `~/.oh-my-plumb/runtime/<version>` and points the hooks at that copy. It also picks up anything the new release changes about how it hooks in, such as a new hook event or the right plugin for the OpenCode version you now run. Your rubric and key are left as they are.
 
 ## Uninstall
 
