@@ -13,7 +13,7 @@ import {
 } from "oh-my-plumb-schema";
 import { resolveCredentials } from "../lib/credentials.js";
 import { detectHosts, hostLabel, installHost, parseHost, type Installed } from "../lib/hosts.js";
-import { hookScriptPath } from "../lib/packageRoot.js";
+import { hookScriptPath, installRoot, packageRoot } from "../lib/packageRoot.js";
 import { ohMyPlumbDir, findRepoRoot, rubricPath } from "../lib/paths.js";
 import { readRubric, writeRubric } from "../lib/rubricFile.js";
 import {
@@ -170,6 +170,12 @@ export const runInit = async (argv: string[]): Promise<number> => {
       text: foundText(files.length, skills.length),
     },
   ];
+  if (installRoot() !== packageRoot())
+    steps.push({
+      ok: true,
+      text: "running from the npx cache, which npm can clear, so hooks point at a copy",
+      detail: installRoot(),
+    });
   mkdirSync(ohMyPlumbDir(root), { recursive: true });
   writeFileSync(path.join(ohMyPlumbDir(root), ".gitignore"), "events.jsonl\ncompile-skill.md\n");
   const rubricFile = rubricPath(root);

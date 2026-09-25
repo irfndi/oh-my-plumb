@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { packageRoot } from "./packageRoot.js";
+import { installRoot } from "./packageRoot.js";
 import { homeDir } from "./paths.js";
 
 export const OPENCODE_PLUGIN_MARKER = "oh-my-plumb-opencode-plugin";
@@ -31,7 +31,7 @@ export const opencodeIsV2 = (): boolean => {
  * `oh-my-plumb-v2.js`, and neither reads the other's.
  */
 export const pluginSourcePath = (): string =>
-  path.join(packageRoot(), "opencode", opencodeIsV2() ? "oh-my-plumb-v2.js" : "oh-my-plumb.mjs");
+  path.join(installRoot(), "opencode", opencodeIsV2() ? "oh-my-plumb-v2.js" : "oh-my-plumb.mjs");
 
 const shim = (source: string): string =>
   [

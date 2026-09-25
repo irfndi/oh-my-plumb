@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { packageRoot } from "./packageRoot.js";
+import { installRoot } from "./packageRoot.js";
 
 export const PI_PLUGIN_MARKER = "oh-my-plumb-pi-extension";
 
@@ -9,7 +9,7 @@ export const PI_PLUGIN_MARKER = "oh-my-plumb-pi-extension";
  * The extension as shipped in the package. The installed file only points at
  * it, so an upgrade needs no reinstall. Mirrors opencodePlugin.ts.
  */
-export const piExtensionSourcePath = (): string => path.join(packageRoot(), "pi", "oh-my-plumb.ts");
+export const piExtensionSourcePath = (): string => path.join(installRoot(), "pi", "oh-my-plumb.ts");
 
 /** Pi and Oh My Pi load the same extension; the marker names the host it was installed for. */
 export const installPiExtension = (target: string, host: "pi" | "omp"): void => {

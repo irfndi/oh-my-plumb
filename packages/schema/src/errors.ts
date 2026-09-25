@@ -11,7 +11,8 @@ export type PlumbErrorCode =
   | "CLAUDE_UNAVAILABLE"
   | "CHECK_TIMEOUT"
   | "CHECK_FAILED"
-  | "CHECK_INPUT_INVALID";
+  | "CHECK_INPUT_INVALID"
+  | "RUNTIME_COPY_FAILED";
 
 export class PlumbError extends Error {
   readonly code: PlumbErrorCode;
