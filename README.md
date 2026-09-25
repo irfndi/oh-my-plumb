@@ -84,6 +84,8 @@ Pi only: oh-my-plumb runs as an in-process extension. It reads each file before 
 
 Oh My Pi only: `omp` loads the same extension from its own directories, `~/.omp/agent/extensions/` or, with `--project`, `.omp/extensions/`. The turn check hooks omp's `session_stop` instead of pi's `agent_before_settle`.
 
+Pi and Oh My Pi can also install oh-my-plumb as a package (`pi install npm:oh-my-plumb`, `omp plugin install oh-my-plumb`). When one is already installed, `init` writes no extension file and removes the one it wrote earlier. An extension file written first then does nothing once the package shows up. Either way, only one copy runs. Files written by 0.2.0 or earlier don't do this check, so run `init` again after upgrading.
+
 ### Tested against
 
 | Host          | Tested against                    | What we depend on                                                                              |

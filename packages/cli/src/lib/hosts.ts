@@ -2,7 +2,12 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { PlumbError, assertNever, HOSTS, hostSchema, type Host } from "oh-my-plumb-schema";
-import { installPiExtension, uninstallPiExtension } from "./piPlugin.js";
+import {
+  installPiExtension,
+  packageInstall,
+  uninstallPiExtension,
+  type PackageInstall,
+} from "./piPlugin.js";
 import { installOpencodePlugin, uninstallOpencodePlugin } from "./opencodePlugin.js";
 import { hookScriptPath } from "./packageRoot.js";
 import { homeDir } from "./paths.js";
@@ -121,6 +126,22 @@ export const syncToolCallMatchers = (root: string): Host[] => {
 
 export type Installed = { host: Host; target: string; what: string; afterwards?: string };
 
+/** The host already loads oh-my-plumb as a package, so an extension file would make it run twice. */
+const asPackage = (host: "pi" | "omp", target: string, found: PackageInstall): Installed => {
+  const removed = uninstallPiExtension(target) ? "; the old extension file was removed" : "";
+  const version = found.version === undefined ? "" : `, ${found.version} on disk`;
+  const installed: Installed = {
+    host,
+    target: found.from,
+    what: `already installed as a package (${found.spec}${version}), so ${hostLabel(host)} runs that copy${removed}`,
+  };
+  if (!found.pinned) return installed;
+  return {
+    ...installed,
+    afterwards: `Pi keeps oh-my-plumb at ${found.spec.slice("npm:oh-my-plumb@".length)} because the package is pinned. \`pi install npm:oh-my-plumb\` unpins it, and \`pi update --extensions\` keeps it current from then on.`,
+  };
+};
+
 export const installHost = (host: Host, root: string, project: boolean): Installed => {
   const target = installTarget(host, root, project);
   switch (host) {
@@ -148,6 +169,8 @@ export const installHost = (host: Host, root: string, project: boolean): Install
       installOpencodePlugin(target);
       return { host, target, what: "plugin written; OpenCode loads it at the next start" };
     case "pi": {
+      const found = packageInstall(host, root);
+      if (found !== undefined) return asPackage(host, target, found);
       installPiExtension(target, host);
       const what = "extension written; Pi loads it at the next start";
       // Without project trust pi skips .pi/extensions silently, which reads as a broken install.
@@ -160,9 +183,12 @@ export const installHost = (host: Host, root: string, project: boolean): Install
           "Pi only loads a project extension once the project is trusted: accept pi's trust prompt the next time you start pi here. `pi --approve` trusts it for one run without saving that.",
       };
     }
-    case "omp":
+    case "omp": {
+      const found = packageInstall(host, root);
+      if (found !== undefined) return asPackage(host, target, found);
       installPiExtension(target, host);
       return { host, target, what: "extension written; Oh My Pi loads it at the next start" };
+    }
     default:
       return assertNever(host);
   }
