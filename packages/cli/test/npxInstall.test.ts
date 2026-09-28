@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -23,11 +24,11 @@ const cliRoot = path.resolve(import.meta.dirname, "..");
 /** A package laid out the way npx leaves it: ~/.npm/_npx/<hash>/node_modules/oh-my-plumb. */
 const fakeNpxCache = (): { cache: string; bin: string } => {
   const cache = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-npm-"));
-  const nodeModules = path.join(cache, "_npx", "0a1b2c3d", "node_modules");
+  const nodeModules = path.join(cache, "_npx", "0a1b2c3d4e5f6a7b", "node_modules");
   const pkg = path.join(nodeModules, "oh-my-plumb");
   for (const entry of ["package.json", "dist", "pi", "opencode", "skills"])
     cpSync(path.join(cliRoot, entry), path.join(pkg, entry), { recursive: true });
-  // Dependencies are linked by absolute path, so they outlive the deleted cache as npm's copies would.
+  // Linked deps are the pessimistic case: the copy must materialize them, because nothing outside the cache survives it.
   for (const dep of readdirSync(path.join(cliRoot, "node_modules"))) {
     if (dep.startsWith(".")) continue;
     symlinkSync(realpathSync(path.join(cliRoot, "node_modules", dep)), path.join(nodeModules, dep));
@@ -92,6 +93,20 @@ describe("init run by npx (needs `pnpm build` first)", () => {
       .flatMap((group) => group.hooks)
       .find((hook) => hook.command?.includes(OH_MY_PLUMB_HOOK_MARKER))?.command;
     expect(command).toContain(runtime);
+
+    // The runtime copy must stand alone: no dependency may reach outside it.
+    const [version] = readdirSync(runtime);
+    const copiedModules = path.join(runtime, version ?? "", "node_modules");
+    for (const dep of readdirSync(copiedModules)) {
+      if (dep.startsWith(".")) continue;
+      const packages = dep.startsWith("@")
+        ? readdirSync(path.join(copiedModules, dep)).map((name) =>
+            path.join(copiedModules, dep, name),
+          )
+        : [path.join(copiedModules, dep)];
+      for (const pkg of packages)
+        expect(lstatSync(path.join(pkg, "package.json")).isSymbolicLink()).toBe(false);
+    }
 
     const shim = readFileSync(path.join(root, ".pi", "extensions", "oh-my-plumb.ts"), "utf8");
     const target = /from "(file:[^"]+)"/.exec(shim)?.[1];

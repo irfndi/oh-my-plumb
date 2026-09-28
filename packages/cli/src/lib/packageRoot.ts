@@ -31,36 +31,44 @@ const packageVersion = (root: string): string => {
   return typeof version === "string" ? version : "unknown";
 };
 
-/** The node_modules folder holding this package when npx ran it from its cache. */
+/** node_modules when npx ran this from ~/.npm/_npx/<16-hex>/node_modules; the hash segment rules out a project's own `_npx` folder. */
 const npxNodeModules = (root: string): string | undefined => {
   const parent = path.dirname(root);
-  return path.basename(parent) === "node_modules" && root.split(path.sep).includes("_npx")
+  const hash = path.basename(path.dirname(parent));
+  return path.basename(parent) === "node_modules" &&
+    path.basename(path.dirname(path.dirname(parent))) === "_npx" &&
+    /^[0-9a-f]{16}$/.test(hash)
     ? parent
     : undefined;
 };
 
+/** The files init and the hooks read. A copy missing any of them is rebuilt, not trusted. */
+const runtimeComplete = (copied: string): boolean =>
+  ["package.json", "dist/oh-my-plumb-hook.js", "dist/bin.js", "pi/oh-my-plumb.ts"].every((file) =>
+    existsSync(path.join(copied, file)),
+  );
+
 /**
  * Copies this package and its dependencies out of the npx cache, once per
  * version. The copy is staged and renamed into place, so a half-finished copy
- * is never mistaken for a complete one.
+ * is never mistaken for a complete one. Dependencies are dereferenced so the
+ * copy stands alone even when the source links them elsewhere.
  */
 const copyOutOfNpx = (root: string, nodeModules: string): string => {
   const dir = path.join(globalOhMyPlumbDir(), "runtime", packageVersion(root));
   const copied = path.join(dir, "node_modules", path.basename(root));
-  if (existsSync(path.join(copied, "package.json"))) return copied;
+  if (runtimeComplete(copied)) return copied;
   const staging = `${dir}.${process.pid}.tmp`;
   try {
     rmSync(staging, { recursive: true, force: true });
-    cpSync(nodeModules, path.join(staging, "node_modules"), {
-      recursive: true,
-      verbatimSymlinks: true,
-    });
+    cpSync(nodeModules, path.join(staging, "node_modules"), { recursive: true, dereference: true });
     mkdirSync(path.dirname(dir), { recursive: true });
     try {
+      rmSync(dir, { recursive: true, force: true });
       renameSync(staging, dir);
     } catch (error) {
       // Another init finished the same copy first.
-      if (!existsSync(path.join(copied, "package.json"))) throw error;
+      if (!runtimeComplete(copied)) throw error;
     }
   } catch (error) {
     throw new PlumbError("RUNTIME_COPY_FAILED", `could not copy ${nodeModules} to ${dir}`, {
