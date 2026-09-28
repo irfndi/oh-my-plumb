@@ -68,7 +68,6 @@ const piPackage = (settings: string, nodeModules: string): PackageInstall | unde
     path.join(nodeModules, "oh-my-plumb", "package.json"),
     packageVersionSchema,
   )?.version;
-  // A listed package with no copy on disk has nothing to run, so the extension must not stand down.
   if (listed === undefined || version === undefined) return undefined;
   return { spec: listed.spec, from: settings, version, pinned: listed.pinned };
 };

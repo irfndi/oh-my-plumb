@@ -20,7 +20,6 @@ export const ompManifestSchema = z
 
 export const packageVersionSchema = z.object({ version: z.string() });
 
-/** The one matcher behind `packageInstall` (CLI) and `packageInstalled` (pi extension), so the two cannot drift. */
 export const piListsPackage = (
   settings: unknown,
 ): { spec: string; pinned: boolean } | undefined => {

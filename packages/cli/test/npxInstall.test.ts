@@ -27,7 +27,6 @@ const fakeNpxCache = (): { cache: string; bin: string } => {
   const pkg = path.join(nodeModules, "oh-my-plumb");
   for (const entry of ["package.json", "dist", "pi", "opencode", "skills"])
     cpSync(path.join(cliRoot, entry), path.join(pkg, entry), { recursive: true });
-  // Linked deps are the pessimistic case: the copy must materialize them.
   for (const dep of readdirSync(path.join(cliRoot, "node_modules"))) {
     if (dep.startsWith(".")) continue;
     symlinkSync(realpathSync(path.join(cliRoot, "node_modules", dep)), path.join(nodeModules, dep));
