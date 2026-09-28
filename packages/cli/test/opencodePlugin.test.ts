@@ -5,6 +5,7 @@ import path from "node:path";
 import type * as ChildProcessModule from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { preToolUseInputSchema, toolCallPostToolUseSchema } from "oh-my-plumb-schema";
+import { addOpencodePackagePlugin } from "../src/lib/opencodePlugin.js";
 
 // A real model verdict is the only thing that makes the hook deny a call, and no
 // offline test can reach the gateway. With a reply set here the hook child is
@@ -85,6 +86,51 @@ const repoWithToolCallRule = (): string => {
   );
   return root;
 };
+
+describe("opencode package plugin", () => {
+  it("reads commented configs and reports a failed write instead of crashing", () => {
+    const config = path.join(
+      process.env.OH_MY_PLUMB_HOME_DIR ?? "",
+      ".config",
+      "opencode",
+      "opencode.json",
+    );
+    mkdirSync(path.dirname(config), { recursive: true });
+    writeFileSync(config, '{ "plugin": [ "other-plugin", ], // trailing comma and comment\n}');
+    expect(addOpencodePackagePlugin()).toBe(true);
+    expect(JSON.parse(readFileSync(config, "utf8")).plugin).toContain("oh-my-plumb");
+  });
+
+  it("records oh-my-plumb in the npm plugin list the host itself updates", () => {
+    const config = path.join(
+      process.env.OH_MY_PLUMB_HOME_DIR ?? "",
+      ".config",
+      "opencode",
+      "opencode.json",
+    );
+    mkdirSync(path.dirname(config), { recursive: true });
+    writeFileSync(config, JSON.stringify({ plugin: ["other-plugin"] }));
+    expect(addOpencodePackagePlugin()).toBe(true);
+    expect(JSON.parse(readFileSync(config, "utf8")).plugin).toEqual([
+      "other-plugin",
+      "oh-my-plumb",
+    ]);
+    expect(addOpencodePackagePlugin()).toBe(false);
+  });
+
+  it("leaves an already listed entry alone", () => {
+    const config = path.join(
+      process.env.OH_MY_PLUMB_HOME_DIR ?? "",
+      ".config",
+      "opencode",
+      "opencode.json",
+    );
+    mkdirSync(path.dirname(config), { recursive: true });
+    writeFileSync(config, JSON.stringify({ plugin: ["oh-my-plumb@1.2.3"] }));
+    expect(addOpencodePackagePlugin()).toBe(false);
+    expect(JSON.parse(readFileSync(config, "utf8")).plugin).toEqual(["oh-my-plumb@1.2.3"]);
+  });
+});
 
 describe("opencode plugin tool calls", () => {
   it("passes the hook schema as a shell call", () => {

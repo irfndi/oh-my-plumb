@@ -647,4 +647,21 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
     expect(out.hookSpecificOutput.additionalContext).toContain("AGENTS.md");
     expect(out.systemMessage).toContain("no API key");
   });
+
+  it("session-start stays quiet about updates when the registry pins nothing", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-repo-"));
+    writeFileSync(path.join(root, "AGENTS.md"), "- Use type, never interface\n");
+    const r = run(
+      "session-start",
+      JSON.stringify({
+        session_id: "t",
+        cwd: root,
+        hook_event_name: "SessionStart",
+        source: "startup",
+      }),
+    );
+    expect(r.status).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.systemMessage ?? "").not.toContain("is available");
+  });
 });

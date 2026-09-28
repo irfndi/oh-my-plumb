@@ -3,7 +3,8 @@ import { compilePrompt, type CompileTarget } from "../lib/compilePrompt.js";
 import { appendEvent } from "../lib/events.js";
 import { hasApiKey } from "../lib/credentials.js";
 import { findLintConfigs } from "../lib/lintConfig.js";
-import { placeCompileSkill } from "../lib/packageRoot.js";
+import { placeCompileSkill, runningVersion } from "../lib/packageRoot.js";
+import { updateNotice } from "../lib/updateCheck.js";
 import {
   canonicalSourcePath,
   findRepoRoot,
@@ -131,6 +132,8 @@ export const handleSessionStart = async (raw: unknown): Promise<HookOutput> => {
   for (const problem of plan.invalid) {
     notices.push(`oh-my-plumb: rubric could not be read and is being ignored: ${problem}`);
   }
+  const update = updateNotice(runningVersion());
+  if (update !== undefined) notices.push(update);
   const systemMessage = notices.length > 0 ? notices.join("\n") : undefined;
 
   if (plan.targets.length === 0) {
