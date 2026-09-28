@@ -251,7 +251,6 @@ describe("hosts", () => {
   });
 
   it("runs exactly one copy whichever of the package and init came first", async () => {
-    // The file init writes is what the host loads; handlers it registers are the copy running.
     const handlersFrom = async (file: string): Promise<number> => {
       const { default: extension } = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
       let count = 0;
@@ -262,7 +261,6 @@ describe("hosts", () => {
     const piSettings = path.join(home, ".pi", "agent", "settings.json");
     const ompManifest = path.join(home, ".omp", "plugins", "package.json");
 
-    // init first, then the package: the file stays but stands down.
     for (const host of ["pi", "omp"] as const) {
       installHost(host, root, false);
       expect(await handlersFrom(installTarget(host, root, false))).toBeGreaterThan(0);
@@ -276,7 +274,6 @@ describe("hosts", () => {
       expect(await handlersFrom(installTarget(host, root, false))).toBeGreaterThan(0);
     expect(installHost("pi", root, false).what).toContain("extension written");
 
-    // The package, then init: init removes its old file and says which copy runs.
     const copy = (nodeModules: string, version: string): void => {
       mkdirSync(path.join(nodeModules, "oh-my-plumb"), { recursive: true });
       writeFileSync(
@@ -300,7 +297,6 @@ describe("hosts", () => {
     expect(existsSync(installTarget("omp", root, false))).toBe(false);
     expect(omp.what).toContain("oh-my-plumb@^0.2.0");
     expect(omp.afterwards).toBeUndefined();
-    // A project install is skipped too: the personal package already loads here.
     installHost("pi", root, true);
     expect(existsSync(installTarget("pi", root, true))).toBe(false);
   });

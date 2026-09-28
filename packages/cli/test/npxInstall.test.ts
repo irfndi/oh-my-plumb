@@ -21,14 +21,13 @@ import { OH_MY_PLUMB_HOOK_MARKER, readSettings } from "../src/lib/settings.js";
 
 const cliRoot = path.resolve(import.meta.dirname, "..");
 
-/** A package laid out the way npx leaves it: ~/.npm/_npx/<hash>/node_modules/oh-my-plumb. */
 const fakeNpxCache = (): { cache: string; bin: string } => {
   const cache = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-npm-"));
   const nodeModules = path.join(cache, "_npx", "0a1b2c3d4e5f6a7b", "node_modules");
   const pkg = path.join(nodeModules, "oh-my-plumb");
   for (const entry of ["package.json", "dist", "pi", "opencode", "skills"])
     cpSync(path.join(cliRoot, entry), path.join(pkg, entry), { recursive: true });
-  // Linked deps are the pessimistic case: the copy must materialize them, because nothing outside the cache survives it.
+  // Linked deps are the pessimistic case: the copy must materialize them.
   for (const dep of readdirSync(path.join(cliRoot, "node_modules"))) {
     if (dep.startsWith(".")) continue;
     symlinkSync(realpathSync(path.join(cliRoot, "node_modules", dep)), path.join(nodeModules, dep));
@@ -85,7 +84,7 @@ describe("init run by npx (needs `pnpm build` first)", () => {
     expect(init.status).toBe(0);
     expect(init.stdout).toContain("npx cache");
 
-    // A trimmed runtime copy is rebuilt on the next init instead of being trusted.
+    // A trimmed copy is rebuilt on the next init.
     const copyRoot = path.join(home, ".oh-my-plumb", "runtime");
     const [version] = readdirSync(copyRoot);
     const copiedPkg = path.join(copyRoot, version ?? "", "node_modules", "oh-my-plumb");

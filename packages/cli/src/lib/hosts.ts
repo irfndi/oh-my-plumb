@@ -126,7 +126,6 @@ export const syncToolCallMatchers = (root: string): Host[] => {
 
 export type Installed = { host: Host; target: string; what: string; afterwards?: string };
 
-/** The host already loads oh-my-plumb as a package, so an extension file would make it run twice. */
 const asPackage = (host: "pi" | "omp", target: string, found: PackageInstall): Installed => {
   const removed = uninstallPiExtension(target) ? "; the old extension file was removed" : "";
   const installed: Installed = {

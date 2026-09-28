@@ -21,7 +21,6 @@ export const PI_PLUGIN_MARKER = "oh-my-plumb-pi-extension";
  */
 export const piExtensionSourcePath = (): string => path.join(installRoot(), "pi", "oh-my-plumb.ts");
 
-/** The file names its host, so the extension can stand down when that host also has the package. */
 export const installPiExtension = (target: string, host: "pi" | "omp"): void => {
   mkdirSync(path.dirname(target), { recursive: true });
   writeFileSync(
@@ -56,7 +55,6 @@ const readJson = <T>(file: string, schema: z.ZodType<T>): T | undefined => {
   }
 };
 
-/** oh-my-plumb installed through a host's own package system, which loads it without our file. */
 export type PackageInstall = {
   spec: string;
   from: string;

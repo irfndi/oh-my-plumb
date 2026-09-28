@@ -40,7 +40,7 @@ const npxNodeModules = (root: string): string | undefined => {
     : undefined;
 };
 
-/** The files init and the hooks read. A copy missing any of them is rebuilt, not trusted. */
+/** A copy missing any of these is rebuilt, not trusted. */
 const runtimeComplete = (copied: string): boolean =>
   [
     "package.json",
@@ -51,12 +51,7 @@ const runtimeComplete = (copied: string): boolean =>
     "opencode/oh-my-plumb-v2.js",
   ].every((file) => existsSync(path.join(copied, file)));
 
-/**
- * Copies this package and its dependencies out of the npx cache, once per
- * version. The copy is staged and renamed into place, so a half-finished copy
- * is never mistaken for a complete one. Dependencies are dereferenced so the
- * copy stands alone even when the source links them elsewhere.
- */
+/** Copies this package and its dependencies out of the npx cache, once per version; the staged rename never serves a half-finished copy. */
 const copyOutOfNpx = (root: string, nodeModules: string): string => {
   const dir = path.join(globalOhMyPlumbDir(), "runtime", packageVersion(root));
   const copied = path.join(dir, "node_modules", path.basename(root));
@@ -89,11 +84,7 @@ const copyOutOfNpx = (root: string, nodeModules: string): string => {
   return copied;
 };
 
-/**
- * The package hosts are pointed at. npm may clear its npx cache at any time,
- * and a hook left pointing there fails on every event, so a copy run by npx
- * points hosts at a copy of itself under ~/.oh-my-plumb/runtime instead.
- */
+/** The package hosts are pointed at: npx may clear its cache at any time, and a hook left pointing there fails on every event. */
 export const installRoot = (): string => {
   const root = packageRoot();
   const nodeModules = npxNodeModules(root);
