@@ -11,6 +11,7 @@
   "homepage": "https://github.com/irfndi/oh-my-plumb/tree/master/packages/cli",
   "author": "irfndi",
   "type": "module",
+  "main": "./opencode/server.mjs",
   "bin": {
     "oh-my-plumb": "dist/bin.js"
   },
