@@ -69,7 +69,16 @@ export {
   type ToolCall,
   type HookOutput,
 } from "./hooks.js";
-export { hostSchema, HOSTS, type Host } from "./host.js";
+export {
+  hostSchema,
+  HOSTS,
+  piSettingsSchema,
+  ompManifestSchema,
+  packageVersionSchema,
+  piListsPackage,
+  ompListsPlugin,
+  type Host,
+} from "./host.js";
 export {
   bandSchema,
   verdictSchema,

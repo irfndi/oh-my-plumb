@@ -9,6 +9,13 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  ompListsPlugin,
+  ompManifestSchema,
+  packageVersionSchema,
+  piListsPackage,
+  piSettingsSchema,
+} from "oh-my-plumb-schema";
 
 const HOOK = fileURLToPath(new URL("../dist/oh-my-plumb-hook.js", import.meta.url));
 
@@ -149,7 +156,56 @@ export const preToolCallResult = (out) => {
   return undefined;
 };
 
-export default function ohMyPlumb(pi) {
+const readJson = (schema, file) => {
+  try {
+    return schema.parse(JSON.parse(readFileSync(file, "utf8")));
+  } catch {
+    return undefined;
+  }
+};
+
+const piInstalled = (settings, nodeModules) => {
+  const listed = piListsPackage(readJson(piSettingsSchema, settings));
+  return (
+    listed !== undefined &&
+    readJson(packageVersionSchema, path.join(nodeModules, "oh-my-plumb", "package.json")) !==
+      undefined
+  );
+};
+
+const ompInstalled = (pluginsDir) => {
+  const range = ompListsPlugin(readJson(ompManifestSchema, path.join(pluginsDir, "package.json")));
+  return (
+    range !== undefined &&
+    readJson(
+      packageVersionSchema,
+      path.join(pluginsDir, "node_modules", "oh-my-plumb", "package.json"),
+    ) !== undefined
+  );
+};
+
+/** Keep the file pairs in step with `packageInstall` in src/lib/piPlugin.ts; the matcher itself is shared. */
+export const packageInstalled = (host, cwd) => {
+  const home = process.env.OH_MY_PLUMB_HOME_DIR ?? homedir();
+  return host === "omp"
+    ? ompInstalled(path.join(home, ".omp", "plugins")) ||
+        ompInstalled(path.join(cwd, ".omp", "plugins"))
+    : piInstalled(
+        path.join(home, ".pi", "agent", "settings.json"),
+        path.join(home, ".pi", "agent", "npm", "node_modules"),
+      ) ||
+        piInstalled(
+          path.join(cwd, ".pi", "settings.json"),
+          path.join(cwd, ".pi", "npm", "node_modules"),
+        );
+};
+
+export default function ohMyPlumb(pi, options) {
+  // The file `oh-my-plumb init` writes passes shimFor. When the host also loads
+  // oh-my-plumb as a package, that copy runs and this one stays out of the way.
+  try {
+    if (options?.shimFor !== undefined && packageInstalled(options.shimFor, process.cwd())) return;
+  } catch {}
   const originals = new Map();
 
   pi.on("tool_call", async (event, ctx) => {
