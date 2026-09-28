@@ -11,6 +11,7 @@ import {
 import {
   addOpencodePackagePlugin,
   installOpencodePlugin,
+  opencodeIsV2,
   uninstallOpencodePlugin,
 } from "./opencodePlugin.js";
 import { hookScriptPath } from "./packageRoot.js";
@@ -169,14 +170,16 @@ export const installHost = (host: Host, root: string, project: boolean): Install
     }
     case "opencode": {
       // The npm package plugin loads in every project, so only a global install registers it.
-      const added = project ? false : addOpencodePackagePlugin();
-      installOpencodePlugin(target);
+      // On v2 the package entry loads the same checks; the file shim stays as the fallback.
+      const added = project || !opencodeIsV2() ? false : addOpencodePackagePlugin();
+      const stoodDown = added && uninstallOpencodePlugin(target);
+      if (!stoodDown) installOpencodePlugin(target);
       return {
         host,
         target,
         what:
           added === true
-            ? "plugin written; OpenCode loads it at the next start. Also listed in the npm package plugins, so the check command for that host updates it"
+            ? "listed in the npm package plugins, so that host's update command moves it; the file shim was removed"
             : "plugin written; OpenCode loads it at the next start",
       };
     }

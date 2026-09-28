@@ -6,6 +6,7 @@ import type * as ChildProcessModule from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { preToolUseInputSchema, toolCallPostToolUseSchema } from "oh-my-plumb-schema";
 import { addOpencodePackagePlugin } from "../src/lib/opencodePlugin.js";
+import { installHost } from "../src/lib/hosts.js";
 
 // A real model verdict is the only thing that makes the hook deny a call, and no
 // offline test can reach the gateway. With a reply set here the hook child is
@@ -99,6 +100,34 @@ describe("opencode package plugin", () => {
     writeFileSync(config, '{ "plugin": [ "other-plugin", ], // trailing comma and comment\n}');
     expect(addOpencodePackagePlugin()).toBe(true);
     expect(JSON.parse(readFileSync(config, "utf8")).plugin).toContain("oh-my-plumb");
+  });
+
+  it("keeps the file shim on v1 where no package entrypoint loads", () => {
+    const config = path.join(
+      process.env.OH_MY_PLUMB_HOME_DIR ?? "",
+      ".config",
+      "opencode",
+      "opencode.json",
+    );
+    mkdirSync(path.dirname(config), { recursive: true });
+    writeFileSync(config, JSON.stringify({ plugin: [] }));
+    const target = path.join(
+      process.env.OH_MY_PLUMB_HOME_DIR ?? "",
+      ".config",
+      "opencode",
+      "plugins",
+      "oh-my-plumb.js",
+    );
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-repo-"));
+    const onlyV1 = process.env.PATH;
+    try {
+      process.env.PATH = "/nonexistent";
+      const out = installHost("opencode", root, false);
+      expect(out.what).toContain("plugin written");
+      expect(existsSync(target)).toBe(true);
+    } finally {
+      process.env.PATH = onlyV1;
+    }
   });
 
   it("records oh-my-plumb in the npm plugin list the host itself updates", () => {

@@ -203,9 +203,9 @@ Each host updates through its own package system; the host command moves oh-my-p
 
 ```
 pi update --extensions            # pi package (unpinned npm:oh-my-plumb)
-omp update --plugins              # omp plugin
-opencode plugin update            # OpenCode v2 npm package plugin (v1: opencode plugin oh-my-plumb)
-npm i -g oh-my-plumb@latest       # Claude Code, Codex: whatever copy oh-my-plumb resolves to on PATH
+omp plugin install oh-my-plumb --force   # omp plugin (update --plugins covers marketplace plugins only)
+opencode plugin update            # OpenCode v2 npm package plugin, from the next release on; v1 keeps its file shim
+npm i -g oh-my-plumb@latest && oh-my-plumb init   # Claude Code, Codex: hooks bake in absolute paths, so re-run init
 ```
 
 At session start the hook says once a day when a newer release is out, naming the command for your host. `npx oh-my-plumb@latest init` still works as the fallback: it re-points every host at the new version at once, which is also how a new release picks up hook-in changes such as a new hook event or the right plugin for the OpenCode version you now run. Your rubric and key are left as they are. npm can clear its npx cache at any time, so when `init` runs through npx it first copies itself to `~/.oh-my-plumb/runtime/<version>` and points the hooks at that copy. This covers npm's `npx` cache; `pnpm dlx`, `yarn dlx` and `bunx` keep packages in caches of their own and are not copied out yet, and a runtime copy trimmed by a disk cleaner is rebuilt on the next `init`.

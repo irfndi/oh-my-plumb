@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 import type { Host } from "oh-my-plumb-schema";
 import { globalOhMyPlumbDir } from "./paths.js";
 
@@ -13,13 +14,12 @@ export const UPDATE_CHECK_LATEST_ENV = "OH_MY_PLUMB_UPDATE_CHECK_LATEST";
 
 const stateFile = (): string => path.join(globalOhMyPlumbDir(), "update-check.json");
 
+const stateSchema = z.object({ checkedAt: z.number(), latest: z.string() });
+
 const readState = (): { checkedAt: number; latest: string } | undefined => {
   try {
-    const parsed: unknown = JSON.parse(readFileSync(stateFile(), "utf8"));
-    if (typeof parsed !== "object" || parsed === null) return undefined;
-    const { checkedAt, latest } = parsed as { checkedAt: unknown; latest: unknown };
-    if (typeof checkedAt !== "number" || typeof latest !== "string") return undefined;
-    return { checkedAt, latest };
+    const parsed = stateSchema.safeParse(JSON.parse(readFileSync(stateFile(), "utf8")));
+    return parsed.success ? parsed.data : undefined;
   } catch {
     return undefined;
   }
@@ -68,10 +68,10 @@ const newerThan = (latest: string, running: string): boolean => {
 /** One line per host: whatever copy runs, its own updater moves it. */
 export const UPDATE_COMMANDS: Record<Host, string> = {
   pi: "pi update --extensions",
-  omp: "omp update --plugins",
+  omp: "omp plugin install oh-my-plumb --force",
   opencode: "opencode plugin update",
-  claude: "npm i -g oh-my-plumb@latest",
-  codex: "npm i -g oh-my-plumb@latest",
+  claude: "npm i -g oh-my-plumb@latest && oh-my-plumb init",
+  codex: "npm i -g oh-my-plumb@latest && oh-my-plumb init",
 };
 
 /** A once-a-day nudge naming each host's own update command. Never throws. */

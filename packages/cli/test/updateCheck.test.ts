@@ -32,10 +32,10 @@ describe("updateCheck", () => {
   it("names every host's own update command", () => {
     expect(UPDATE_COMMANDS).toEqual({
       pi: "pi update --extensions",
-      omp: "omp update --plugins",
+      omp: "omp plugin install oh-my-plumb --force",
       opencode: "opencode plugin update",
-      claude: "npm i -g oh-my-plumb@latest",
-      codex: "npm i -g oh-my-plumb@latest",
+      claude: "npm i -g oh-my-plumb@latest && oh-my-plumb init",
+      codex: "npm i -g oh-my-plumb@latest && oh-my-plumb init",
     });
   });
 
@@ -68,6 +68,17 @@ describe("updateCheck", () => {
     );
     process.env[UPDATE_CHECK_LATEST_ENV] = "0.3.0-beta.10";
     expect(updateNotice("0.3.0-beta.2")).toContain("oh-my-plumb 0.3.0-beta.10 is available");
+  });
+
+  it("ignores a state file with the wrong shape", () => {
+    const dir = path.join(process.env.OH_MY_PLUMB_HOME_DIR ?? "", ".oh-my-plumb");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      path.join(dir, "update-check.json"),
+      JSON.stringify({ checkedAt: "yesterday", latest: 42 }),
+    );
+    process.env[UPDATE_CHECK_LATEST_ENV] = "0.3.0";
+    expect(updateNotice("0.2.0")).toContain("oh-my-plumb 0.3.0 is available");
   });
 
   it("writes the checked release to the state file", () => {
