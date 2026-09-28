@@ -648,7 +648,7 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
     expect(out.systemMessage).toContain("no API key");
   });
 
-  it("session-start stays quiet about updates when the registry is unreachable", () => {
+  it("session-start stays quiet about updates when the registry pins nothing", () => {
     const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-repo-"));
     writeFileSync(path.join(root, "AGENTS.md"), "- Use type, never interface\n");
     const r = run(

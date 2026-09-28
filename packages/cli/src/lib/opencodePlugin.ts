@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import JSON5 from "json5";
 import { installRoot } from "./packageRoot.js";
 import { homeDir } from "./paths.js";
 
@@ -48,8 +49,7 @@ const configFiles = (): string[] => {
 
 const readConfig = (file: string): Record<string, unknown> | undefined => {
   try {
-    const text = readFileSync(file, "utf8");
-    const parsed: unknown = JSON.parse(text);
+    const parsed: unknown = JSON5.parse(readFileSync(file, "utf8"));
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
     return parsed as Record<string, unknown>;
   } catch {
@@ -57,7 +57,7 @@ const readConfig = (file: string): Record<string, unknown> | undefined => {
   }
 };
 
-/** Records `oh-my-plumb` in the npm `plugin` list OpenCode itself installs and updates; true when the list changed. Existing entries are left alone. */
+/** Records `oh-my-plumb` in the npm `plugin` list OpenCode itself installs and updates; true when the list changed. Existing entries are left alone. Returns false on any write failure, so `init` keeps going. */
 export const addOpencodePackagePlugin = (): boolean => {
   for (const file of configFiles()) {
     const config = readConfig(file);
@@ -72,10 +72,14 @@ export const addOpencodePackagePlugin = (): boolean => {
       )
     )
       return false;
-    writeFileSync(
-      file,
-      JSON.stringify({ ...config, plugin: [...plugins, "oh-my-plumb"] }, null, 2) + "\n",
-    );
+    try {
+      writeFileSync(
+        file,
+        JSON.stringify({ ...config, plugin: [...plugins, "oh-my-plumb"] }, null, 2) + "\n",
+      );
+    } catch {
+      return false;
+    }
     return true;
   }
   return false;

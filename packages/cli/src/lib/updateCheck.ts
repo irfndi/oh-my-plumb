@@ -1,10 +1,15 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import type { Host } from "oh-my-plumb-schema";
 import { globalOhMyPlumbDir } from "./paths.js";
 
 /** How often session-start may mention an update; the check itself is one cached registry read. */
-const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+/** Registry reads must never be what a host waits on; the notice is informational. */
+export const REGISTRY_TIMEOUT_MS = 2_500;
+/** Tests pin the registry answer through the environment instead of the network. */
+export const UPDATE_CHECK_LATEST_ENV = "OH_MY_PLUMB_UPDATE_CHECK_LATEST";
 
 const stateFile = (): string => path.join(globalOhMyPlumbDir(), "update-check.json");
 
@@ -29,9 +34,13 @@ const writeState = (checkedAt: number, latest: string): void => {
   }
 };
 
+const npmOn = (platform = process.platform): string => (platform === "win32" ? "npm.cmd" : "npm");
+
 const latestFromRegistry = (timeoutMs: number): string | undefined => {
+  const pinned = process.env[UPDATE_CHECK_LATEST_ENV];
+  if (pinned !== undefined && pinned !== "") return pinned;
   try {
-    const out = execFileSync("npm", ["view", "oh-my-plumb", "version"], {
+    const out = execFileSync(npmOn(), ["view", "oh-my-plumb", "version"], {
       encoding: "utf8",
       timeout: timeoutMs,
     }).trim();
@@ -41,18 +50,20 @@ const latestFromRegistry = (timeoutMs: number): string | undefined => {
   }
 };
 
+const numericPrefix = (segment: string): number => {
+  const match = /^[0-9]+/.exec(segment);
+  return match === null ? 0 : Number(match[0]);
+};
+
 const newerThan = (latest: string, running: string): boolean => {
-  const parts = (v: string): number[] => v.split(".").map((n) => Number(n));
-  const a = parts(latest);
-  const b = parts(running);
+  const a = latest.split(".").map(numericPrefix);
+  const b = running.split(".").map(numericPrefix);
   for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
     const diff = (a[i] ?? 0) - (b[i] ?? 0);
     if (diff !== 0) return diff > 0;
   }
   return false;
 };
-
-import type { Host } from "oh-my-plumb-schema";
 
 /** One line per host: whatever copy runs, its own updater moves it. */
 export const UPDATE_COMMANDS: Record<Host, string> = {
@@ -68,7 +79,7 @@ export const updateNotice = (running: string, now = Date.now()): string | undefi
   let state = readState();
   if (state === undefined || now - state.checkedAt >= CHECK_INTERVAL_MS) {
     state = { checkedAt: now, latest: running };
-    const latest = latestFromRegistry(8_000);
+    const latest = latestFromRegistry(REGISTRY_TIMEOUT_MS);
     if (latest !== undefined) state = { checkedAt: now, latest };
     writeState(state.checkedAt, state.latest);
   }

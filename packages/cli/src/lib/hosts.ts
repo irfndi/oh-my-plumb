@@ -168,7 +168,8 @@ export const installHost = (host: Host, root: string, project: boolean): Install
       };
     }
     case "opencode": {
-      const added = addOpencodePackagePlugin();
+      // The npm package plugin loads in every project, so only a global install registers it.
+      const added = project ? false : addOpencodePackagePlugin();
       installOpencodePlugin(target);
       return {
         host,

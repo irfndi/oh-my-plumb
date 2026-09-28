@@ -88,6 +88,19 @@ const repoWithToolCallRule = (): string => {
 };
 
 describe("opencode package plugin", () => {
+  it("reads commented configs and reports a failed write instead of crashing", () => {
+    const config = path.join(
+      process.env.OH_MY_PLUMB_HOME_DIR ?? "",
+      ".config",
+      "opencode",
+      "opencode.json",
+    );
+    mkdirSync(path.dirname(config), { recursive: true });
+    writeFileSync(config, '{ "plugin": [ "other-plugin", ], // trailing comma and comment\n}');
+    expect(addOpencodePackagePlugin()).toBe(true);
+    expect(JSON.parse(readFileSync(config, "utf8")).plugin).toContain("oh-my-plumb");
+  });
+
   it("records oh-my-plumb in the npm plugin list the host itself updates", () => {
     const config = path.join(
       process.env.OH_MY_PLUMB_HOME_DIR ?? "",
