@@ -8,7 +8,11 @@ import {
   uninstallPiExtension,
   type PackageInstall,
 } from "./piPlugin.js";
-import { installOpencodePlugin, uninstallOpencodePlugin } from "./opencodePlugin.js";
+import {
+  addOpencodePackagePlugin,
+  installOpencodePlugin,
+  uninstallOpencodePlugin,
+} from "./opencodePlugin.js";
 import { hookScriptPath } from "./packageRoot.js";
 import { homeDir } from "./paths.js";
 import { hasOurHooks, hookSpecs, installHooks, uninstallHooks } from "./settings.js";
@@ -149,7 +153,7 @@ export const installHost = (host: Host, root: string, project: boolean): Install
       return {
         host,
         target,
-        what: `hooks written: ${specs.map((spec) => spec.event).join(", ")}`,
+        what: `hooks written: ${specs.map((spec) => spec.event).join(", ")}. They run whatever copy oh-my-plumb resolves to on PATH; npm i -g oh-my-plumb@latest (or the package manager you installed from) moves every host at once`,
       };
     }
     case "codex": {
@@ -163,9 +167,18 @@ export const installHost = (host: Host, root: string, project: boolean): Install
           "Codex trusts new hooks once: start codex, type /hooks, accept the oh-my-plumb entries.",
       };
     }
-    case "opencode":
+    case "opencode": {
+      const added = addOpencodePackagePlugin();
       installOpencodePlugin(target);
-      return { host, target, what: "plugin written; OpenCode loads it at the next start" };
+      return {
+        host,
+        target,
+        what:
+          added === true
+            ? "plugin written; OpenCode loads it at the next start. Also listed in the npm package plugins, so the check command for that host updates it"
+            : "plugin written; OpenCode loads it at the next start",
+      };
+    }
     case "pi": {
       const found = packageInstall(host, root);
       if (found !== undefined) return asPackage(host, target, found);

@@ -40,6 +40,47 @@ const shim = (source: string): string =>
     "",
   ].join("\n");
 
+/** Config roots OpenCode reads, first hit wins. */
+const configFiles = (): string[] => {
+  const base = path.join(homeDir(), ".config", "opencode");
+  return [path.join(base, "opencode.json"), path.join(base, "opencode.jsonc")];
+};
+
+const readConfig = (file: string): Record<string, unknown> | undefined => {
+  try {
+    const text = readFileSync(file, "utf8");
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Records `oh-my-plumb` in the npm `plugin` list OpenCode itself installs and updates; true when the list changed. Existing entries are left alone. */
+export const addOpencodePackagePlugin = (): boolean => {
+  for (const file of configFiles()) {
+    const config = readConfig(file);
+    if (config === undefined) continue;
+    const plugins = config["plugin"];
+    if (!Array.isArray(plugins)) continue;
+    if (
+      plugins.some(
+        (entry) =>
+          entry === "oh-my-plumb" ||
+          (typeof entry === "string" && entry.startsWith("oh-my-plumb@")),
+      )
+    )
+      return false;
+    writeFileSync(
+      file,
+      JSON.stringify({ ...config, plugin: [...plugins, "oh-my-plumb"] }, null, 2) + "\n",
+    );
+    return true;
+  }
+  return false;
+};
+
 export const installOpencodePlugin = (target: string): void => {
   mkdirSync(path.dirname(target), { recursive: true });
   writeFileSync(target, shim(pluginSourcePath()));

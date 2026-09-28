@@ -6,6 +6,17 @@ import { globalOhMyPlumbDir } from "./paths.js";
 import { readRegularText, writeRegularFile } from "./regularFile.js";
 
 /** Directory of the installed oh-my-plumb package (the one holding package.json). */
+export const runningVersion = (): string => {
+  try {
+    const version: unknown = JSON.parse(
+      readFileSync(path.join(packageRoot(), "package.json"), "utf8"),
+    ).version;
+    return typeof version === "string" ? version : "unknown";
+  } catch {
+    return "unknown";
+  }
+};
+
 export const packageRoot = (): string => {
   let dir = path.dirname(fileURLToPath(import.meta.url));
   for (;;) {
