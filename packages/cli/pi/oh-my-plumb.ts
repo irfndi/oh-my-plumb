@@ -201,7 +201,6 @@ export const packageInstalled = (host, cwd) => {
 };
 
 export default function ohMyPlumb(pi, options) {
-  // init passes shimFor; when the host also runs the package, this copy stands down.
   try {
     if (options?.shimFor !== undefined && packageInstalled(options.shimFor, process.cwd())) return;
   } catch {}
