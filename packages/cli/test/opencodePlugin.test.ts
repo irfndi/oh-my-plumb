@@ -130,6 +130,37 @@ describe("opencode package plugin", () => {
     }
   });
 
+  it("registers exactly once when the package entry is new", () => {
+    const config = path.join(
+      process.env.OH_MY_PLUMB_HOME_DIR ?? "",
+      ".config",
+      "opencode",
+      "opencode.json",
+    );
+    mkdirSync(path.dirname(config), { recursive: true });
+    writeFileSync(config, JSON.stringify({ plugin: ["other-plugin"] }));
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-repo-"));
+    const savedPath = process.env.PATH;
+    try {
+      const out = installHost("opencode", root, false);
+      expect(out.what).toContain("the file shim was removed");
+      expect(
+        existsSync(
+          path.join(
+            process.env.OH_MY_PLUMB_HOME_DIR ?? "",
+            ".config",
+            "opencode",
+            "plugins",
+            "oh-my-plumb.js",
+          ),
+        ),
+      ).toBe(false);
+      expect(JSON.parse(readFileSync(config, "utf8")).plugin).toContain("oh-my-plumb");
+    } finally {
+      process.env.PATH = savedPath;
+    }
+  });
+
   it("records oh-my-plumb in the npm plugin list the host itself updates", () => {
     const config = path.join(
       process.env.OH_MY_PLUMB_HOME_DIR ?? "",
