@@ -31,22 +31,25 @@ const packageVersion = (root: string): string => {
   return typeof version === "string" ? version : "unknown";
 };
 
-/** node_modules when npx ran this from ~/.npm/_npx/<16-hex>/node_modules; the hash segment rules out a project's own `_npx` folder. */
+/** node_modules when npx ran this from ~/.npm/_npx/<hash>/node_modules; the hash segment rules out a project's own `_npx` folder. */
 const npxNodeModules = (root: string): string | undefined => {
   const parent = path.dirname(root);
-  const hash = path.basename(path.dirname(parent));
   return path.basename(parent) === "node_modules" &&
-    path.basename(path.dirname(path.dirname(parent))) === "_npx" &&
-    /^[0-9a-f]{16}$/.test(hash)
+    path.basename(path.dirname(path.dirname(parent))) === "_npx"
     ? parent
     : undefined;
 };
 
 /** The files init and the hooks read. A copy missing any of them is rebuilt, not trusted. */
 const runtimeComplete = (copied: string): boolean =>
-  ["package.json", "dist/oh-my-plumb-hook.js", "dist/bin.js", "pi/oh-my-plumb.ts"].every((file) =>
-    existsSync(path.join(copied, file)),
-  );
+  [
+    "package.json",
+    "dist/oh-my-plumb-hook.js",
+    "dist/bin.js",
+    "pi/oh-my-plumb.ts",
+    "opencode/oh-my-plumb.mjs",
+    "opencode/oh-my-plumb-v2.js",
+  ].every((file) => existsSync(path.join(copied, file)));
 
 /**
  * Copies this package and its dependencies out of the npx cache, once per
@@ -63,13 +66,19 @@ const copyOutOfNpx = (root: string, nodeModules: string): string => {
     rmSync(staging, { recursive: true, force: true });
     cpSync(nodeModules, path.join(staging, "node_modules"), { recursive: true, dereference: true });
     mkdirSync(path.dirname(dir), { recursive: true });
+    const previous = `${dir}.previous`;
+    rmSync(previous, { recursive: true, force: true });
+    if (existsSync(dir)) renameSync(dir, previous);
     try {
-      rmSync(dir, { recursive: true, force: true });
       renameSync(staging, dir);
     } catch (error) {
-      // Another init finished the same copy first.
-      if (!runtimeComplete(copied)) throw error;
+      // Losing the race to another init is fine; losing the working copy is not.
+      if (!runtimeComplete(copied)) {
+        if (existsSync(previous)) renameSync(previous, dir);
+        throw error;
+      }
     }
+    rmSync(previous, { recursive: true, force: true });
   } catch (error) {
     throw new PlumbError("RUNTIME_COPY_FAILED", `could not copy ${nodeModules} to ${dir}`, {
       cause: error,

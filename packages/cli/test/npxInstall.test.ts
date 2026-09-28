@@ -84,6 +84,22 @@ describe("init run by npx (needs `pnpm build` first)", () => {
     expect(init.stderr).toBe("");
     expect(init.status).toBe(0);
     expect(init.stdout).toContain("npx cache");
+
+    // A trimmed runtime copy is rebuilt on the next init instead of being trusted.
+    const copyRoot = path.join(home, ".oh-my-plumb", "runtime");
+    const [version] = readdirSync(copyRoot);
+    const copiedPkg = path.join(copyRoot, version ?? "", "node_modules", "oh-my-plumb");
+    rmSync(path.join(copiedPkg, "dist", "bin.js"));
+    rmSync(path.join(copiedPkg, "opencode", "oh-my-plumb.mjs"));
+    const repair = spawnSync("node", [bin, "init", "claude", "pi", "--project"], {
+      cwd: root,
+      env,
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+    expect(repair.status).toBe(0);
+    expect(existsSync(path.join(copiedPkg, "dist", "bin.js"))).toBe(true);
+    expect(existsSync(path.join(copiedPkg, "opencode", "oh-my-plumb.mjs"))).toBe(true);
     rmSync(cache, { recursive: true, force: true });
 
     const runtime = path.join(home, ".oh-my-plumb", "runtime");
@@ -95,7 +111,6 @@ describe("init run by npx (needs `pnpm build` first)", () => {
     expect(command).toContain(runtime);
 
     // The runtime copy must stand alone: no dependency may reach outside it.
-    const [version] = readdirSync(runtime);
     const copiedModules = path.join(runtime, version ?? "", "node_modules");
     for (const dep of readdirSync(copiedModules)) {
       if (dep.startsWith(".")) continue;
