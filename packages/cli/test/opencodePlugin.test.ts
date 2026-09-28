@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type * as ChildProcessModule from "node:child_process";
@@ -131,17 +139,19 @@ describe("opencode package plugin", () => {
   });
 
   it("registers exactly once when the package entry is new", () => {
-    const config = path.join(
-      process.env.OH_MY_PLUMB_HOME_DIR ?? "",
-      ".config",
-      "opencode",
-      "opencode.json",
-    );
-    mkdirSync(path.dirname(config), { recursive: true });
-    writeFileSync(config, JSON.stringify({ plugin: ["other-plugin"] }));
+    const bareHome = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-barehome-"));
+    const bareConfig = path.join(bareHome, ".config", "opencode", "opencode.json");
+    mkdirSync(path.dirname(bareConfig), { recursive: true });
+    writeFileSync(bareConfig, JSON.stringify({ plugin: ["other-plugin"] }));
     const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-repo-"));
     const savedPath = process.env.PATH;
+    const savedHome = process.env.OH_MY_PLUMB_HOME_DIR;
+    const probeDir = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-opencode2-"));
+    writeFileSync(path.join(probeDir, "opencode2"), "#!/bin/sh\n");
+    chmodSync(path.join(probeDir, "opencode2"), 0o755);
     try {
+      process.env.PATH = `${probeDir}${path.delimiter}${savedPath}`;
+      process.env.OH_MY_PLUMB_HOME_DIR = bareHome;
       const out = installHost("opencode", root, false);
       expect(out.what).toContain("the file shim was removed");
       expect(
@@ -155,9 +165,11 @@ describe("opencode package plugin", () => {
           ),
         ),
       ).toBe(false);
-      expect(JSON.parse(readFileSync(config, "utf8")).plugin).toContain("oh-my-plumb");
+      expect(JSON.parse(readFileSync(bareConfig, "utf8")).plugin).toContain("oh-my-plumb");
     } finally {
       process.env.PATH = savedPath;
+      if (savedHome === undefined) delete process.env.OH_MY_PLUMB_HOME_DIR;
+      else process.env.OH_MY_PLUMB_HOME_DIR = savedHome;
     }
   });
 
