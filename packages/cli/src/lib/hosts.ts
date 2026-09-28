@@ -172,8 +172,8 @@ export const installHost = (host: Host, root: string, project: boolean): Install
       // The npm package plugin loads in every project, so only a global install registers it.
       // On v2 the package entry loads the same checks; the file shim stays as the fallback.
       const added = project || !opencodeIsV2() ? false : addOpencodePackagePlugin();
-      const stoodDown = added && uninstallOpencodePlugin(target);
-      if (!stoodDown) installOpencodePlugin(target);
+      if (added) uninstallOpencodePlugin(target);
+      else installOpencodePlugin(target);
       return {
         host,
         target,
