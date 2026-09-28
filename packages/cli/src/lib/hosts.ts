@@ -129,11 +129,10 @@ export type Installed = { host: Host; target: string; what: string; afterwards?:
 /** The host already loads oh-my-plumb as a package, so an extension file would make it run twice. */
 const asPackage = (host: "pi" | "omp", target: string, found: PackageInstall): Installed => {
   const removed = uninstallPiExtension(target) ? "; the old extension file was removed" : "";
-  const version = found.version === undefined ? "" : `, ${found.version} on disk`;
   const installed: Installed = {
     host,
     target: found.from,
-    what: `already installed as a package (${found.spec}${version}), so ${hostLabel(host)} runs that copy${removed}`,
+    what: `already installed as a package (${found.spec}, ${found.version} on disk)${removed}, so at most one copy runs`,
   };
   if (!found.pinned) return installed;
   return {

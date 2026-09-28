@@ -4,3 +4,52 @@ import { z } from "zod";
 export const hostSchema = z.enum(["claude", "codex", "opencode", "pi", "omp"]);
 export type Host = z.infer<typeof hostSchema>;
 export const HOSTS: readonly Host[] = hostSchema.options;
+
+const PI_SPEC = /^npm:oh-my-plumb(@.+)?$/;
+
+/** The host file shapes, so an edge parse in the CLI and the matchers below cannot drift. */
+export const piSettingsSchema = z
+  .object({ packages: z.array(z.unknown()).optional() })
+  .passthrough();
+export const ompManifestSchema = z
+  .object({
+    dependencies: z.record(z.string(), z.unknown()).optional(),
+    devDependencies: z.record(z.string(), z.unknown()).optional(),
+    optionalDependencies: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
+
+/** The version field of the on-disk package: installed means this parses. */
+export const packageVersionSchema = z.object({ version: z.string() });
+
+/** The one matcher behind `packageInstall` (CLI) and `packageInstalled` (pi extension), so the two cannot drift. */
+export const piListsPackage = (
+  settings: unknown,
+): { spec: string; pinned: boolean } | undefined => {
+  const parsed = piSettingsSchema.safeParse(settings);
+  if (!parsed.success) return undefined;
+  const entry = z.union([z.string(), z.object({ source: z.string() }).passthrough()]);
+  for (const raw of parsed.data.packages ?? []) {
+    const source = entry.safeParse(raw);
+    if (!source.success) continue;
+    const spec = typeof source.data === "string" ? source.data : source.data.source;
+    const match = PI_SPEC.exec(spec);
+    if (match !== null) return { spec, pinned: match[1] !== undefined };
+  }
+  return undefined;
+};
+
+/** Dev and optional sections count too: a dev-only plugin must not be missed. */
+export const ompListsPlugin = (manifest: unknown): string | undefined => {
+  const parsed = ompManifestSchema.safeParse(manifest);
+  if (!parsed.success) return undefined;
+  for (const section of [
+    parsed.data.dependencies,
+    parsed.data.devDependencies,
+    parsed.data.optionalDependencies,
+  ]) {
+    const range = section?.["oh-my-plumb"];
+    if (typeof range === "string") return range;
+  }
+  return undefined;
+};

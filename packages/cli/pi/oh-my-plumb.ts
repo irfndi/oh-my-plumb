@@ -9,6 +9,13 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  ompListsPlugin,
+  ompManifestSchema,
+  packageVersionSchema,
+  piListsPackage,
+  piSettingsSchema,
+} from "oh-my-plumb-schema";
 
 const HOOK = fileURLToPath(new URL("../dist/oh-my-plumb-hook.js", import.meta.url));
 
@@ -149,36 +156,48 @@ export const preToolCallResult = (out) => {
   return undefined;
 };
 
-const readJson = (file) => {
+const readJson = (schema, file) => {
   try {
-    return JSON.parse(readFileSync(file, "utf8"));
+    return schema.parse(JSON.parse(readFileSync(file, "utf8")));
   } catch {
     return undefined;
   }
 };
 
-const listsPiPackage = (settings) => {
-  const packages = readJson(settings)?.packages;
+const piInstalled = (settings, nodeModules) => {
+  const listed = piListsPackage(readJson(piSettingsSchema, settings));
   return (
-    Array.isArray(packages) &&
-    packages.some((entry) =>
-      /^npm:oh-my-plumb(@.+)?$/.test(typeof entry === "string" ? entry : String(entry?.source)),
-    )
+    listed !== undefined &&
+    readJson(packageVersionSchema, path.join(nodeModules, "oh-my-plumb", "package.json")) !==
+      undefined
   );
 };
 
-const listsOmpPlugin = (pluginsDir) =>
-  typeof readJson(path.join(pluginsDir, "package.json"))?.dependencies?.["oh-my-plumb"] ===
-  "string";
+const ompInstalled = (pluginsDir) => {
+  const range = ompListsPlugin(readJson(ompManifestSchema, path.join(pluginsDir, "package.json")));
+  return (
+    range !== undefined &&
+    readJson(
+      packageVersionSchema,
+      path.join(pluginsDir, "node_modules", "oh-my-plumb", "package.json"),
+    ) !== undefined
+  );
+};
 
-/** Keep in step with `packageInstall` in src/lib/piPlugin.ts. */
+/** Keep the file pairs in step with `packageInstall` in src/lib/piPlugin.ts; the matcher itself is shared. */
 export const packageInstalled = (host, cwd) => {
   const home = process.env.OH_MY_PLUMB_HOME_DIR ?? homedir();
   return host === "omp"
-    ? listsOmpPlugin(path.join(home, ".omp", "plugins")) ||
-        listsOmpPlugin(path.join(cwd, ".omp", "plugins"))
-    : listsPiPackage(path.join(home, ".pi", "agent", "settings.json")) ||
-        listsPiPackage(path.join(cwd, ".pi", "settings.json"));
+    ? ompInstalled(path.join(home, ".omp", "plugins")) ||
+        ompInstalled(path.join(cwd, ".omp", "plugins"))
+    : piInstalled(
+        path.join(home, ".pi", "agent", "settings.json"),
+        path.join(home, ".pi", "agent", "npm", "node_modules"),
+      ) ||
+        piInstalled(
+          path.join(cwd, ".pi", "settings.json"),
+          path.join(cwd, ".pi", "npm", "node_modules"),
+        );
 };
 
 export default function ohMyPlumb(pi, options) {

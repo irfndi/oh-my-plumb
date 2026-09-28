@@ -2,7 +2,14 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
-import { assertNever } from "oh-my-plumb-schema";
+import {
+  assertNever,
+  ompListsPlugin,
+  ompManifestSchema,
+  packageVersionSchema,
+  piListsPackage,
+  piSettingsSchema,
+} from "oh-my-plumb-schema";
 import { installRoot } from "./packageRoot.js";
 import { homeDir } from "./paths.js";
 
@@ -41,16 +48,6 @@ export const uninstallPiExtension = (target: string): boolean => {
   return true;
 };
 
-const piSettingsSchema = z.object({
-  packages: z
-    .array(z.union([z.string(), z.object({ source: z.string() }).passthrough()]))
-    .optional(),
-});
-const pluginsManifestSchema = z.object({
-  dependencies: z.record(z.string(), z.string()).optional(),
-});
-const versionSchema = z.object({ version: z.string() });
-
 const readJson = <T>(file: string, schema: z.ZodType<T>): T | undefined => {
   try {
     return schema.parse(JSON.parse(readFileSync(file, "utf8")));
@@ -63,42 +60,37 @@ const readJson = <T>(file: string, schema: z.ZodType<T>): T | undefined => {
 export type PackageInstall = {
   spec: string;
   from: string;
-  version: string | undefined;
+  version: string;
   pinned: boolean;
 };
 
-const PI_SPEC = /^npm:oh-my-plumb(@.+)?$/;
-
 const piPackage = (settings: string, nodeModules: string): PackageInstall | undefined => {
-  const spec = (readJson(settings, piSettingsSchema)?.packages ?? [])
-    .map((entry) => (typeof entry === "string" ? entry : entry.source))
-    .find((source) => PI_SPEC.test(source));
-  if (spec === undefined) return undefined;
-  return {
-    spec,
-    from: settings,
-    version: readJson(path.join(nodeModules, "oh-my-plumb", "package.json"), versionSchema)
-      ?.version,
-    pinned: PI_SPEC.exec(spec)?.[1] !== undefined,
-  };
+  const listed = piListsPackage(readJson(settings, piSettingsSchema));
+  const version = readJson(
+    path.join(nodeModules, "oh-my-plumb", "package.json"),
+    packageVersionSchema,
+  )?.version;
+  // A listed package with no copy on disk has nothing to run, so the extension must not stand down.
+  if (listed === undefined || version === undefined) return undefined;
+  return { spec: listed.spec, from: settings, version, pinned: listed.pinned };
 };
 
 const ompPlugin = (pluginsDir: string): PackageInstall | undefined => {
-  const range = readJson(path.join(pluginsDir, "package.json"), pluginsManifestSchema)
-    ?.dependencies?.["oh-my-plumb"];
-  if (range === undefined) return undefined;
+  const range = ompListsPlugin(readJson(path.join(pluginsDir, "package.json"), ompManifestSchema));
+  const version = readJson(
+    path.join(pluginsDir, "node_modules", "oh-my-plumb", "package.json"),
+    packageVersionSchema,
+  )?.version;
+  if (range === undefined || version === undefined) return undefined;
   return {
     spec: `oh-my-plumb@${range}`,
     from: path.join(pluginsDir, "package.json"),
-    version: readJson(
-      path.join(pluginsDir, "node_modules", "oh-my-plumb", "package.json"),
-      versionSchema,
-    )?.version,
+    version,
     pinned: false,
   };
 };
 
-/** Keep in step with `packageInstalled` in pi/oh-my-plumb.ts. */
+/** Keep the file pairs in step with `packageInstalled` in pi/oh-my-plumb.ts; the matcher itself is shared. */
 export const packageInstall = (host: "pi" | "omp", root: string): PackageInstall | undefined => {
   switch (host) {
     case "pi": {

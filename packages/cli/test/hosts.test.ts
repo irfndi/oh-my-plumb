@@ -271,18 +271,25 @@ describe("hosts", () => {
     writeFileSync(piSettings, JSON.stringify({ packages: ["npm:oh-my-plumb@0.1.2"] }));
     mkdirSync(path.dirname(ompManifest), { recursive: true });
     writeFileSync(ompManifest, JSON.stringify({ dependencies: { "oh-my-plumb": "^0.2.0" } }));
+    // Listed but not on disk: a stale settings file must not silently disable checks.
+    for (const host of ["pi", "omp"] as const)
+      expect(await handlersFrom(installTarget(host, root, false))).toBeGreaterThan(0);
+    expect(installHost("pi", root, false).what).toContain("extension written");
+
+    // The package, then init: init removes its old file and says which copy runs.
+    const copy = (nodeModules: string, version: string): void => {
+      mkdirSync(path.join(nodeModules, "oh-my-plumb"), { recursive: true });
+      writeFileSync(
+        path.join(nodeModules, "oh-my-plumb", "package.json"),
+        JSON.stringify({ name: "oh-my-plumb", version }),
+      );
+    };
+    copy(path.join(home, ".pi", "agent", "npm", "node_modules"), "0.1.2");
+    copy(path.join(home, ".omp", "plugins", "node_modules"), "0.2.0");
     for (const host of ["pi", "omp"] as const)
       expect(await handlersFrom(installTarget(host, root, false))).toBe(0);
     expect(await handlersFrom(packaged)).toBeGreaterThan(0);
 
-    // The package, then init: init removes its old file and says which copy runs.
-    mkdirSync(path.join(home, ".pi", "agent", "npm", "node_modules", "oh-my-plumb"), {
-      recursive: true,
-    });
-    writeFileSync(
-      path.join(home, ".pi", "agent", "npm", "node_modules", "oh-my-plumb", "package.json"),
-      JSON.stringify({ name: "oh-my-plumb", version: "0.1.2" }),
-    );
     const pi = installHost("pi", root, false);
     expect(existsSync(installTarget("pi", root, false))).toBe(false);
     expect(pi.target).toBe(piSettings);
@@ -296,5 +303,21 @@ describe("hosts", () => {
     // A project install is skipped too: the personal package already loads here.
     installHost("pi", root, true);
     expect(existsSync(installTarget("pi", root, true))).toBe(false);
+  });
+
+  it("counts an omp plugin recorded under devDependencies", () => {
+    const pluginsDir = path.join(home, ".omp", "plugins");
+    mkdirSync(path.join(pluginsDir, "node_modules", "oh-my-plumb"), { recursive: true });
+    writeFileSync(
+      path.join(pluginsDir, "node_modules", "oh-my-plumb", "package.json"),
+      JSON.stringify({ name: "oh-my-plumb", version: "0.2.0" }),
+    );
+    mkdirSync(pluginsDir, { recursive: true });
+    writeFileSync(
+      path.join(pluginsDir, "package.json"),
+      JSON.stringify({ devDependencies: { "oh-my-plumb": "^0.2.0" } }),
+    );
+    expect(installHost("omp", root, false).what).toContain("oh-my-plumb@^0.2.0");
+    expect(existsSync(installTarget("omp", root, false))).toBe(false);
   });
 });
