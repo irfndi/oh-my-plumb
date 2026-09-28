@@ -13,7 +13,7 @@ import path from "node:path";
 import type * as ChildProcessModule from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
-import { preToolUseInputSchema, toolCallPostToolUseSchema } from "oh-my-plumb-schema";
+import { PlumbError, preToolUseInputSchema, toolCallPostToolUseSchema } from "oh-my-plumb-schema";
 import { addOpencodePackagePlugin } from "../src/lib/opencodePlugin.js";
 import { installHost } from "../src/lib/hosts.js";
 import { readRubric } from "../src/lib/rubricFile.js";
@@ -299,7 +299,7 @@ describe("opencode plugin tool calls", () => {
     expect(toolCallRulesFor(nested)).toBe(true);
     const rubric = path.join(root, ".oh-my-plumb", "rubric.json");
     const read = readRubric(rubric);
-    if (read.kind !== "ok") throw new Error("fixture rubric did not parse");
+    if (read.kind !== "ok") throw new PlumbError("RUBRIC_INVALID", "fixture rubric did not parse");
     writeFileSync(
       rubric,
       JSON.stringify({
