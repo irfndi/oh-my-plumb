@@ -12,9 +12,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type * as ChildProcessModule from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { z } from "zod";
 import { preToolUseInputSchema, toolCallPostToolUseSchema } from "oh-my-plumb-schema";
 import { addOpencodePackagePlugin } from "../src/lib/opencodePlugin.js";
 import { installHost } from "../src/lib/hosts.js";
+import { readRubric } from "../src/lib/rubricFile.js";
 
 // A real model verdict is the only thing that makes the hook deny a call, and no
 // offline test can reach the gateway. With a reply set here the hook child is
@@ -39,6 +41,13 @@ vi.mock("node:child_process", async (importOriginal) => {
 });
 
 // A computed specifier keeps tsc out of the plugin, which OpenCode loads as untyped JS.
+const pluginListSchema = z.object({ plugin: z.array(z.string()) });
+
+const pluginListIn = (file: string): string[] => {
+  const parsed = pluginListSchema.safeParse(JSON.parse(readFileSync(file, "utf8")));
+  return parsed.success ? parsed.data.plugin : [];
+};
+
 const opencodePlugin = "../opencode/oh-my-plumb.mjs";
 const {
   toolCallPayload,
@@ -107,7 +116,7 @@ describe("opencode package plugin", () => {
     mkdirSync(path.dirname(config), { recursive: true });
     writeFileSync(config, '{ "plugin": [ "other-plugin", ], // trailing comma and comment\n}');
     expect(addOpencodePackagePlugin()).toBe(true);
-    expect(JSON.parse(readFileSync(config, "utf8")).plugin).toContain("oh-my-plumb");
+    expect(pluginListIn(config)).toContain("oh-my-plumb");
   });
 
   it("keeps the file shim on v1 where no package entrypoint loads", () => {
@@ -165,7 +174,7 @@ describe("opencode package plugin", () => {
           ),
         ),
       ).toBe(false);
-      expect(JSON.parse(readFileSync(bareConfig, "utf8")).plugin).toContain("oh-my-plumb");
+      expect(pluginListIn(bareConfig)).toContain("oh-my-plumb");
     } finally {
       process.env.PATH = savedPath;
       if (savedHome === undefined) delete process.env.OH_MY_PLUMB_HOME_DIR;
@@ -183,10 +192,7 @@ describe("opencode package plugin", () => {
     mkdirSync(path.dirname(config), { recursive: true });
     writeFileSync(config, JSON.stringify({ plugin: ["other-plugin"] }));
     expect(addOpencodePackagePlugin()).toBe(true);
-    expect(JSON.parse(readFileSync(config, "utf8")).plugin).toEqual([
-      "other-plugin",
-      "oh-my-plumb",
-    ]);
+    expect(pluginListIn(config)).toEqual(["other-plugin", "oh-my-plumb"]);
     expect(addOpencodePackagePlugin()).toBe(false);
   });
 
@@ -200,7 +206,7 @@ describe("opencode package plugin", () => {
     mkdirSync(path.dirname(config), { recursive: true });
     writeFileSync(config, JSON.stringify({ plugin: ["oh-my-plumb@1.2.3"] }));
     expect(addOpencodePackagePlugin()).toBe(false);
-    expect(JSON.parse(readFileSync(config, "utf8")).plugin).toEqual(["oh-my-plumb@1.2.3"]);
+    expect(pluginListIn(config)).toEqual(["oh-my-plumb@1.2.3"]);
   });
 });
 
@@ -292,17 +298,21 @@ describe("opencode plugin tool calls", () => {
     mkdirSync(nested, { recursive: true });
     expect(toolCallRulesFor(nested)).toBe(true);
     const rubric = path.join(root, ".oh-my-plumb", "rubric.json");
-    const parsed = JSON.parse(readFileSync(rubric, "utf8"));
+    const read = readRubric(rubric);
+    if (read.kind !== "ok") throw new Error("fixture rubric did not parse");
     writeFileSync(
       rubric,
-      JSON.stringify({ ...parsed, rules: [{ ...parsed.rules[0], status: "disabled" }] }),
+      JSON.stringify({
+        ...read.rubric,
+        rules: [{ ...read.rubric.rules[0], status: "disabled" }],
+      }),
     );
     expect(toolCallRulesFor(nested)).toBe(false);
-    writeFileSync(rubric, JSON.stringify({ ...parsed, rules: [] }));
+    writeFileSync(rubric, JSON.stringify({ ...read.rubric, rules: [] }));
     expect(toolCallRulesFor(nested)).toBe(false);
     const home = process.env.OH_MY_PLUMB_HOME_DIR ?? "";
     mkdirSync(path.join(home, ".oh-my-plumb"), { recursive: true });
-    writeFileSync(path.join(home, ".oh-my-plumb", "global.json"), JSON.stringify(parsed));
+    writeFileSync(path.join(home, ".oh-my-plumb", "global.json"), JSON.stringify(read.rubric));
     try {
       expect(toolCallRulesFor(nested)).toBe(true);
     } finally {
