@@ -7,7 +7,6 @@ export const HOSTS: readonly Host[] = hostSchema.options;
 
 const PI_SPEC = /^npm:oh-my-plumb(@.+)?$/;
 
-/** The host file shapes, so an edge parse in the CLI and the matchers below cannot drift. */
 export const piSettingsSchema = z
   .object({ packages: z.array(z.unknown()).optional() })
   .passthrough();
@@ -19,7 +18,6 @@ export const ompManifestSchema = z
   })
   .passthrough();
 
-/** The version field of the on-disk package: installed means this parses. */
 export const packageVersionSchema = z.object({ version: z.string() });
 
 /** The one matcher behind `packageInstall` (CLI) and `packageInstalled` (pi extension), so the two cannot drift. */
@@ -39,7 +37,6 @@ export const piListsPackage = (
   return undefined;
 };
 
-/** Dev and optional sections count too: a dev-only plugin must not be missed. */
 export const ompListsPlugin = (manifest: unknown): string | undefined => {
   const parsed = ompManifestSchema.safeParse(manifest);
   if (!parsed.success) return undefined;
