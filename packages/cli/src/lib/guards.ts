@@ -1,10 +1,14 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { assertNever, type Rule } from "oh-my-plumb-schema";
+import vm from "node:vm";
+import { assertNever, type CodeCheck, type Rule } from "oh-my-plumb-schema";
 import { z } from "zod";
 import { callMcpGuard, type McpLaunch } from "./mcp.js";
 import { debug } from "./output.js";
+import { readRegularText } from "./regularFile.js";
+import { globApplies } from "./scope.js";
+import type { Verdict } from "oh-my-plumb-schema";
 
 /**
  * Phase 3: MCP dispatch + skill-as-guardrail execution.
@@ -38,6 +42,8 @@ export type GuardRoute = {
   tool?: string;
   /** Resolved skill guard entry: the absolute path of `<dir>/<name>/guard.*`. */
   skill?: string;
+  /** Inline code check, run in-process under a sandbox. */
+  code?: CodeCheck;
 };
 
 export type GuardHit = { ruleId: string; source: string; reason: string };
@@ -68,7 +74,11 @@ const matches = (trigger: string, file: string): boolean => {
 };
 
 export const routesForFile = (routes: readonly GuardRoute[], file: string): GuardRoute[] =>
-  routes.filter((r) => matches(r.trigger, file));
+  routes.filter((r) =>
+    // Code checks scope the way rule scopes do (picomatch, `**/*.ts` matches a
+    // top-level file); executable guards keep the matcher they always had.
+    r.code !== undefined ? globApplies(r.trigger, file) : matches(r.trigger, file),
+  );
 
 /** Narrow one `{ isError, content }` result, shared by the line and MCP paths. */
 export const guardOutputOf = (
@@ -119,10 +129,13 @@ export const resolveSkillGuard = (
 
 export const SKILL_DIRS = [".pi/skills", "skills", ".claude/skills"];
 
-/** Guard routes from the rubric: one per guard check, keyed to the rule that owns it. */
+/** Guard routes from the rubric: one per guard or code check, keyed to the rule that owns it. */
 export const guardRoutes = (rules: readonly Rule[], root: string): GuardRoute[] =>
-  rules.flatMap((rule) => {
-    if (rule.status !== "active" || rule.check.type !== "guard") return [];
+  rules.flatMap((rule): GuardRoute[] => {
+    if (rule.status !== "active") return [];
+    if (rule.check.type === "code")
+      return [{ ruleId: rule.id, trigger: rule.check.scope, code: rule.check }];
+    if (rule.check.type !== "guard") return [];
     const { command, server, tool, skill, scope } = rule.check;
     const entry = skill === undefined ? undefined : resolveSkillGuard(root, SKILL_DIRS, skill);
     return [
@@ -168,11 +181,11 @@ const commandTarget = (command: readonly string[]): CommandTarget => {
  */
 export const routeGaps = (
   root: string,
-  route: Pick<GuardRoute, "command" | "server" | "skill">,
+  route: Pick<GuardRoute, "command" | "server" | "skill" | "code">,
   mcpServers: readonly string[],
 ): string[] => {
   const gaps: string[] = [];
-  const { command, server, skill } = route;
+  const { command, server, skill, code } = route;
   if (server !== undefined && !mcpServers.some((detected) => detected.endsWith(`:${server}`)))
     gaps.push(`MCP server "${server}" is not configured here`);
   if (command !== undefined) {
@@ -191,7 +204,7 @@ export const routeGaps = (
       default:
         assertNever(target);
     }
-  } else if (skill === undefined && server === undefined) {
+  } else if (skill === undefined && server === undefined && code === undefined) {
     gaps.push("no guard command resolves here");
   }
   return gaps;
@@ -199,6 +212,32 @@ export const routeGaps = (
 
 /** Guard deadline: a guard that hangs is a skip, never a hold. */
 export const GUARD_TIMEOUT_MS = 2_000;
+
+/**
+ * The code rules in scope of one file, run against the file's content on disk,
+ * as act-band verdicts. The `check` command uses this to agree with the hooks:
+ * a code rule fires the same way in both. Missing or unreadable file: no hits.
+ */
+export const codeCheckVerdicts = async (
+  rules: readonly Rule[],
+  root: string,
+  file: string,
+): Promise<Verdict[]> => {
+  const pairs = rules.flatMap((rule) =>
+    rule.status === "active" && rule.check.type === "code" && globApplies(rule.check.scope, file)
+      ? [{ ruleId: rule.id, check: rule.check }]
+      : [],
+  );
+  if (pairs.length === 0) return [];
+  const text = readRegularText(path.resolve(root, file));
+  if (text === undefined) return [];
+  const hits = await Promise.all(
+    pairs.map(({ ruleId, check }) => runCodeCheck(ruleId, check, file, text)),
+  );
+  return hits.flatMap((hit) =>
+    hit === undefined ? [] : [{ ruleId: hit.ruleId, probability: 1, band: "act" as const }],
+  );
+};
 
 /**
  * Run one guard command with FILE_PATH in env and the file text on stdin.
@@ -289,4 +328,71 @@ export const runMcpGuard = async (
   const out = result === undefined ? undefined : guardOutputOf(result);
   if (out?.isError !== true) return undefined;
   return { ruleId, source: ruleId, reason: `${ruleId}: ${file}: ${out.content.slice(0, 500)}` };
+};
+
+/** CPU wall for one code check: counting ops take microseconds, so past this the script is stuck. */
+export const CODE_CHECK_TIMEOUT_MS = 500;
+
+/** Only this exact shape blocks; anything else a script returns is a pass. */
+const codeHitSchema = z.object({ isError: z.literal(true), content: z.string().optional() });
+
+/**
+ * Inline code check: run the rubric's own predicate over the edited file.
+ *
+ * The script is the body of a `(path, contents) => …` function. It runs once,
+ * in a fresh vm realm, strictly, over a null-prototype sandbox: the script
+ * sees only its two string arguments and its realm's own JS builtins — no
+ * require, process or filesystem, and no host object whose prototype chain
+ * reaches back into ours (`globalThis.constructor.constructor` over a plain
+ * `{}` sandbox is the known way out of node:vm).
+ *
+ * A throw, a timeout, or anything but a `{ isError: true, content }` answer
+ * is a silent pass, like every guard. A rejection the script left dangling
+ * (a dynamic `import()`, an orphaned promise) lands after the vm call, so the
+ * drain below catches it while the guard listener is on: without it, an
+ * unhandled rejection would crash the whole hook. node:vm is a fence, not a
+ * wall; the rubric is still code the repo author trusts.
+ */
+export const runCodeCheck = async (
+  ruleId: string,
+  check: CodeCheck,
+  file: string,
+  text: string,
+): Promise<GuardHit | undefined> => {
+  // The file and text go in as source, not as sandbox properties: a
+  // contextified host object would hand the script the escape above.
+  const source = `"use strict";\n(function (path, contents) {\n${check.script}\n})(${JSON.stringify(file)}, ${JSON.stringify(text)})`;
+  let result: unknown;
+  let dangling: unknown;
+  const onRejection = (reason: unknown): void => {
+    dangling ??= reason;
+  };
+  process.on("unhandledRejection", onRejection);
+  try {
+    result = vm.runInNewContext(source, Object.create(null), {
+      timeout: CODE_CHECK_TIMEOUT_MS,
+    });
+    // One turn of the event loop, guarded, lets whatever the script started settle.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  } catch (error) {
+    debug(
+      `code check ${ruleId} skipped: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
+  } finally {
+    process.off("unhandledRejection", onRejection);
+  }
+  if (dangling !== undefined)
+    debug(
+      `code check ${ruleId} left a rejected promise behind: ${
+        dangling instanceof Error ? dangling.message : String(dangling)
+      }`,
+    );
+  const hit = codeHitSchema.safeParse(result);
+  if (!hit.success) return undefined;
+  const content =
+    hit.data.content === undefined || hit.data.content.trim() === ""
+      ? check.text
+      : hit.data.content;
+  return { ruleId, source: ruleId, reason: `${ruleId}: ${file}: ${content.slice(0, 500)}` };
 };

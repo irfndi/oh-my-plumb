@@ -20,3 +20,9 @@ export const ruleAppliesTo = (rule: Pick<Rule, "scope">, relativePath: string): 
 /** Tool name against a tool-call rule's globs, ignoring case: hosts spell `Bash` and `bash`. No scope means every tool. */
 export const ruleAppliesToTool = (rule: Pick<Rule, "scope">, tool: string): boolean =>
   rule.scope === undefined || matcherFor(rule.scope, true)(tool);
+
+/** One glob string (whitespace-separated patterns allowed) against a repo-relative path. */
+export const globApplies = (glob: string, relativePath: string): boolean => {
+  const patterns = glob.split(/\s+/).filter(Boolean);
+  return patterns.length > 0 && matcherFor(patterns)(relativePath);
+};

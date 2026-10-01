@@ -40,12 +40,37 @@ Ask the questions in this order and stop at the first yes.
 
 1. Is the rule about how you call a tool: which command you run, with which arguments, rather than anything written in a file? Then `check.type` is `model`, `target` is `toolCall`, and `scope` holds tool names instead of file globs, for example `["Bash"]`. Tool names match without regard to case, so `Bash` also covers the `bash` that pi and OpenCode send; add any other name a host gives the same tool. The judge reads one recorded call: the tool's name plus the input it was called with. Worked examples: "Always prefix shell commands with `rtk`" is a tool-call rule scoped to `["Bash"]`, and "Use pnpm, not npm" is a tool-call rule scoped to `["Bash"]`. A rule about what a file contains ("no `npm install` in package.json scripts") is not this bucket; it keeps going down the list.
 2. Can a linter enforce it exactly? Then `check.type` is `lint`. Examples: `interface Foo` when the rule says use `type`; `as` casts; `fetch(`; `process.env.`; `Date.now()`; `console.log`; `npm install`. Put the linter rule that enforces it in `how` (`@typescript-eslint/consistent-type-definitions`, `no-restricted-syntax`, a stylelint rule) or, failing that, the AST or grep shape, and a `pattern` as a hint when one is obvious. oh-my-plumb records these and reports them for the user's own linter; it never runs them and never sends them to the model. The judge is for what a linter cannot express.
-3. Does the rule need counting or measuring: line lengths, line counts, selector counts, nesting depth, alphabetical or length order (imports or props ordered by line length is the common one)? That is mechanical work, and the judge cannot count. If question 2 found no regex for it, `check.type` is `deferred` with reason "needs a script, not a judge". Do not turn it into a model question; it will score about 0.4 on everything.
+3. Does the rule need counting or measuring: line lengths, line counts, selector counts, nesting depth, alphabetical or length order (imports or props ordered by line length is the common one)? That is mechanical work, and the judge cannot count. Do not turn it into a model question; it will score about 0.4 on everything. Write it as a `code` check instead (next section).
 4. Can a judge answer it by looking at a change and nothing else? Then `check.type` is `model`. Most style, structure, comment, error handling, naming, and "do not do X" rules land here.
 5. Does answering need the rest of the repository? "Reuse existing error codes", "follow existing patterns", "any visual pattern in two places becomes a shared component", "check whether a helper already exists". Then `check.type` is `deferred` with a one line `reason`. These are real rules that this version cannot check on a diff, and the report says so.
 6. Is it about the conversation or the process rather than the code? "Ask when unsure", "state a plan", "run the tests before you finish", "clean up processes you started". Then `check.type` is `unenforceable` with a `reason`. These rules govern how a whole session is run, and no single diff or recorded call settles them. "Ask when unsure" is about the conversation itself, so there is nothing in front of the checker to score.
 
 Every statement lands somewhere. Count them: the summary you give the user is the bucket counts `validate` prints, where tool-call rules count under "checked by Jev" with the other model rules.
+
+### Writing a code check
+
+A `code` check is a small predicate the hook runs itself: exact, free, and portable. (An executable guard script needs a shebang and an executable bit and only runs on macOS and Linux; a code check runs wherever the hook runs.) The `script` field is the body of a function the hook calls as `fn(path, contents)` — the edited file's repo-relative path and its new text, both strings. There is nothing else in reach: no imports, no filesystem, no network. String and array methods are enough.
+
+- Return `{ "isError": true, "content": "..." }` to block. The content is what the agent reads, so make it an instruction: name the offending lines.
+- Anything else — `undefined`, nothing, `{ "isError": false }` — passes the file.
+- A thrown error, a 0.5 s overrun, or a returned shape you did not intend counts as a pass, never as a violation. Write the script so the clean path is the obvious one.
+- Keep it under about 25 lines. Quote the rule in `check.text`, and put the file glob in `check.scope`: a code check never uses the rule-level `scope`.
+
+```json
+{
+  "id": "max-line-length",
+  "text": "Keep lines under 120 characters.",
+  "source": { "path": "AGENTS.md", "line": 7 },
+  "check": {
+    "type": "code",
+    "scope": "**/*.{ts,tsx}",
+    "text": "Keep lines under 120 characters.",
+    "script": "const long = contents.split(\"\\n\").map((line, i) => [line.length, i + 1]).filter(([n]) => n > 120);\nreturn long.length === 0 ? { isError: false } : { isError: true, content: `Lines over 120 chars: ${long.map(([, n]) => n).join(", ")}. Break them up.` };"
+  }
+}
+```
+
+If the rule needs information the file alone cannot give — the list of codes that already exist, a sibling module's shape — a script cannot have it either. That is the `deferred` bucket (question 5), not a code check.
 
 ## Step 4. Write the question for each model rule
 
@@ -178,6 +203,17 @@ Write the file the hook named (`.oh-my-plumb/rubric.json` for the project, `~/.o
           "type": "boolean",
           "instructions": "Does this command run without the `rtk` prefix?"
         }
+      }
+    },
+    {
+      "id": "ordered-imports",
+      "text": "Imports are ordered by line length.",
+      "source": { "path": "AGENTS.md", "line": 30 },
+      "check": {
+        "type": "code",
+        "scope": "**/*.{ts,tsx}",
+        "text": "Imports are ordered by line length.",
+        "script": "const lens = contents.split(\"\\n\").filter((l) => /^import /.test(l)).map((l) => l.length);\nfor (let i = 1; i < lens.length; i++) if (lens[i] < lens[i - 1]) return { isError: true, content: \"Imports must be ordered by line length. Sort the import block.\" };\nreturn { isError: false };"
       }
     },
     {

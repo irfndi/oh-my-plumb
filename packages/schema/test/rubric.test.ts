@@ -22,6 +22,45 @@ const guardRule = {
 };
 
 describe("rubricSchema", () => {
+  it("accepts a code check, and rejects a rule-level scope on one", () => {
+    const parsed = rubricSchema.parse({
+      ...base,
+      rules: [
+        {
+          id: "max-line-length",
+          text: "Keep lines under 120 characters.",
+          source: { path: "AGENTS.md", line: 7 },
+          check: {
+            type: "code",
+            scope: "**/*.{ts,tsx}",
+            text: "Keep lines under 120 characters.",
+            script:
+              "return contents.length <= 120 ? { isError: false } : { isError: true, content: 'too long' };",
+          },
+        },
+      ],
+    });
+    expect(parsed.rules[0]?.check.type).toBe("code");
+    const rejected = rubricSchema.safeParse({
+      ...base,
+      rules: [
+        {
+          id: "max-line-length",
+          text: "Keep lines under 120 characters.",
+          source: { path: "AGENTS.md" },
+          scope: ["**/*.ts"],
+          check: {
+            type: "code",
+            scope: "**/*.ts",
+            text: "Keep lines under 120 characters.",
+            script: "return { isError: false };",
+          },
+        },
+      ],
+    });
+    expect(rejected.success).toBe(false);
+  });
+
   it("accepts a lint rule, a model rule with a phase, and the two reporting buckets", () => {
     const parsed = rubricSchema.parse({
       ...base,

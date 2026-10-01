@@ -6,6 +6,7 @@ import { runCheckCommand } from "./commands/check.js";
 import { runCompile } from "./commands/compile.js";
 import { runInit } from "./commands/init.js";
 import { runLogin } from "./commands/login.js";
+import { runMcp } from "./commands/mcp.js";
 import { runReplay } from "./commands/replay.js";
 import { runReport } from "./commands/report.js";
 import { runRubric } from "./commands/rubric.js";
@@ -38,6 +39,8 @@ const main = async (): Promise<number> => {
       return runAudit(rest);
     case "report":
       return runReport(rest);
+    case "mcp":
+      return runMcp(rest);
     case "replay":
       return runReplay(rest);
     case "bench":

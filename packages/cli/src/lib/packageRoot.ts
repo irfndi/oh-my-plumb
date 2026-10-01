@@ -56,6 +56,7 @@ const runtimeComplete = (copied: string): boolean =>
     "package.json",
     "dist/oh-my-plumb-hook.js",
     "dist/bin.js",
+    "dist/mcp-server.js",
     "pi/oh-my-plumb.ts",
     "opencode/oh-my-plumb.mjs",
     "opencode/oh-my-plumb-v2.js",

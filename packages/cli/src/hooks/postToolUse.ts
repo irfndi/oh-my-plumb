@@ -17,6 +17,7 @@ import {
   GUARD_TIMEOUT_MS,
   guardRoutes,
   routesForFile,
+  runCodeCheck,
   runGuard,
   runMcpGuard,
   type GuardHit,
@@ -152,6 +153,13 @@ const handleEdit = async (input: PostToolUseInput): Promise<HookOutput> => {
                 GUARD_TIMEOUT_MS,
                 root,
               ).then((hit) => (hit === undefined ? undefined : { relative, hit })),
+            );
+          }
+          if (r.code !== undefined) {
+            jobs.push(
+              runCodeCheck(r.ruleId, r.code, relative, edit.after ?? "").then((hit) =>
+                hit === undefined ? undefined : { relative, hit },
+              ),
             );
           }
           return jobs;

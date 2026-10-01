@@ -20,9 +20,10 @@ const statusCell = (status: RuleStatus): Cell => {
   }
 };
 
-/** A guard's trigger is its check.scope; every other rule scopes with rule.scope. */
+/** A guard's or code check's trigger is its check.scope; every other rule scopes with rule.scope. */
 const scopeCell = (rule: Rule): Cell => {
-  const scope = rule.check.type === "guard" ? [rule.check.scope] : rule.scope;
+  const scope =
+    rule.check.type === "guard" || rule.check.type === "code" ? [rule.check.scope] : rule.scope;
   return { text: scopeLabel(scope), color: scope ? palette.mist : palette.ash };
 };
 
@@ -34,6 +35,8 @@ const checkCell = (rule: Rule): Cell => {
       return { text: `jev ${rule.check.question.type}`, color: palette.indigo };
     case "guard":
       return { text: "guard", color: palette.plum };
+    case "code":
+      return { text: "code", color: palette.plum };
     case "deferred":
       return { text: "deferred", color: palette.ceramicWarm };
     case "unenforceable":

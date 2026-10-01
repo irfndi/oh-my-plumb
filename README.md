@@ -131,6 +131,7 @@ Every file is judged as if it had just been written. You get a table by rule and
 | `oh-my-plumb calibrate`         | score every rule against your recent git history and recorded tool calls           |
 | `oh-my-plumb tune`              | rewrite the rules that never fire                                                  |
 | `oh-my-plumb bench`             | latency and spend, measured on your machine                                        |
+| `oh-my-plumb mcp`               | how to attach the MCP server, so an agent can call the checks as tools             |
 | `oh-my-plumb uninstall [agent]` | remove the hooks                                                                   |
 
 `report`, `check`, `audit`, `bench` and `calibrate` take `--json`.
@@ -173,6 +174,31 @@ A guard is an executable script committed with your repo. The hook finds it at `
 
 A guard can also be a tool on an MCP server your agent already has configured: give the check a `server` and a `tool` instead (`"server": "postgres-inspector", "tool": "validate_migration"`). The hook starts the server the way your agent's MCP config does, calls the tool with `file_path` and `content`, and blocks when the result has `isError: true`. The same 2-second deadline and silent pass apply.
 
+### Inline code checks
+
+When the compile step meets a rule that needs counting or measuring — line lengths, nesting depth, import order — it can now write the check itself instead of leaving it unenforced. The rule gets a `code` check: a small predicate stored right in the rubric, which the hook runs itself.
+
+```json
+{
+  "id": "max-line-length",
+  "text": "Keep lines under 120 characters.",
+  "source": { "path": "AGENTS.md", "line": 7 },
+  "check": {
+    "type": "code",
+    "scope": "**/*.{ts,tsx}",
+    "text": "Keep lines under 120 characters.",
+    "script": "const long = contents.split(\"\\n\").map((line, i) => [line.length, i + 1]).filter(([n]) => n > 120);\nreturn long.length === 0 ? { isError: false } : { isError: true, content: `Lines over 120 chars: ${long.map(([, n]) => n).join(", ")}. Break them up.` };"
+  }
+}
+```
+
+- The `script` is the body of a function called as `fn(path, contents)`, with the file's repo-relative path and its new text. Return `{"isError": true, "content": "..."}` to block, anything else to pass.
+- It runs in a fresh JavaScript sandbox with nothing in reach but its two string arguments — no imports, no filesystem, no network. A throw, a 0.5-second overrun, or an unexpected return is a silent pass, like every guard.
+- Exact, local, free: no tokens, no API call, and it works on Windows, where an executable guard script cannot start.
+- node:vm is a fence, not a wall. The rubric is still code the repo author trusts; treat a rubric from a repo you do not trust like any code from it.
+
+Write one by hand, or let `compile` generate it: rules that need counting come out of the compile step as code checks now, not as dead `deferred` entries.
+
 ### The contract
 
 On every in-scope edit the hook spawns the script once:
@@ -190,6 +216,23 @@ On every in-scope edit the hook spawns the script once:
 - A check on this repo's 56-rule rubric, about a dozen rules per edit, is 1,300 to 2,000 input tokens: $0.00006 to $0.00008, 0.4 to 1.3 s for Jev and 1.4 to 2.5 s for the whole hook including Node startup. A turn of 15 edits costs a tenth of a cent. Measured 2026-09-23, direct to TypeSafe. `oh-my-plumb bench` measures yours.
 - The hooks cannot break your session. Every path exits 0, has a hard deadline, and prints only what the host expects.
 - No key or no network: the edit goes through unchecked and the miss is logged in `.oh-my-plumb/events.jsonl`, where `report` counts it. The log is gitignored, and at 1 MB session start keeps its newest half, so it never grows past that. If an older release had you commit it, `oh-my-plumb init` stops tracking it (the file stays on disk); erasing it from history is up to you.
+
+## As an MCP server
+
+The hooks judge edits while the agent works. The same checks are also available on demand, as tools on an MCP server, for hosts that speak MCP and for moments the hooks do not cover — a one-shot run, CI, or a codemode script that wants to drive the repair itself:
+
+```
+const result = await tools["oh-my-plumb"].check({});
+const broken = result.verdicts.filter((v) => v.band === "act");
+```
+
+Four tools, each running the CLI's own `--json` path, so there is one implementation of each check: `check` (uncommitted changes, judged the way the hooks would), `audit` (existing files), `report` (rules in force, what fires) and `bench` (latency and spend).
+
+```
+oh-my-plumb mcp
+```
+
+prints the server path and the config block for each host. Nothing is written for you: the config is the host's own, and one pasted block beats four parsers.
 
 ## How it hooks in
 

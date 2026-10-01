@@ -4,6 +4,7 @@ import { PlumbError, toolCallSchema, type ToolCall } from "oh-my-plumb-schema";
 import { loudestVerdicts, runCheck, runToolCallCheck } from "../lib/checkRunner.js";
 import { EDIT_CHECK_TIMEOUT_MS, TURN_CHECK_TIMEOUT_MS } from "../lib/constants.js";
 import { requireApiKey } from "../lib/credentials.js";
+import { codeCheckVerdicts } from "../lib/guards.js";
 import { boundState } from "../lib/diff.js";
 import { splitDiff, workingTreeDiff } from "../lib/git.js";
 import { loadRubric } from "../lib/loadRubric.js";
@@ -122,15 +123,19 @@ export const runCheckCommand = async (argv: string[]): Promise<number> => {
     if (phase === "all" || phase === "edit") {
       for (const f of files) {
         progress(`checking ${f.file}`);
-        const out = await runCheck({
-          phase: "edit",
-          fileDiffs: [{ file: f.file, text: boundState(f.text).text }],
-          task: values.task,
-          rules: loaded.rules,
-          thresholds: loaded.thresholds,
-          timeoutMs: EDIT_CHECK_TIMEOUT_MS,
-          retries: 2,
-        });
+        const [out, codeVerdicts] = await Promise.all([
+          runCheck({
+            phase: "edit",
+            fileDiffs: [{ file: f.file, text: boundState(f.text).text }],
+            task: values.task,
+            rules: loaded.rules,
+            thresholds: loaded.thresholds,
+            timeoutMs: EDIT_CHECK_TIMEOUT_MS,
+            retries: 2,
+          }),
+          // Code rules judge the file on disk, as the hooks do, in parallel with the model.
+          codeCheckVerdicts(loaded.rules, root, f.file),
+        ]);
         spendUsd += out.usage.costUsd ?? 0;
         sections.push({
           phase: "edit",
@@ -138,7 +143,7 @@ export const runCheckCommand = async (argv: string[]): Promise<number> => {
           modelRules: out.modelRules.length,
           calls: out.calls,
           latencyMs: out.modelLatencyMs,
-          verdicts: out.verdicts,
+          verdicts: [...out.verdicts, ...codeVerdicts],
         });
       }
     }

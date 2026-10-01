@@ -20,6 +20,7 @@ const COMMANDS: [string, string][] = [
     "judge past claude, codex, opencode or pi sessions in this repo as if oh-my-plumb had been installed",
   ],
   ["bench [--runs N]", "latency and spend, measured on this machine"],
+  ["mcp", "how to attach the MCP server, so an agent can call the checks as tools"],
   ["uninstall [agent] [--project]", "remove the hooks from one agent, or all"],
 ];
 

@@ -126,6 +126,23 @@ export const guardCheckSchema = z
     "say which guard command runs, name the skill, or name the MCP server and tool",
   );
 
+/**
+ * A rule the compile step wrote as code: an inline predicate the hook runs in
+ * a sandbox with the edited file's path and contents. Exact, local, free, and
+ * portable where an executable guard script is not (Windows has no shebang).
+ * node:vm is a fence, not a wall; the rubric is still code the repo author trusts.
+ */
+export const codeCheckSchema = z.object({
+  type: z.literal("code"),
+  /** Body of a `(path, contents) => …` function; returns a hit object, or anything else to pass. */
+  script: z.string().min(1).max(4000),
+  /** File glob the check watches. */
+  scope: z.string().min(1).max(500),
+  /** The rule the check enforces, in a human's words. */
+  text: z.string().min(1).max(600),
+});
+export type CodeCheck = z.infer<typeof codeCheckSchema>;
+
 export const deferredCheckSchema = z.object({
   type: z.literal("deferred"),
   reason: z.string().min(1).max(300),
@@ -140,6 +157,7 @@ export const checkSchema = z.discriminatedUnion("type", [
   lintCheckSchema,
   modelCheckSchema,
   guardCheckSchema,
+  codeCheckSchema,
   deferredCheckSchema,
   unenforceableCheckSchema,
 ]);
@@ -188,11 +206,11 @@ export const ruleSchema = z
         message: `rule "${rule.id}" is model-checked and needs "when": "edit" or "turn"`,
       });
     }
-    if (rule.check.type === "guard" && rule.scope !== undefined) {
+    if ((rule.check.type === "guard" || rule.check.type === "code") && rule.scope !== undefined) {
       ctx.addIssue({
         code: "custom",
         path: ["scope"],
-        message: `rule "${rule.id}" is a guard; its trigger lives in check.scope alone`,
+        message: `rule "${rule.id}" is a ${rule.check.type} check; its trigger lives in check.scope alone`,
       });
     }
     const editTools = ["edit", "write", "multiedit", "apply_patch"];
