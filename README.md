@@ -189,7 +189,7 @@ On every in-scope edit the hook spawns the script once:
 - Key lookup order: the environment (`TYPESAFE_AI_API_KEY`), then `.env.local` and `.env` at the repo root, then `~/.oh-my-plumb/.env`. Never a flag, never logged. Set `AI_GATEWAY_API_KEY` instead of a TypeSafe key to go through your Vercel AI Gateway.
 - A check on this repo's 56-rule rubric, about a dozen rules per edit, is 1,300 to 2,000 input tokens: $0.00006 to $0.00008, 0.4 to 1.3 s for Jev and 1.4 to 2.5 s for the whole hook including Node startup. A turn of 15 edits costs a tenth of a cent. Measured 2026-09-23, direct to TypeSafe. `oh-my-plumb bench` measures yours.
 - The hooks cannot break your session. Every path exits 0, has a hard deadline, and prints only what the host expects.
-- No key or no network: the edit goes through unchecked and the miss is logged in `.oh-my-plumb/events.jsonl`, where `report` counts it.
+- No key or no network: the edit goes through unchecked and the miss is logged in `.oh-my-plumb/events.jsonl`, where `report` counts it. The log is gitignored, and at 1 MB session start keeps its newest half, so it never grows past that. If an older release had you commit it, `oh-my-plumb init` stops tracking it (the file stays on disk); erasing it from history is up to you.
 
 ## How it hooks in
 

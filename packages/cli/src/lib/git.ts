@@ -5,7 +5,7 @@ import { parsePatch } from "diff";
 import { PlumbError } from "oh-my-plumb-schema";
 import { GIT_TIMEOUT_MS, MAX_STATE_CHARS } from "./constants.js";
 import { renderHunks } from "./diff.js";
-import { isExcludedPath, SECRET_FILE_PATTERNS } from "./paths.js";
+import { isExcludedPath, isPlumbOwned, SECRET_FILE_PATTERNS } from "./paths.js";
 
 /**
  * One git call, killed outright at its timeout. A clean filter, LFS, or a slow
@@ -34,6 +34,24 @@ const git = (
 
 export const isGitRepo = (root: string): boolean =>
   git(root, ["rev-parse", "--is-inside-work-tree"], 2_000) !== undefined;
+
+/**
+ * Stops git tracking files it once committed, keeping the working copies. A
+ * gitignore written after the fact does not untrack anything, so an old
+ * events.jsonl rides in every diff and every commit otherwise. Only files
+ * under .oh-my-plumb are eligible, so a wrong path here cannot untrack a
+ * source file. Returns the paths it untracked; absent git, an empty list.
+ */
+export const untrackIgnored = (root: string, relativePaths: readonly string[]): string[] => {
+  const untracked: string[] = [];
+  for (const name of relativePaths) {
+    if (!isPlumbOwned(name)) continue;
+    if (git(root, ["ls-files", "--", name], 2_000)?.trim() === "") continue;
+    if (git(root, ["rm", "--cached", "--quiet", "--", name], 2_000) !== undefined)
+      untracked.push(name);
+  }
+  return untracked;
+};
 
 const SKIP_FILE =
   /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|Cargo\.lock|go\.sum)$|\.(min\.js|min\.css|map|svg|png|jpg|jpeg|gif|ico|woff2?|ttf|pdf|lock|snap)$/;

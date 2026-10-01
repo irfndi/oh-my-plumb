@@ -1,6 +1,6 @@
 import { sessionStartInputSchema, type HookOutput, type Rubric } from "oh-my-plumb-schema";
 import { compilePrompt, type CompileTarget } from "../lib/compilePrompt.js";
-import { appendEvent } from "../lib/events.js";
+import { appendEvent, trimEvents } from "../lib/events.js";
 import { hasApiKey } from "../lib/credentials.js";
 import { findLintConfigs } from "../lib/lintConfig.js";
 import { placeCompileSkill, runningVersion } from "../lib/packageRoot.js";
@@ -121,6 +121,7 @@ export const handleSessionStart = async (raw: unknown): Promise<HookOutput> => {
   const input = parsed.data;
   const root = findRepoRoot(input.cwd);
   pruneOldTurns();
+  trimEvents(root);
 
   const plan = await planCompile(root);
   const notices: string[] = [];

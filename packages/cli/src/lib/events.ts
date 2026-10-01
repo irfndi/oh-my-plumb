@@ -1,9 +1,9 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { closeSync, mkdirSync, readFileSync, readSync, renameSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 import { eventSchema, toolNameSchema, type PlumbEvent } from "oh-my-plumb-schema";
-import { MAX_UNKNOWN_PAYLOADS_PER_TURN } from "./constants.js";
+import { EVENTS_LOG_MAX_BYTES, MAX_UNKNOWN_PAYLOADS_PER_TURN } from "./constants.js";
 import { findRepoRoot, ohMyPlumbDir, eventsPath } from "./paths.js";
-import { writeRegularFile } from "./regularFile.js";
+import { openRegular, writeRegularFile } from "./regularFile.js";
 import {
   incrementUnknownPayloads,
   turnDir,
@@ -31,6 +31,71 @@ export const appendEvent = (root: string, event: PlumbEvent): void => {
     writeRegularFile(eventsPath(root), `${JSON.stringify(event)}\n`, { use: "append" });
   } catch {
     // nothing to do: logging is optional
+  }
+};
+
+/**
+ * Reads a byte window ending at the file's end, without holding the whole file
+ * in memory: a legacy log can be tens of megabytes.
+ */
+const readTail = (file: string, bytes: number): string | undefined => {
+  const opened = openRegular(file);
+  if (opened === undefined) return undefined;
+  const { fd, size } = opened;
+  try {
+    const start = Math.max(0, size - bytes);
+    const length = size - start;
+    const buffer = Buffer.alloc(length);
+    let read = 0;
+    while (read < length) {
+      const count = readSync(fd, buffer, read, length - read, start + read);
+      if (count === 0) break;
+      read += count;
+    }
+    return buffer.toString("utf8", 0, read);
+  } catch {
+    return undefined;
+  } finally {
+    closeSync(fd);
+  }
+};
+
+/**
+ * Keeps the event log at a bounded size: past the cap, session start rewrites
+ * it to its newest cap-sized window, cut on a line boundary, keeping only
+ * lines the schema still accepts. One pass lands under the cap whatever the
+ * log had grown to, and what report and tune read — recent checks — stays.
+ * The rename is atomic and any check appended mid-trim is telemetry, safe to
+ * lose. Best effort, like every reader and writer of this file.
+ */
+export const trimEvents = (root: string, maxBytes = EVENTS_LOG_MAX_BYTES): void => {
+  try {
+    const file = eventsPath(root);
+    const opened = openRegular(file);
+    if (opened === undefined) return;
+    const { size } = opened;
+    closeSync(opened.fd);
+    if (size <= maxBytes) return;
+    const raw = readTail(file, maxBytes);
+    if (raw === undefined) return;
+    const firstNewline = raw.indexOf("\n");
+    if (firstNewline === -1) return;
+    const kept: string[] = [];
+    for (const line of raw.slice(firstNewline + 1).split("\n")) {
+      if (line.trim() === "") continue;
+      try {
+        if (eventSchema.safeParse(JSON.parse(line)).success) kept.push(line);
+      } catch {
+        // a torn line is dropped here for good
+      }
+    }
+    // Same directory, so the rename cannot cross a filesystem; a fixed name
+    // because a rename replaces whole, and a crashed trim leaves one file.
+    const tmp = `${file}.tmp`;
+    writeFileSync(tmp, kept.length === 0 ? "" : `${kept.join("\n")}\n`, { mode: 0o600 });
+    renameSync(tmp, file);
+  } catch {
+    // housekeeping must never take the hook down
   }
 };
 

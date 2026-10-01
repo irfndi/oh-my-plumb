@@ -1,10 +1,20 @@
 import { execSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 import { createBlobId } from "oh-my-plumb-schema";
-import { blobIdsAt, snapshotTree, splitDiff, workingTreeDiff } from "../src/lib/git.js";
+import {
+  blobIdsAt,
+  snapshotTree,
+  splitDiff,
+  untrackIgnored,
+  workingTreeDiff,
+} from "../src/lib/git.js";
+
+const commitAll = (root: string): void => {
+  execSync("git add -A && git -c user.email=a@b -c user.name=a commit -q -m init", { cwd: root });
+};
 
 describe("the working tree diff", () => {
   it("includes files git does not track yet", () => {
@@ -25,6 +35,27 @@ describe("the working tree diff", () => {
     writeFileSync(path.join(root, ".env"), "KEY=1\n");
     writeFileSync(path.join(root, "a.ts"), "export const a = 1;\n");
     expect(splitDiff(workingTreeDiff(root, [])).map((f) => f.file)).toEqual(["a.ts"]);
+  });
+
+  it("untracks committed-then-ignored files, keeps the working copies, and reports only what it untracked", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-git-"));
+    execSync("git init -q .", { cwd: root });
+    writeFileSync(path.join(root, ".gitignore"), "events.jsonl\n");
+    writeFileSync(path.join(root, "a.ts"), "export const a = 1;\n");
+    mkdirSync(path.join(root, ".oh-my-plumb"));
+    writeFileSync(path.join(root, ".oh-my-plumb", "events.jsonl"), "{\n");
+    execSync("git add -f .oh-my-plumb/events.jsonl", { cwd: root });
+    commitAll(root);
+    expect(untrackIgnored(root, [])).toEqual([]);
+    expect(untrackIgnored(root, [".oh-my-plumb/events.jsonl", "a.ts"])).toEqual([
+      ".oh-my-plumb/events.jsonl",
+    ]);
+    expect(execSync("git ls-files", { cwd: root, encoding: "utf8" }).trim().split("\n")).toEqual([
+      ".gitignore",
+      "a.ts",
+    ]);
+    expect(readFileSync(path.join(root, ".oh-my-plumb", "events.jsonl"), "utf8")).toBe("{\n");
+    expect(untrackIgnored(root, [".oh-my-plumb/events.jsonl"])).toEqual([]);
   });
 });
 

@@ -15,6 +15,7 @@ import { resolveCredentials } from "../lib/credentials.js";
 import { detectHosts, hostLabel, installHost, parseHost, type Installed } from "../lib/hosts.js";
 import { hookScriptPath, installRoot, packageRoot } from "../lib/packageRoot.js";
 import { ohMyPlumbDir, findRepoRoot, rubricPath } from "../lib/paths.js";
+import { isGitRepo, untrackIgnored } from "../lib/git.js";
 import { readRubric, writeRubric } from "../lib/rubricFile.js";
 import {
   discoverGlobalSources,
@@ -178,6 +179,17 @@ export const runInit = async (argv: string[]): Promise<number> => {
     });
   mkdirSync(ohMyPlumbDir(root), { recursive: true });
   writeFileSync(path.join(ohMyPlumbDir(root), ".gitignore"), "events.jsonl\ncompile-skill.md\n");
+  if (isGitRepo(root)) {
+    const untracked = untrackIgnored(root, [
+      ".oh-my-plumb/events.jsonl",
+      ".oh-my-plumb/compile-skill.md",
+    ]);
+    for (const name of untracked)
+      steps.push({
+        ok: true,
+        text: `stopped tracking ${name} (ignored, was committed); remove it from history if you need to`,
+      });
+  }
   const rubricFile = rubricPath(root);
   const before = readRubric(rubricFile);
   if (before.kind === "invalid") {

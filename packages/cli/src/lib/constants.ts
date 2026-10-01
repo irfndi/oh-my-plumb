@@ -35,6 +35,13 @@ export const MAX_UNKNOWN_PAYLOADS_PER_TURN = 5;
 
 export const SESSION_STATE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * The event log's size ceiling. Past it, session start keeps the newest half and
+ * drops the rest: recent checks are the ones report and tune read, and the log
+ * stays bounded whatever a session loop appends.
+ */
+export const EVENTS_LOG_MAX_BYTES = 1_000_000;
+
 /** How long a single git call may run before it is killed. Well under every hook budget. */
 export const GIT_TIMEOUT_MS = 5_000;
 /** How long turn-start may spend snapshotting the working tree with git, all calls together. */
