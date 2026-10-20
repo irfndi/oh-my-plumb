@@ -6,12 +6,12 @@ export type KeyProbe =
   | { kind: "rejected"; message: string }
   | { kind: "unknown" };
 
-export type ProbeTarget = { url: string; name: string };
+export type ProbeTarget = { url: string; name: string; method: "GET" | "POST" };
 
 const targetOf = (creds: Exclude<Credentials, { kind: "none" }>): ProbeTarget =>
   creds.kind === "typesafe"
-    ? { url: TYPESAFE_PROBE_URL, name: "api.typesafe.ai" }
-    : { url: GATEWAY_PROBE_URL, name: "the AI gateway" };
+    ? { url: TYPESAFE_PROBE_URL, name: "api.typesafe.ai", method: "POST" }
+    : { url: GATEWAY_PROBE_URL, name: "the AI gateway", method: "GET" };
 
 /**
  * One request, no tokens spent: only the answer's status decides, and only an
@@ -24,9 +24,9 @@ export const probeKey = async (
 ): Promise<KeyProbe> => {
   try {
     const response = await fetch(target.url, {
-      method: "POST",
+      method: target.method,
       headers: { authorization: `Bearer ${creds.key}`, "content-type": "application/json" },
-      body: "{}",
+      ...(target.method === "POST" ? { body: "{}" } : {}),
       signal: AbortSignal.timeout(KEY_PROBE_TIMEOUT_MS),
     });
     return response.status === 401 || response.status === 403

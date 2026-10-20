@@ -8,12 +8,12 @@ export const GATEWAY_KEY_ENV = "AI_GATEWAY_API_KEY";
 export const JEV_USD_PER_INPUT_TOKEN = 0.042 / 1_000_000;
 
 /**
- * The one request each credential kind is checked with. A malformed body is
- * refused on the credential before anything reads it, so the status alone says
- * whether the key still works.
+ * The one request each credential kind is checked with, chosen because it
+ * answers on the credential: Jev refuses a malformed body at the door, and the
+ * gateway's model list is public until a key is supplied and rejected.
  */
 export const TYPESAFE_PROBE_URL = "https://api.typesafe.ai/v1/systemone";
-export const GATEWAY_PROBE_URL = "https://ai-gateway.vercel.sh/v4/ai/language-model";
+export const GATEWAY_PROBE_URL = "https://ai-gateway.vercel.sh/v1/models";
 /** Session start may spend this long on the probe; a slow provider must not delay the first prompt. */
 export const KEY_PROBE_TIMEOUT_MS = 2_500;
 /** One probe per key per day: a revoked key is noticed at the next session, not on every one. */
