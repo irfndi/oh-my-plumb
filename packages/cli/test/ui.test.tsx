@@ -141,6 +141,54 @@ describe("views", () => {
     expect(frame).toContain("scripts/v.mjs does not exist");
   });
 
+  it("report groups failures by cause, with the newest message and the way out", () => {
+    const { lastFrame } = render(
+      <ReportView
+        data={{
+          root: "/r",
+          rules,
+          events: [
+            {
+              kind: "error",
+              at: "2026-09-28T07:13:40Z",
+              phase: "edit",
+              code: "AUTH_FAILED",
+              message:
+                "api.typesafe.ai refused the key (401): Cannot authenticate with the server.",
+            },
+            {
+              kind: "error",
+              at: "2026-10-02T12:43:00Z",
+              phase: "edit",
+              code: "AUTH_FAILED",
+              message: "api.typesafe.ai refused the key (401): check your API key and try again.",
+            },
+            {
+              kind: "error",
+              at: "2026-10-01T00:00:00Z",
+              phase: "turn",
+              code: "CHECK_FAILED",
+              message: "api.typesafe.ai answered 520: upstream error",
+            },
+          ],
+          stats: new Map(),
+          dead: [],
+          problems: [],
+          missingRoutes: [],
+          piTrust: null,
+        }}
+      />,
+    );
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("3 checks failed or timed out");
+    expect(frame).toContain("AUTH_FAILED");
+    expect(frame).toContain("2×");
+    expect(frame).toContain("check your API key and try again");
+    expect(frame).toContain("CHECK_FAILED");
+    expect(frame).toContain("520");
+    expect(frame).toContain("Run oh-my-plumb login with a fresh key");
+  });
+
   it("report counts payloads it skipped as unknown", () => {
     const { lastFrame } = render(
       <ReportView

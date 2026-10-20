@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vite-plus/test";
 import { MAX_UNKNOWN_PAYLOADS_PER_TURN } from "../src/lib/constants.js";
 import { readEvents } from "../src/lib/events.js";
+import { noteKeyRejected } from "../src/lib/keyState.js";
 
 const script = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -31,6 +32,19 @@ const run = (name: string, input: string) =>
       ...process.env,
       AI_GATEWAY_API_KEY: "",
       TYPESAFE_AI_API_KEY: "",
+      OH_MY_PLUMB_HOME_DIR: home,
+    },
+    timeout: 25_000,
+  });
+
+const runWithKey = (key: string, name: string, input: string) =>
+  spawnSync("node", [script, name], {
+    input,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      AI_GATEWAY_API_KEY: "",
+      TYPESAFE_AI_API_KEY: key,
       OH_MY_PLUMB_HOME_DIR: home,
     },
     timeout: 25_000,
@@ -663,5 +677,56 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
     expect(r.status).toBe(0);
     const out = JSON.parse(r.stdout);
     expect(out.systemMessage ?? "").not.toContain("is available");
+  });
+
+  it("a key the provider refused is reported without a call, and warned about once a session", () => {
+    const key = "refused-key";
+    process.env.OH_MY_PLUMB_HOME_DIR = home;
+    noteKeyRejected(key, "api.typesafe.ai refused the key (401)");
+    delete process.env.OH_MY_PLUMB_HOME_DIR;
+
+    const root = repoWith([
+      {
+        id: "diff-rule",
+        text: "t",
+        source: { path: "AGENTS.md" },
+        when: "edit",
+        check: { type: "model", question: { type: "boolean", instructions: "?" } },
+      },
+    ]);
+
+    const start = runWithKey(
+      key,
+      "session-start",
+      JSON.stringify({
+        session_id: "refused-start",
+        cwd: root,
+        hook_event_name: "SessionStart",
+        source: "startup",
+      }),
+    );
+    expect(start.status).toBe(0);
+    const started = JSON.parse(start.stdout);
+    expect(started.systemMessage).toContain("api.typesafe.ai refused the key (401)");
+    expect(started.systemMessage).toContain("oh-my-plumb login with a fresh key");
+
+    const edit = JSON.stringify({
+      session_id: "refused-edits",
+      cwd: root,
+      hook_event_name: "PostToolUse",
+      tool_name: "Write",
+      tool_input: { file_path: path.join(root, "a.ts"), content: "export const a = 1;\n" },
+      tool_response: { originalFile: null, structuredPatch: [] },
+    });
+    const first = runWithKey(key, "post-tool-use", edit);
+    expect(first.status).toBe(0);
+    expect(JSON.parse(first.stdout).systemMessage).toContain("refused the key");
+
+    const second = runWithKey(key, "post-tool-use", edit);
+    expect(second.status).toBe(0);
+    expect(second.stdout).toBe("");
+
+    const events = readFileSync(path.join(root, ".oh-my-plumb", "events.jsonl"), "utf8");
+    expect(events).toContain('"code":"AUTH_FAILED"');
   });
 });

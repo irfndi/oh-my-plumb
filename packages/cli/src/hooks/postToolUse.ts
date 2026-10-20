@@ -23,7 +23,7 @@ import {
   type GuardHit,
 } from "../lib/guards.js";
 import { EDIT_CHECK_TIMEOUT_MS, MAX_BLOCKS_PER_RULE_PER_TURN } from "../lib/constants.js";
-import { hasApiKey } from "../lib/credentials.js";
+import { hasApiKey, rejectedKeyNotice } from "../lib/credentials.js";
 import { boundState, editsFromPostToolUse, type EditHunk } from "../lib/diff.js";
 import { appendEvent, appendUnknownPayload } from "../lib/events.js";
 import { loadRubric } from "../lib/loadRubric.js";
@@ -250,7 +250,8 @@ const handleEdit = async (input: PostToolUseInput): Promise<HookOutput> => {
       message: error instanceof Error ? error.message : String(error),
       latencyMs: Math.round(performance.now() - started),
     });
-    return { kind: "silent" };
+    const notice = rejectedKeyNotice(root, input.session_id);
+    return notice === undefined ? { kind: "silent" } : { kind: "notice", systemMessage: notice };
   }
 
   for (const { edit, relative } of checked) {

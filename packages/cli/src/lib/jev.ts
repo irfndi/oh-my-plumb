@@ -15,7 +15,8 @@ import {
   JEV_USD_PER_INPUT_TOKEN,
   TYPESAFE_MODEL_ID,
 } from "./constants.js";
-import { credentials, NO_KEY_HINT, type Credentials } from "./credentials.js";
+import { credentials, KEY_REJECTED_HINT, NO_KEY_HINT, type Credentials } from "./credentials.js";
+import { isKeyRejected, keyRejectionSentence, noteAuthFailure, noteKeyWorked } from "./keyState.js";
 import type { ToolCallEntry } from "./session.js";
 
 export type ModelRule = Rule & { check: { type: "model" } };
@@ -91,7 +92,11 @@ const toAnswer = (value: unknown): ModelAnswer | undefined => {
   }
 };
 
-type GatewayFailure = { code: "CHECK_TIMEOUT" | "CHECK_FAILED"; message: string };
+type ModelFailure = { code: "CHECK_TIMEOUT" | "CHECK_FAILED" | "AUTH_FAILED"; message: string };
+
+/** Which service this key is spent at: a 401 from one says nothing about the other. */
+const endpointFor = (creds: Exclude<Credentials, { kind: "none" }>): string =>
+  creds.kind === "typesafe" ? "api.typesafe.ai" : "the AI gateway";
 
 const isAbort = (error: unknown): boolean =>
   error instanceof Error &&
@@ -116,45 +121,55 @@ const bodyOf = (error: unknown): string | undefined => {
   )
     return undefined;
   try {
-    const parsed: unknown = JSON.parse(error.responseBody);
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      "message" in parsed &&
-      typeof parsed.message === "string"
-    )
-      return parsed.message;
+    const message = messageField(JSON.parse(error.responseBody));
+    if (message !== undefined) return message;
   } catch {
     // not JSON
   }
   return error.responseBody.slice(0, 160);
 };
 
+const messageField = (value: unknown): string | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  if ("message" in value && typeof value.message === "string") return value.message;
+  if ("detail" in value) return messageField(value.detail);
+  return undefined;
+};
+
 /**
- * The gateway's own words, not the SDK's. A retry that ran out of time says
+ * The provider's own words, not the SDK's. A retry that ran out of time says
  * "Delay was aborted"; what the person needs is the answer that made the SDK
- * retry in the first place.
+ * retry in the first place, and which service gave it.
  */
-const explain = (error: unknown): GatewayFailure => {
+const explain = (error: unknown, creds: Exclude<Credentials, { kind: "none" }>): ModelFailure => {
   const attempts: unknown[] = RetryError.isInstance(error) ? error.errors : [error];
   const answered = [...attempts].reverse().find((e) => statusOf(e) !== undefined);
+  const endpoint = endpointFor(creds);
   if (answered !== undefined) {
     const status = statusOf(answered);
     const body = bodyOf(answered);
     const tries = attempts.length > 1 ? ` after ${attempts.length} tries` : "";
+    if (status === 401 || status === 403)
+      return {
+        code: "AUTH_FAILED",
+        message: `${endpoint} refused the key (${status})${body ? `: ${body}` : ""}`,
+      };
     return {
       code: "CHECK_FAILED",
-      message: `the gateway answered ${status}${tries}${body ? `: ${body}` : ""}`,
+      message: `${endpoint} answered ${status}${tries}${body ? `: ${body}` : ""}`,
     };
   }
   if (attempts.some(isAbort))
-    return { code: "CHECK_TIMEOUT", message: "the gateway did not answer within the time allowed" };
+    return { code: "CHECK_TIMEOUT", message: `${endpoint} did not answer within the time allowed` };
   const last = attempts.at(-1);
   return { code: "CHECK_FAILED", message: last instanceof Error ? last.message : String(last) };
 };
 
-export const describeGatewayFailure = (error: unknown): PlumbError => {
-  const failure = explain(error);
+export const describeModelFailure = (
+  error: unknown,
+  creds: Exclude<Credentials, { kind: "none" }>,
+): PlumbError => {
+  const failure = explain(error, creds);
   return new PlumbError(failure.code, failure.message, { cause: error });
 };
 
@@ -191,6 +206,9 @@ export const checkWithModel = async (
   if (rules.length === 0) return { verdicts: [], usage: {}, latencyMs: 0 };
   const creds = credentials();
   if (creds.kind === "none") throw new PlumbError("NO_API_KEY", NO_KEY_HINT);
+  // A refused key is latched: dialling it again on every edit buys the same 401 and the agent's time.
+  if (isKeyRejected(creds.key))
+    throw new PlumbError("AUTH_FAILED", `${keyRejectionSentence(creds.key)} ${KEY_REJECTED_HINT}`);
 
   const { experimental_evaluate: evaluate } = await import("ai");
   const model = await evaluationModel(creds);
@@ -209,8 +227,11 @@ export const checkWithModel = async (
       providerOptions: { gateway: { zeroDataRetention: true } },
     });
   } catch (error) {
-    throw describeGatewayFailure(error);
+    const failure = describeModelFailure(error, creds);
+    if (failure.code === "AUTH_FAILED") noteAuthFailure(creds.key, failure.message);
+    throw failure;
   }
+  noteKeyWorked(creds.key);
   const latencyMs = Math.round(performance.now() - started);
 
   const verdicts: Verdict[] = [];

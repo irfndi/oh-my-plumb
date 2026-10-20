@@ -7,6 +7,20 @@ export const GATEWAY_KEY_ENV = "AI_GATEWAY_API_KEY";
 /** List price observed 2026-09-17: $0.042 per million input tokens, output free. */
 export const JEV_USD_PER_INPUT_TOKEN = 0.042 / 1_000_000;
 
+/**
+ * The one request each credential kind is checked with. A malformed body is
+ * refused on the credential before anything reads it, so the status alone says
+ * whether the key still works.
+ */
+export const TYPESAFE_PROBE_URL = "https://api.typesafe.ai/v1/systemone";
+export const GATEWAY_PROBE_URL = "https://ai-gateway.vercel.sh/v4/ai/language-model";
+/** Session start may spend this long on the probe; a slow provider must not delay the first prompt. */
+export const KEY_PROBE_TIMEOUT_MS = 2_500;
+/** One probe per key per day: a revoked key is noticed at the next session, not on every one. */
+export const KEY_PROBE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+/** Consecutive auth failures that latch a key the provider keeps refusing. */
+export const AUTH_FAILURE_LATCH_AFTER = 3;
+
 export const EDIT_CHECK_TIMEOUT_MS = 8_000;
 export const TURN_CHECK_TIMEOUT_MS = 15_000;
 export const STDIN_TIMEOUT_MS = 2_000;

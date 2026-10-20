@@ -25,7 +25,7 @@ import { editsCoverFile } from "../lib/coverage.js";
 import { boundState, remainingMs, unifiedDiff } from "../lib/diff.js";
 import { appendEvent } from "../lib/events.js";
 import { blobIdsAt, diffTrees, snapshotTree, splitDiff, type FileDiff } from "../lib/git.js";
-import { hasApiKey } from "../lib/credentials.js";
+import { hasApiKey, rejectedKeyNotice } from "../lib/credentials.js";
 import { loadRubric } from "../lib/loadRubric.js";
 import { debug } from "../lib/output.js";
 import { findRepoRoot, isExcludedPath, relativeToRoot } from "../lib/paths.js";
@@ -255,7 +255,10 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
       message: error instanceof Error ? error.message : String(error),
       latencyMs: Math.round(performance.now() - started),
     });
-    return finish({ kind: "silent" });
+    const notice = rejectedKeyNotice(root, input.session_id);
+    return finish(
+      notice === undefined ? { kind: "silent" } : { kind: "notice", systemMessage: notice },
+    );
   }
 
   const byId = new Map(loaded.rules.map((r) => [r.id, r]));

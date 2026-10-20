@@ -1,7 +1,14 @@
-import { sessionStartInputSchema, type HookOutput, type Rubric } from "oh-my-plumb-schema";
+import {
+  assertNever,
+  sessionStartInputSchema,
+  type HookOutput,
+  type Rubric,
+} from "oh-my-plumb-schema";
 import { compilePrompt, type CompileTarget } from "../lib/compilePrompt.js";
 import { appendEvent, trimEvents } from "../lib/events.js";
-import { hasApiKey } from "../lib/credentials.js";
+import { rejectedKeyNotice, resolveCredentials } from "../lib/credentials.js";
+import { probeKey } from "../lib/keyProbe.js";
+import { isKeyRejected, noteKeyAccepted, noteKeyRejected, probeIsDue } from "../lib/keyState.js";
 import { findLintConfigs } from "../lib/lintConfig.js";
 import { placeCompileSkill, runningVersion } from "../lib/packageRoot.js";
 import { updateNotice } from "../lib/updateCheck.js";
@@ -115,6 +122,36 @@ export const planCompile = async (
   };
 };
 
+const NO_KEY_NOTICE =
+  "oh-my-plumb: no API key was found, so edits are not being checked. Run oh-my-plumb login, or put TYPESAFE_AI_API_KEY in the environment or a .env at the repo root, then start a new session.";
+
+/**
+ * A present key is not a working key, so one bounded probe says which it is.
+ * A latched key gets that probe once a day too: a refusal is worth repeating
+ * about once, not on every edit, and a fix on the provider's side should not
+ * need a new key before it is believed.
+ */
+const keyNotice = async (root: string, sessionId: string): Promise<string | undefined> => {
+  const creds = resolveCredentials(root);
+  if (creds.kind === "none") return NO_KEY_NOTICE;
+  if (probeIsDue(creds.key)) {
+    const probe = await probeKey(creds);
+    switch (probe.kind) {
+      case "accepted":
+        noteKeyAccepted(creds.key);
+        return undefined;
+      case "rejected":
+        noteKeyRejected(creds.key, probe.message);
+        return rejectedKeyNotice(root, sessionId);
+      case "unknown":
+        break;
+      default:
+        return assertNever(probe);
+    }
+  }
+  return isKeyRejected(creds.key) ? rejectedKeyNotice(root, sessionId) : undefined;
+};
+
 export const handleSessionStart = async (raw: unknown): Promise<HookOutput> => {
   const parsed = sessionStartInputSchema.safeParse(raw);
   if (!parsed.success) return { kind: "silent" };
@@ -125,11 +162,8 @@ export const handleSessionStart = async (raw: unknown): Promise<HookOutput> => {
 
   const plan = await planCompile(root);
   const notices: string[] = [];
-  if (!hasApiKey(root)) {
-    notices.push(
-      "oh-my-plumb: no API key was found, so edits are not being checked. Run oh-my-plumb login, or put TYPESAFE_AI_API_KEY in the environment or a .env at the repo root, then start a new session.",
-    );
-  }
+  const keyProblem = await keyNotice(root, input.session_id);
+  if (keyProblem !== undefined) notices.push(keyProblem);
   for (const problem of plan.invalid) {
     notices.push(`oh-my-plumb: rubric could not be read and is being ignored: ${problem}`);
   }

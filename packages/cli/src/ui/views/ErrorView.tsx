@@ -16,6 +16,7 @@ const TITLES: Record<PlumbErrorCode, string> = {
   HOST_NOT_FOUND: "No supported agent was found on this machine",
   HOST_UNSUPPORTED: "Replay is not available for this agent yet",
   CHECK_TIMEOUT: "Jev did not answer in time",
+  AUTH_FAILED: "The provider refused the key",
   CHECK_FAILED: "Jev refused the check",
   CHECK_INPUT_INVALID: "The check input could not be read",
   RUNTIME_COPY_FAILED: "oh-my-plumb could not copy itself out of the npx cache",

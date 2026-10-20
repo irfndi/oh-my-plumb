@@ -23,13 +23,36 @@ export type ReportData = {
 };
 
 type Check = Extract<PlumbEvent, { kind: "check" }>;
+type Failure = Extract<PlumbEvent, { kind: "error" }>;
+
+type FailureGroup = { code: string; count: number; message: string; at: string };
+
+/** One line per cause, with the newest message: 1528 identical auth errors are one fact, not 1528. */
+const failureGroups = (failures: readonly Failure[]): FailureGroup[] => {
+  const byCode = new Map<string, FailureGroup>();
+  for (const failure of failures) {
+    const group = byCode.get(failure.code);
+    byCode.set(
+      failure.code,
+      group === undefined
+        ? { code: failure.code, count: 1, message: failure.message, at: failure.at }
+        : {
+            ...group,
+            count: group.count + 1,
+            ...(failure.at >= group.at ? { message: failure.message, at: failure.at } : {}),
+          },
+    );
+  }
+  return [...byCode.values()].sort((a, b) => b.count - a.count);
+};
 
 const reasonOf = (rule: Rule): string =>
   rule.check.type === "deferred" || rule.check.type === "unenforceable" ? rule.check.reason : "";
 
 export function ReportView({ data }: { data: ReportData }) {
   const checks = data.events.filter((e): e is Check => e.kind === "check");
-  const errors = data.events.filter((e) => e.kind === "error").length;
+  const groups = failureGroups(data.events.filter((e): e is Failure => e.kind === "error"));
+  const errors = groups.reduce((sum, group) => sum + group.count, 0);
   const unknown = data.events.filter((e) => e.kind === "unknown_payload").length;
   const edit = checks.filter((c) => c.phase === "edit");
   const turn = checks.filter((c) => c.phase === "turn");
@@ -258,10 +281,25 @@ export function ReportView({ data }: { data: ReportData }) {
       {errors > 0 || unknown > 0 ? (
         <Box flexDirection="column" marginTop={1}>
           {errors > 0 ? (
-            <Text color={palette.amber}>
-              {errors} {errors === 1 ? "check" : "checks"} failed or timed out. Those edits went
-              unchecked.
-            </Text>
+            <Box flexDirection="column">
+              <Text color={palette.amber}>
+                {errors} {errors === 1 ? "check" : "checks"} failed or timed out. Those edits went
+                unchecked.
+              </Text>
+              {groups.map((group) => (
+                <Text key={group.code} color={palette.cloud}>
+                  {"  "}
+                  {group.code}
+                  {"  "}
+                  {group.count}× <Text color={palette.mist}>{group.message}</Text>
+                </Text>
+              ))}
+              {groups.some((group) => group.code === "AUTH_FAILED") ? (
+                <Text color={palette.mist}>
+                  Run oh-my-plumb login with a fresh key. Until then every check fails the same way.
+                </Text>
+              ) : null}
+            </Box>
           ) : null}
           {unknown > 0 ? (
             <Text color={palette.amber}>

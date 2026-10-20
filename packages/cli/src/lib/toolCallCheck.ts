@@ -7,7 +7,7 @@ import {
 } from "oh-my-plumb-schema";
 import { runToolCallCheck, selectToolCallRules, type CheckOutcome } from "./checkRunner.js";
 import { EDIT_CHECK_TIMEOUT_MS } from "./constants.js";
-import { hasApiKey } from "./credentials.js";
+import { hasApiKey, rejectedKeyNotice } from "./credentials.js";
 import { appendEvent } from "./events.js";
 import { loadRubric } from "./loadRubric.js";
 import { debug } from "./output.js";
@@ -81,7 +81,8 @@ export const handleToolCall = async (input: ToolCallInput): Promise<HookOutput> 
       message: error instanceof Error ? error.message : String(error),
       latencyMs: Math.round(performance.now() - started),
     });
-    return { kind: "silent" };
+    const notice = rejectedKeyNotice(root, input.session_id);
+    return notice === undefined ? { kind: "silent" } : { kind: "notice", systemMessage: notice };
   }
 
   const byId = new Map(loaded.rules.map((r) => [r.id, r]));

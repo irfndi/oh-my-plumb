@@ -2,6 +2,7 @@ import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { PlumbError } from "oh-my-plumb-schema";
 import { GATEWAY_KEY_ENV, TYPESAFE_KEY_ENV } from "./constants.js";
+import { claimRejectedWarning, isKeyRejected, keyRejectionSentence } from "./keyState.js";
 import { globalOhMyPlumbDir } from "./paths.js";
 import { readRegularText } from "./regularFile.js";
 
@@ -109,6 +110,22 @@ export const saveUserKey = (name: string, key: string): string => {
 };
 
 export const NO_KEY_HINT = `No API key found. Run "oh-my-plumb login" with your TypeSafe key, or put ${TYPESAFE_KEY_ENV} in the environment or a .env file at the repo root.`;
+
+/** The only way out of a refused key; every message about one ends with it. */
+export const KEY_REJECTED_HINT =
+  "Checks stay off until the key changes: run oh-my-plumb login with a fresh key.";
+
+/**
+ * The warning a session gets when its key has been refused, claimed so it
+ * lands once per session: a refused key fails every edit the same way, and
+ * nobody needs that said 1528 times.
+ */
+export const rejectedKeyNotice = (root: string, sessionId: string): string | undefined => {
+  const creds = resolveCredentials(root);
+  if (creds.kind === "none" || !isKeyRejected(creds.key)) return undefined;
+  if (!claimRejectedWarning(creds.key, sessionId)) return undefined;
+  return `oh-my-plumb: ${keyRejectionSentence(creds.key)} ${KEY_REJECTED_HINT}`;
+};
 
 /** The same places findCredentials looks, in its order, so the hint names what the user actually has. Only names reach the message, never values. */
 const noKeyHint = (root: string): string => {
