@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type * as AiModule from "ai";
+import { PlumbError } from "oh-my-plumb-schema";
 import { runEnabled } from "../src/commands/enable.js";
 import { handleSessionStart } from "../src/hooks/sessionStart.js";
 import { handleStop } from "../src/hooks/stop.js";
@@ -65,7 +66,7 @@ const rubricOf = (root: string | undefined, enabled?: boolean): object => ({
 
 const rubricOnDisk = (file: string): { enabled?: boolean; rules: unknown[] } => {
   const read = readRubric(file);
-  if (read.kind !== "ok") throw new Error(`rubric did not parse: ${read.kind}`);
+  if (read.kind !== "ok") throw new PlumbError("RUBRIC_INVALID", "fixture rubric did not parse");
   return { enabled: read.rubric.enabled, rules: read.rubric.rules };
 };
 
