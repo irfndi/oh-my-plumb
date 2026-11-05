@@ -21,15 +21,61 @@ import { OH_MY_PLUMB_HOOK_MARKER, readSettings } from "../src/lib/settings.js";
 
 const cliRoot = path.resolve(import.meta.dirname, "..");
 
+/**
+ * An npx cache laid out the way npm lays one out: a flat `node_modules` where
+ * every package's dependencies are siblings, not the deep store pnpm uses. The
+ * fixture has to reproduce that, because `init` copies the tree with
+ * `dereference: true` and the copy must stand alone: under pnpm, `ai`'s own
+ * `@ai-sdk/gateway` lives beside it in the store, so flattening the symlinks
+ * alone would drop it and every hook would fail to import `ai`.
+ */
 const fakeNpxCache = (): { cache: string; bin: string } => {
   const cache = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-npm-"));
   const nodeModules = path.join(cache, "_npx", "0a1b2c3d4e5f6a7b", "node_modules");
   const pkg = path.join(nodeModules, "oh-my-plumb");
   for (const entry of ["package.json", "dist", "pi", "opencode", "skills"])
     cpSync(path.join(cliRoot, entry), path.join(pkg, entry), { recursive: true });
+  // pnpm resolves a package's dependencies through its own nested store entry, so
+  // each package's real path is the place to look, not one shared sibling list.
+  const linked = new Map<string, string>();
+  // `store/name` for a plain package, `store/@scope/name` for a scoped one.
+  const storeOf = (real: string): string =>
+    path.basename(path.dirname(real)).startsWith("@")
+      ? path.dirname(path.dirname(real))
+      : path.dirname(real);
+  const walk = (real: string): void => {
+    const store = storeOf(real);
+    for (const name of readdirSync(store)) {
+      if (name === path.basename(real) || name.startsWith(".")) continue;
+      const names =
+        name.startsWith("@") && !name.includes("/")
+          ? readdirSync(path.join(store, name)).map((scoped) => `${name}/${scoped}`)
+          : [name];
+      for (const dep of names) {
+        if (linked.has(dep)) continue;
+        const found = path.join(store, dep);
+        if (!existsSync(found)) continue;
+        const depReal = realpathSync(found);
+        linked.set(dep, depReal);
+        walk(depReal);
+      }
+    }
+  };
   for (const dep of readdirSync(path.join(cliRoot, "node_modules"))) {
     if (dep.startsWith(".")) continue;
-    symlinkSync(realpathSync(path.join(cliRoot, "node_modules", dep)), path.join(nodeModules, dep));
+    const names = dep.startsWith("@")
+      ? readdirSync(path.join(cliRoot, "node_modules", dep)).map((scoped) => `${dep}/${scoped}`)
+      : [dep];
+    for (const name of names) {
+      const real = realpathSync(path.join(cliRoot, "node_modules", name));
+      linked.set(name, real);
+      walk(real);
+    }
+  }
+  for (const [name, real] of linked) {
+    const target = path.join(nodeModules, name);
+    mkdirSync(path.dirname(target), { recursive: true });
+    symlinkSync(real, target);
   }
   return { cache, bin: path.join(pkg, "dist", "bin.js") };
 };
