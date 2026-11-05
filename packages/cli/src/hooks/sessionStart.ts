@@ -10,6 +10,7 @@ import { rejectedKeyNotice, resolveCredentials } from "../lib/credentials.js";
 import { probeKey } from "../lib/keyProbe.js";
 import { isKeyRejected, noteKeyAccepted, noteKeyRejected, probeIsDue } from "../lib/keyState.js";
 import { findLintConfigs } from "../lib/lintConfig.js";
+import { loadRubric, offNotice } from "../lib/loadRubric.js";
 import { placeCompileSkill, runningVersion } from "../lib/packageRoot.js";
 import { updateNotice } from "../lib/updateCheck.js";
 import {
@@ -162,6 +163,9 @@ export const handleSessionStart = async (raw: unknown): Promise<HookOutput> => {
 
   const plan = await planCompile(root);
   const notices: string[] = [];
+  // Off must be said out loud: silence from a stand-down reads exactly like a clean session.
+  const loaded = loadRubric(root);
+  if (loaded.off !== undefined) notices.push(offNotice(loaded.off, root));
   const keyProblem = await keyNotice(root, input.session_id);
   if (keyProblem !== undefined) notices.push(keyProblem);
   for (const problem of plan.invalid) {
@@ -170,6 +174,11 @@ export const handleSessionStart = async (raw: unknown): Promise<HookOutput> => {
   const update = updateNotice(runningVersion());
   if (update !== undefined) notices.push(update);
   const systemMessage = notices.length > 0 ? notices.join("\n") : undefined;
+
+  // A scope that is off compiles nothing: the agent asked for quiet, not for work.
+  if (loaded.off !== undefined) {
+    return systemMessage === undefined ? { kind: "silent" } : { kind: "notice", systemMessage };
+  }
 
   if (plan.targets.length === 0) {
     return systemMessage === undefined ? { kind: "silent" } : { kind: "notice", systemMessage };

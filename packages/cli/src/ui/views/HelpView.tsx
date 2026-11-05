@@ -9,6 +9,10 @@ const COMMANDS: [string, string][] = [
     "hook into claude, codex, opencode, pi, omp, or every one found here",
   ],
   ["compile", "compile the rubric now, in a headless Claude Code turn"],
+  [
+    "disable | enable [--project]",
+    "stand every check down, or bring them back: this machine, or this repo",
+  ],
   ["tune [--global]", "rewrite rules that never fire, with their statistics attached"],
   ["rubric validate [--global]", "check .oh-my-plumb/rubric.json and fill in source hashes"],
   ["calibrate [--global]", "test every rule against this repo's recent history"],

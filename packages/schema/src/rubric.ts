@@ -314,6 +314,8 @@ export const rubricSchema = z
     compiledAt: z.string(),
     compiledBy: z.string().optional(),
     sources: z.array(rubricSourceSchema),
+    /** False stands every check in this rubric down. Absent means on. */
+    enabled: z.boolean().optional(),
     thresholds: thresholdsSchema.optional(),
     /**
      * MCP servers whose `initialize` instructions compile as rule sources,

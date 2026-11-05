@@ -4,6 +4,7 @@ import { runBench } from "./commands/bench.js";
 import { runCalibrate } from "./commands/calibrate.js";
 import { runCheckCommand } from "./commands/check.js";
 import { runCompile } from "./commands/compile.js";
+import { runEnabled } from "./commands/enable.js";
 import { runInit } from "./commands/init.js";
 import { runLogin } from "./commands/login.js";
 import { runMcp } from "./commands/mcp.js";
@@ -25,6 +26,10 @@ const main = async (): Promise<number> => {
       return runLogin(rest);
     case "init":
       return runInit(rest);
+    case "enable":
+      return runEnabled(rest, true);
+    case "disable":
+      return runEnabled(rest, false);
     case "compile":
       return runCompile(rest, false);
     case "tune":
