@@ -34,9 +34,8 @@ vi.mock("node:child_process", async (importOriginal) => {
 
 // A computed specifier keeps tsc out of the extension, which Pi loads as untyped JS.
 const extension = "../pi/oh-my-plumb.ts";
-const { postToolUsePayload, toolCallPayload, preToolCallPayload, preToolCallResult } = await import(
-  extension
-);
+const { postToolUsePayload, toolCallPayload, preToolCallPayload, preToolCallResult, promptIdOf } =
+  await import(extension);
 
 // The forwarded call runs the real hook child, so the keys are blanked: the
 // skip path must be what a machine without a key exercises.
@@ -262,5 +261,48 @@ describe("pi extension events", () => {
       on: (name: string, fn: (event: unknown, ctx: unknown) => unknown) => handlers.set(name, fn),
     });
     expect(handlers.has("session_stop")).toBe(true);
+  });
+});
+
+describe("the prompt a hook payload belongs to", () => {
+  const ctx = (entries: unknown[]) => ({ sessionManager: { getBranch: () => entries } });
+
+  it("takes the last user message's entry id, not the first", () => {
+    expect(
+      promptIdOf(
+        ctx([
+          { type: "message", id: "u1", message: { role: "user" } },
+          { type: "message", id: "a1", message: { role: "assistant" } },
+          { type: "message", id: "u2", message: { role: "user" } },
+          { type: "message", id: "a2", message: { role: "assistant" } },
+        ]),
+      ),
+    ).toBe("u2");
+  });
+
+  it("stays the same while a run continues, so tool calls and stop agree", () => {
+    // A continuation appends assistant and tool-result entries after the prompt.
+    const base = [{ type: "message", id: "u1", message: { role: "user" } }];
+    const afterTool = [
+      ...base,
+      { type: "message", id: "a1", message: { role: "assistant" } },
+      { type: "message", id: "t1", message: { role: "toolResult" } },
+    ];
+    expect(promptIdOf(ctx(base))).toBe("u1");
+    expect(promptIdOf(ctx(afterTool))).toBe("u1");
+  });
+
+  it("gives no id when the session cannot say, and never throws", () => {
+    expect(promptIdOf(ctx([]))).toBeUndefined();
+    expect(promptIdOf(undefined)).toBeUndefined();
+    expect(
+      promptIdOf({
+        sessionManager: {
+          getBranch: () => {
+            throw new Error("no session");
+          },
+        },
+      }),
+    ).toBeUndefined();
   });
 });

@@ -124,8 +124,15 @@ describe("turn state on disk", () => {
         order: 1,
         name: "Write",
         summary: expect.stringContaining("file_path=/r/a.ts"),
+        // Every short argument survives by name; the file body is past the bound.
+        args: [{ name: "file_path", text: "/r/a.ts" }],
       },
-      { order: 2, name: "Bash", summary: "{command=ls -la}" },
+      {
+        order: 2,
+        name: "Bash",
+        summary: "{command=ls -la}",
+        args: [{ name: "command", text: "ls -la" }],
+      },
     ]);
     expect(log[0]?.summary).toContain(`[${body.length} chars]`);
     expect(JSON.stringify(log)).not.toContain(body);

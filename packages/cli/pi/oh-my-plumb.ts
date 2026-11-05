@@ -100,6 +100,34 @@ const EDIT_TOOLS = { edit: true, write: true };
 // other tool — bash, MCP, an extension's own — is forwarded; rule scopes decide.
 const READ_TOOLS: Record<string, true> = { read: true, grep: true, glob: true };
 
+/**
+ * The user message this run answers: its session entry id, which is what a
+ * hook payload calls `prompt_id`.
+ *
+ * Neither pi nor omp sends one, and `agent_start` cannot stand in — pi emits it
+ * on every `agent.continue()` as well, so one prompt spans several runs. The
+ * session's own last user entry is stable for the whole prompt: a continuation
+ * appends assistant and tool-result entries after it, never a new user one.
+ * Reading it fresh each time keeps the tool hooks and the stop hook agreeing on
+ * one id, which is the whole point: with no id they share a directory per
+ * session, and a turn rule reads the previous prompt's calls as this turn's.
+ */
+export const promptIdOf = (ctx) => {
+  try {
+    const entries = ctx?.sessionManager?.getBranch?.() ?? [];
+    for (let i = entries.length - 1; i >= 0; i -= 1) {
+      const entry = entries[i];
+      if (
+        entry?.type === "message" &&
+        entry.message?.role === "user" &&
+        typeof entry.id === "string"
+      )
+        return entry.id;
+    }
+  } catch {}
+  return undefined;
+};
+
 const readOrNull = (file) => {
   try {
     return readFileSync(file, "utf8");
@@ -108,29 +136,40 @@ const readOrNull = (file) => {
   }
 };
 
-export const postToolUsePayload = ({ filePath, original, after, sessionId, cwd, toolCallId }) => ({
+export const postToolUsePayload = ({
+  filePath,
+  original,
+  after,
+  sessionId,
+  promptId,
+  cwd,
+  toolCallId,
+}) => ({
   tool_name: "Write",
   tool_input: { file_path: filePath, content: after },
   tool_response: { filePath, originalFile: original },
   session_id: sessionId,
+  prompt_id: promptId,
   cwd,
   hook_event_name: "PostToolUse",
   tool_use_id: toolCallId,
 });
 
-export const toolCallPayload = ({ tool, input, sessionId, cwd, toolCallId }) => ({
+export const toolCallPayload = ({ tool, input, sessionId, promptId, cwd, toolCallId }) => ({
   tool_name: tool,
   tool_input: input ?? {},
   session_id: sessionId,
+  prompt_id: promptId,
   cwd,
   hook_event_name: "PostToolUse",
   tool_use_id: toolCallId,
 });
 
-export const preToolCallPayload = ({ tool, input, sessionId, cwd, toolCallId }) => ({
+export const preToolCallPayload = ({ tool, input, sessionId, promptId, cwd, toolCallId }) => ({
   tool_name: tool,
   tool_input: input ?? {},
   session_id: sessionId,
+  prompt_id: promptId,
   cwd,
   hook_event_name: "PreToolUse",
   tool_use_id: toolCallId,
@@ -224,6 +263,7 @@ export default function ohMyPlumb(pi, options) {
           tool: event.toolName,
           input: event.input,
           sessionId: ctx.sessionManager?.getSessionId?.() ?? "pi",
+          promptId: promptIdOf(ctx),
           cwd: ctx.cwd ?? process.cwd(),
           toolCallId: event.toolCallId,
         }),
@@ -252,6 +292,7 @@ export default function ohMyPlumb(pi, options) {
             original: before.original,
             after,
             sessionId,
+            promptId: promptIdOf(ctx),
             cwd,
             toolCallId: event.toolCallId,
           }),
@@ -275,6 +316,7 @@ export default function ohMyPlumb(pi, options) {
           tool: event.toolName,
           input: event.input,
           sessionId,
+          promptId: promptIdOf(ctx),
           cwd,
           toolCallId: event.toolCallId,
         }),
@@ -297,6 +339,7 @@ export default function ohMyPlumb(pi, options) {
         "stop",
         {
           session_id: sessionId,
+          prompt_id: promptIdOf(ctx),
           cwd: ctx.cwd ?? process.cwd(),
           hook_event_name: "Stop",
           stop_hook_active: false,
@@ -324,6 +367,7 @@ export default function ohMyPlumb(pi, options) {
         "stop",
         {
           session_id: event.session_id ?? ctx.sessionManager?.getSessionId?.() ?? "omp",
+          prompt_id: promptIdOf(ctx),
           cwd: ctx.cwd ?? process.cwd(),
           hook_event_name: "Stop",
           stop_hook_active: event.stop_hook_active === true,

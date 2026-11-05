@@ -226,6 +226,7 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
       }),
       runTurnToolCallCheck({
         log,
+        files,
         task,
         rules: judged,
         thresholds: loaded.thresholds,

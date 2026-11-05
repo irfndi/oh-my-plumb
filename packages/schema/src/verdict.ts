@@ -12,6 +12,12 @@ export const verdictSchema = z.object({
   band: bandSchema,
   /** For choice and score answers, what the model picked. */
   answer: z.string().optional(),
+  /**
+   * Set when no model was asked: this turn did not meet the rule's own
+   * precondition, so the rule was cleared without a call. A rule that was
+   * never judgeable is not a rule that was broken.
+   */
+  precondition: z.literal("unmet").optional(),
 });
 export type Verdict = z.infer<typeof verdictSchema>;
 
