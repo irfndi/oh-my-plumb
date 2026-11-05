@@ -44,7 +44,9 @@ const killTree = (child: ChildProcess): void => {
   } catch {
     try {
       child.kill("SIGKILL");
-    } catch {}
+    } catch {
+      // Already gone, or unfallible to signal: a dead server must never break the hook.
+    }
   }
 };
 
@@ -277,7 +279,7 @@ const mcpSession = (
         protocolVersion: PROTOCOL_VERSION,
         capabilities: {},
         // version mirrors packages/cli/package.json; nothing parses it.
-        clientInfo: { name: "oh-my-plumb", version: "0.3.4" },
+        clientInfo: { name: "oh-my-plumb", version: "0.3.5" },
       },
     });
   });
