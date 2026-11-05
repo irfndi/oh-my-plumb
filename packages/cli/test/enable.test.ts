@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -9,6 +9,7 @@ import { handleSessionStart } from "../src/hooks/sessionStart.js";
 import { handleStop } from "../src/hooks/stop.js";
 import { handleTurnStart } from "../src/hooks/turnStart.js";
 import { loadRubric } from "../src/lib/loadRubric.js";
+import { readRubric } from "../src/lib/rubricFile.js";
 import { globalRubricPath, rubricPath } from "../src/lib/paths.js";
 
 // The judge is the only boundary a test cannot reach; a canned answer keeps this
@@ -61,6 +62,12 @@ const rubricOf = (root: string | undefined, enabled?: boolean): object => ({
   ...(enabled === undefined ? {} : { enabled }),
   ...(root === undefined ? {} : {}),
 });
+
+const rubricOnDisk = (file: string): { enabled?: boolean; rules: unknown[] } => {
+  const read = readRubric(file);
+  if (read.kind !== "ok") throw new Error(`rubric did not parse: ${read.kind}`);
+  return { enabled: read.rubric.enabled, rules: read.rubric.rules };
+};
 
 const quiet = (): void => {
   vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -130,7 +137,7 @@ describe("disable and enable write the file a person can read", () => {
     } finally {
       process.chdir(cwd);
     }
-    const written = JSON.parse(readFileSync(rubricPath(root), "utf8"));
+    const written = rubricOnDisk(rubricPath(root));
     expect(written.enabled).toBe(false);
     expect(written.rules).toHaveLength(1);
   });
@@ -145,7 +152,7 @@ describe("disable and enable write the file a person can read", () => {
     } finally {
       process.chdir(cwd);
     }
-    expect(JSON.parse(readFileSync(rubricPath(root), "utf8")).enabled).toBe(true);
+    expect(rubricOnDisk(rubricPath(root)).enabled).toBe(true);
     expect(loadRubric(root).rules).toHaveLength(1);
   });
 
@@ -161,7 +168,7 @@ describe("disable and enable write the file a person can read", () => {
     } finally {
       process.chdir(cwd);
     }
-    const written = JSON.parse(readFileSync(rubricPath(root), "utf8"));
+    const written = rubricOnDisk(rubricPath(root));
     expect(written.enabled).toBe(false);
     expect(written.rules).toEqual([]);
   });
@@ -170,7 +177,7 @@ describe("disable and enable write the file a person can read", () => {
     quiet();
     projectWith(rubricOf(undefined));
     expect(await runEnabled([], false)).toBe(0);
-    expect(JSON.parse(readFileSync(globalRubricPath(), "utf8")).enabled).toBe(false);
+    expect(rubricOnDisk(globalRubricPath()).enabled).toBe(false);
   });
 });
 

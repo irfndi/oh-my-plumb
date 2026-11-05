@@ -12,13 +12,7 @@ export type LoadedRules = {
   off: "project" | "global" | undefined;
 };
 
-/**
- * Project rubric plus the global one, project winning on a clash. `enabled:
- * false` in either file stands every check down for that scope.
- *
- * Read here, in the one place every hook and command already goes through, so
- * a flip takes effect on the next edit with no hook rewrite.
- */
+/** Project rubric plus the global one, project winning on a clash. Read here, where every hook already looks, so a flip lands on the next edit. */
 export const loadRubric = (root: string): LoadedRules => {
   const problems: string[] = [];
   const pick = (file: string): Rubric | undefined => {
@@ -37,7 +31,6 @@ export const loadRubric = (root: string): LoadedRules => {
   };
   const project = pick(rubricPath(root));
   const global = pick(globalRubricPath());
-  // A file that is off is off for its scope; the other scope still speaks.
   const off: LoadedRules["off"] =
     project?.enabled === false ? "project" : global?.enabled === false ? "global" : undefined;
   return {

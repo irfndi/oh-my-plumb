@@ -163,7 +163,7 @@ export const handleSessionStart = async (raw: unknown): Promise<HookOutput> => {
 
   const plan = await planCompile(root);
   const notices: string[] = [];
-  // Off must be said out loud: silence from a stand-down reads exactly like a clean session.
+  // Silence from a stand-down reads exactly like a clean session.
   const loaded = loadRubric(root);
   if (loaded.off !== undefined) notices.push(offNotice(loaded.off, root));
   const keyProblem = await keyNotice(root, input.session_id);
@@ -175,7 +175,6 @@ export const handleSessionStart = async (raw: unknown): Promise<HookOutput> => {
   if (update !== undefined) notices.push(update);
   const systemMessage = notices.length > 0 ? notices.join("\n") : undefined;
 
-  // A scope that is off compiles nothing: the agent asked for quiet, not for work.
   if (loaded.off !== undefined) {
     return systemMessage === undefined ? { kind: "silent" } : { kind: "notice", systemMessage };
   }

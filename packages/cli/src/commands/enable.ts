@@ -6,12 +6,7 @@ import { readRubric, writeRubric } from "../lib/rubricFile.js";
 import { findRepoRoot, globalRubricPath, rubricPath } from "../lib/paths.js";
 import { say } from "../lib/ui.js";
 
-/**
- * The switch is written into the rubric file itself, so it survives a restart
- * and is something a person can read and edit by hand. A missing rubric is
- * created rather than refused: standing the checker down somewhere is a
- * legitimate thing to ask, and the new file says where the switch lives.
- */
+/** The switch lives in the rubric file, so it survives a restart and reads by hand. A missing rubric is created, not refused. */
 export const runEnabled = async (argv: string[], enabled: boolean): Promise<number> => {
   const { values } = parseArgs({
     args: argv,
