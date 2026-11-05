@@ -601,7 +601,7 @@ describe("the hook never breaks the agent (needs `pnpm build` first)", () => {
       }),
     );
     expect(JSON.stringify(readLog("p2"))).toBe(
-      '[{"order":1,"name":"Bash","summary":"{command=pwd}"}]',
+      '[{"order":1,"name":"Bash","summary":"{command=pwd}","args":[{"name":"command","text":"pwd"}]}]',
     );
     expect(readLog("p1")).toHaveLength(2);
   });

@@ -83,7 +83,22 @@ The judge is a small, fast model that answers typed questions with a probability
 - Keep instructions under about 60 words. Every word is billed on every edit whether or not the rule fires.
 - Ask for existence, not for a judgment of the whole: "Among the added lines, is there at least one comment whose content a reader could reconstruct from the code directly below it?" fires on the first offending line, while "Are the comments appropriate?" averages over the hunk and never leaves the middle.
 - A rule about volume or restraint ("comment sparingly", "keep it short", "minimal code") needs two questions: an existence question for the concrete offence, and a `score` question for the amount, with levels the judge can point at ("no such comments", "one or two", "several, or a multi-line block", "most lines"). Do not collapse "sparingly" into a single narrow case and lose the volume.
-- A rule that requires a tool or skill ("use context7 for library docs", "use the brainstorming skill before building a feature") is answered from what the turn ran, not what it changed. Write it as a tool-call rule with `when: "turn"` and no scope; the judge gets the turn's tool-call log (`order`, `name`, `summary` in call order) and nothing else. A turn that called no tools has no log, and these rules do not run for it. In Claude Code a skill appears as a call named `Skill` whose summary names the skill. Ask only about what the log shows: a call's name, its position, the shape in its summary. Never ask about the agent's intent or the conversation; the judge cannot see them and such a question scores about 0.4 on everything. Say where the answer comes from ("Answer only from the turn's tool-call log"). These rules are easy to misjudge, so keep them in the flag band: only a clear miss under the user's absolute wording ("always", "never") should reach act.
+- A rule that requires a tool or skill ("use context7 for library docs", "use the brainstorming skill before building a feature") is answered from what the turn ran, not what it changed. Write it as a tool-call rule with `when: "turn"` and no scope; the judge gets the turn's tool-call log (`order`, `name`, `summary`, `args` in call order) and nothing else. A turn that called no tools has no log, and these rules do not run for it. In Claude Code a skill appears as a call named `Skill` whose summary names the skill. Ask only about what the log shows: a call's name, its position, the shape in its summary. Never ask about the agent's intent or the conversation; the judge cannot see them and such a question scores about 0.4 on everything. Say where the answer comes from ("Answer only from the turn's tool-call log"). These rules are easy to misjudge, so keep them in the flag band: only a clear miss under the user's absolute wording ("always", "never") should reach act.
+
+  **Write a `precondition` whenever the rule has one.** A judge cannot reliably answer "did _this_ turn change a file, and did it run the command" — it reads its own priors and the session before it, so a session that once edited in scope answers `true` on every later turn. The hook can answer it exactly, from this turn alone, for free:
+
+  ```json
+  "precondition": {
+    "changes": ["apps/frontend/**"],
+    "ran": { "arg": ["command"], "pattern": "\\b(bun run check|oxlint|oxfmt)(?:\\s|$)" }
+  }
+  ```
+
+  - `changes`: file globs, repo-relative. When no file the turn changed matches, the rule is cleared unread — so a rule with a stated precondition stops being noise on turns that never approached it.
+  - `ran`: a call the turn made shows the requirement. `arg` names the argument fields to read (`command`, `cmd`, `query`); omit it to read every short argument. `pattern` is JavaScript regex source, matched anywhere in the value. The rule is **met** when a call matches and **broken** when none does, so no judge is asked. Write the pattern with the boundary you mean: `\bbun run check\b` also matches `bun run check:types`, so prefer `\b(bun run check|oxlint|oxfmt)(?:\s|$)`.
+  - `precondition` needs `when: "turn"`: it reads the turn's own state. A rule with one is settled outright by the hook, and the judge is kept for whatever the two tests cannot express.
+  - Only use it for what the hook can see. "Did the turn change a file under X" and "did any call run Y" are answerable; "did it do so because the user asked" is not.
+
 - Use `criteria` for a worked example: `"criteria": { "true": "a `retry`loop written by hand when Radash`retry` is installed", "false": "calling an installed utility" }`. Put the user's own code block here when they gave one.
 - Question types:
   - `boolean` for almost everything. The answer is a probability that the rule is broken.
@@ -131,7 +146,9 @@ The test: if a careful reviewer would want to see the whole change before answer
 
 Lint rules always run per edit and do not need `when`.
 
-A tool-call rule carries `when` like any model rule. `"edit"` judges each call as it happens: the tool's name and its input, for rules about one command ("never run npm"). `"turn"` judges the whole turn's tool-call log once at the end: entries of `order`, `name` and `summary`, edits included, for rules about which tools a turn used and in what order ("look up docs with context7 before changing a dependency"). A turn rule sees the log, not the diff. Give it a scope only when it concerns calls to particular tools; a rule that requires a tool the turn may never have called has no scope.
+A tool-call rule carries `when` like any model rule. `"edit"` judges each call as it happens: the tool's name and its input, for rules about one command ("never run npm"). `"turn"` judges the whole turn's tool-call log once at the end: entries of `order`, `name`, `summary` and `args`, edits included, for rules about which tools a turn used and in what order ("look up docs with context7 before changing a dependency"). A turn rule sees the log, not the diff. Give it a scope only when it concerns calls to particular tools; a rule that requires a tool the turn may never have called has no scope.
+
+A turn rule with a stated precondition — "run the gate before pushing", "read the docs before changing a dependency" — should carry a `precondition` (Step 4). The hook then settles it from the turn's own files and calls, and no judge is asked about a turn that never approached the rule.
 
 ## Step 6. Write the rubric file
 

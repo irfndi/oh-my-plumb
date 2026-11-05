@@ -6,6 +6,7 @@ import { checkWithModel, isModelRule, type CheckState, type ModelRule } from "./
 import { ruleAppliesTo, ruleAppliesToTool } from "./scope.js";
 import { MAX_STATE_CHARS } from "./constants.js";
 import { callSummary, type ToolCallEntry } from "./session.js";
+import { concernsTurn, settlePreconditions, type PreconditionState } from "./precondition.js";
 
 export type CheckRequest = {
   phase: CheckPhase;
@@ -28,6 +29,11 @@ export type ToolCallCheckRequest = {
   thresholds: Thresholds;
   timeoutMs: number;
   retries?: number;
+  /**
+   * What the turn did, for a rule whose own precondition decides whether it is
+   * judged at all. Absent means no precondition applies.
+   */
+  turn?: PreconditionState;
 };
 
 export type CheckOutcome = {
@@ -175,6 +181,8 @@ export const renderToolInput = (call: ToolCall): string => {
 export type TurnToolCallCheckRequest = {
   /** The turn's tool-call log, in call order. */
   log: readonly ToolCallEntry[];
+  /** Repo-relative files the turn changed: what a precondition's `changes` globs read. */
+  files?: readonly string[];
   task?: string;
   rules: readonly Rule[];
   thresholds: Thresholds;
@@ -182,27 +190,29 @@ export type TurnToolCallCheckRequest = {
   retries?: number;
 };
 
-/** Turn-phase tool-call rules for this log: a scoped rule runs only when the turn called a tool its scope names. */
-export const selectTurnToolCallRules = (
-  rules: readonly Rule[],
-  log: readonly ToolCallEntry[],
-): Rule[] =>
-  rules.filter(
-    (rule) =>
-      runsInPhase(rule, "turn", "toolCall") &&
-      (rule.scope === undefined || log.some((entry) => ruleAppliesToTool(rule, entry.name))),
-  );
+/**
+ * Turn-phase tool-call rules for this turn. A scoped rule runs when the turn
+ * called a tool its scope names, or when the rule watches files this turn
+ * changed: a rule demanding a call it never got has nothing in the log to
+ * match, and dropping it there is how such a rule stays silent for ever.
+ */
+export const selectTurnToolCallRules = (rules: readonly Rule[], state: PreconditionState): Rule[] =>
+  rules.filter((rule) => runsInPhase(rule, "turn", "toolCall") && concernsTurn(rule, state));
 
 /** One model call judging the turn's whole tool-call log against every turn-phase tool-call rule it concerns. */
 export const runTurnToolCallCheck = async (
   request: TurnToolCallCheckRequest,
 ): Promise<CheckOutcome> => {
-  const modelRules =
-    request.log.length === 0
+  const state = { files: request.files ?? [], log: request.log };
+  const candidates =
+    request.log.length === 0 && state.files.length === 0
       ? []
-      : selectTurnToolCallRules(request.rules, request.log).filter(isModelRule);
+      : selectTurnToolCallRules(request.rules, state).filter(isModelRule);
+  // Whatever this turn settles without a judge is settled here, before anything is billed.
+  const { settled, judgeable } = settlePreconditions(candidates, state);
+  const modelRules = judgeable.filter(isModelRule);
   if (modelRules.length === 0) {
-    return { verdicts: [], modelRules, calls: 0, usage: {}, modelLatencyMs: 0 };
+    return { verdicts: settled, modelRules, calls: 0, usage: {}, modelLatencyMs: 0 };
   }
   const started = performance.now();
   const result = await checkWithModel(
@@ -216,7 +226,7 @@ export const runTurnToolCallCheck = async (
     request.retries ?? 0,
   );
   return {
-    verdicts: result.verdicts,
+    verdicts: [...result.verdicts, ...settled],
     modelRules,
     calls: 1,
     usage: result.usage,
@@ -232,17 +242,23 @@ export const runToolCallCheck = async (request: ToolCallCheckRequest): Promise<C
   if (request.phase === "turn")
     return runTurnToolCallCheck({
       log: [{ order: 1, name: request.call.tool, summary: callSummary(request.call.input) }],
+      files: request.turn?.files ?? [],
       ...(request.task === undefined ? {} : { task: request.task }),
       rules: request.rules,
       thresholds: request.thresholds,
       timeoutMs: request.timeoutMs,
       ...(request.retries === undefined ? {} : { retries: request.retries }),
     });
-  const modelRules = selectToolCallRules(request.rules, request.phase, request.call.tool).filter(
+  const candidates = selectToolCallRules(request.rules, request.phase, request.call.tool).filter(
     isModelRule,
   );
+  const { settled, judgeable } = settlePreconditions(candidates, {
+    files: request.turn?.files ?? [],
+    log: request.turn?.log ?? [],
+  });
+  const modelRules = judgeable.filter(isModelRule);
   if (modelRules.length === 0) {
-    return { verdicts: [], modelRules, calls: 0, usage: {}, modelLatencyMs: 0 };
+    return { verdicts: settled, modelRules, calls: 0, usage: {}, modelLatencyMs: 0 };
   }
 
   const started = performance.now();
@@ -258,7 +274,7 @@ export const runToolCallCheck = async (request: ToolCallCheckRequest): Promise<C
     request.retries ?? 0,
   );
   return {
-    verdicts: result.verdicts,
+    verdicts: [...result.verdicts, ...settled],
     modelRules,
     calls: 1,
     usage: result.usage,

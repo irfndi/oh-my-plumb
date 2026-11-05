@@ -140,6 +140,15 @@ const toolCallEntrySchema = z.object({
   order: z.number().int().positive(),
   name: z.string().min(1).max(100),
   summary: z.string().max(MAX_TOOL_SUMMARY_CHARS),
+  /**
+   * Short argument values by name, so a precondition can test the command a
+   * call ran without reading the summary back. Absent on entries written
+   * before this was recorded; an empty list is an entry with no short argument.
+   */
+  args: z
+    .array(z.object({ name: z.string().max(100), text: z.string().max(MAX_TOOL_STRING_CHARS) }))
+    .max(16)
+    .optional(),
 });
 /** One entry of the turn's tool-call log: which tool ran, in what order, with what shape of input. */
 export type ToolCallEntry = z.infer<typeof toolCallEntrySchema>;
@@ -199,6 +208,27 @@ export const callSummary = (input: unknown): string => {
 
 const toolCallsDir = (dir: string): string => path.join(dir, "tool-calls");
 
+/**
+ * The argument values a precondition reads: a short string kept as it is,
+ * anything else by name only. A field that carries file text is never kept,
+ * however short — the log holds shapes, never content.
+ */
+const argumentValues = (input: unknown): { name: string; text: string }[] => {
+  if (typeof input !== "object" || input === null) return [];
+  const found: { name: string; text: string }[] = [];
+  const keep = (key: string, value: string): void => {
+    if (found.length >= 16 || CONTENT_KEYS.has(key)) return;
+    if (value.length > MAX_TOOL_STRING_CHARS) return;
+    found.push({ name: key, text: value.replace(/\s+/g, " ").trim() });
+  };
+  for (const [key, value] of Object.entries(input)) {
+    if (typeof value === "string") keep(key, value);
+    else if (Array.isArray(value))
+      for (const item of value.slice(0, 8)) if (typeof item === "string") keep(key, item);
+  }
+  return found;
+};
+
 /** One call joins the turn's log, numbered in call order and capped at the turn's bound. First-write-wins files, like the rest of the turn state. */
 export const recordToolCall = (dir: string, name: string, input: unknown): void => {
   try {
@@ -212,7 +242,11 @@ export const recordToolCall = (dir: string, name: string, input: unknown): void 
       typeof input.command === "string"
         ? { command: `[${input.command.length} chars]` }
         : input;
-    const entry = { name: name.slice(0, 100), summary: callSummary(shown) };
+    const entry = {
+      name: name.slice(0, 100),
+      summary: callSummary(shown),
+      args: argumentValues(shown),
+    };
     for (let attempt = 0; attempt < 32; attempt += 1) {
       const order = countWithPrefix(calls, "call.") + 1;
       if (order > MAX_TOOL_CALLS_PER_TURN) return;

@@ -77,7 +77,7 @@ describe("turn-phase tool-call rules", () => {
       rule("diff-rule", { target: "diff" }),
       rule("off", { status: "disabled" }),
     ];
-    expect(selectTurnToolCallRules(rules, log).map((r) => r.id)).toEqual([
+    expect(selectTurnToolCallRules(rules, { files: [], log }).map((r) => r.id)).toEqual([
       "uses-context7",
       "no-npm",
     ]);
@@ -124,7 +124,7 @@ describe("a rule that requires a tool", () => {
 
   it("is judged on the turn's log, never on a diff or a single call", () => {
     const log = [{ order: 1, name: "Bash", summary: "{command=pnpm add zod}" }];
-    expect(selectTurnToolCallRules(parsed.rules, log)).toHaveLength(1);
+    expect(selectTurnToolCallRules(parsed.rules, { files: [], log })).toHaveLength(1);
     expect(selectRules(parsed.rules, "turn", ["package.json"])).toHaveLength(0);
     expect(selectToolCallRules(parsed.rules, "edit", "Bash")).toHaveLength(0);
   });

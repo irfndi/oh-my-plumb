@@ -80,11 +80,16 @@ export const runCalibrate = async (argv: string[]): Promise<number> => {
   const modelRules = rubric.rules.filter(
     (r) => r.check.type === "model" && r.status !== "disabled",
   );
-  if (modelRules.length === 0) {
+  // A rule with a precondition is settled by the hook, not sampled: calibrating it
+  // would score constant 0s and 1s as if a judge had answered them.
+  const sampled = modelRules.filter(
+    (r) => r.check.type !== "model" || r.check.precondition === undefined,
+  );
+  if (sampled.length === 0) {
     await showStatic(Callout({ tone: "ok", title: "No model-checked rules to calibrate" }));
     return 0;
   }
-  const rulesToRun = modelRules.map((r) => ({ ...r, status: "active" as const }));
+  const rulesToRun = sampled.map((r) => ({ ...r, status: "active" as const }));
   const toolCallRules = rulesToRun.filter((r) => r.target === "toolCall");
   // Only calls some rule could judge, and at most --calls of them, the most recently recorded.
   const recordedCalls = (toolCallRules.length === 0 ? [] : recordedCallsFor(repoRoot))

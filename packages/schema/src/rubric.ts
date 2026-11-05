@@ -90,12 +90,52 @@ export const lintCheckSchema = z
     "say how a linter would enforce it, or give the pattern",
   );
 
+/** How one call shows a command ran: the rules for some argument, the rules any argument's text matches. */
+export const toolArgMatchSchema = z
+  .object({
+    /** Argument names this test reads: `command`, `cmd`. Omit to read every argument as text. */
+    arg: z.array(z.string().min(1).max(100)).min(1).optional(),
+    /** JavaScript source for a pattern: a regex body or a literal, always read as an anchored match. */
+    pattern: z.string().min(1).max(300),
+  })
+  .refine(
+    (m) => {
+      try {
+        new RegExp(m.pattern);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { path: ["pattern"], message: "pattern must be a valid regular expression" },
+  );
+
+/**
+ * The deterministic half of a model rule: what a turn did, read off the turn's
+ * own state instead of asked of a judge. A model question about a precondition
+ * is answered from earlier turns — the very thing a `when: "turn"` rule must
+ * not see — while these two tests only ever read this turn.
+ */
+export const preconditionSchema = z
+  .object({
+    /** At least one file the turn changed matches one of these globs. */
+    changes: z.array(z.string().min(1).max(500)).min(1).optional(),
+    /** A call the turn made shows what the rule asks for. */
+    ran: toolArgMatchSchema.optional(),
+  })
+  .refine(
+    (p) => p.changes !== undefined || p.ran !== undefined,
+    "name what the turn must have done: precondition.changes, precondition.ran, or both",
+  );
+export type Precondition = z.infer<typeof preconditionSchema>;
+
 export const modelCheckSchema = z.object({
   type: z.literal("model"),
   question: questionSchema,
   overlaps: overlapsSchema,
   /** Grep-shaped hint, executable by Tier 1 against added lines when present. */
   pattern: z.string().min(1).max(500).optional(),
+  precondition: preconditionSchema.optional(),
 });
 
 /**
@@ -229,6 +269,14 @@ export const ruleSchema = z
         code: "custom",
         path: ["target"],
         message: `rule "${rule.id}" targets tool calls, which only a model check can judge`,
+      });
+    }
+    const precondition = rule.check.type === "model" ? rule.check.precondition : undefined;
+    if (precondition !== undefined && rule.when !== "turn") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["check", "precondition"],
+        message: `rule "${rule.id}" reads a precondition off the turn's log, so it needs "when": "turn"`,
       });
     }
   });
