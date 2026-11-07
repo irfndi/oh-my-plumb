@@ -144,7 +144,7 @@ describe("turn state on disk", () => {
       recordToolCall(dir, "Bash", { command: `c${i}` });
     }
     expect(readToolCalls(dir)).toHaveLength(MAX_TOOL_CALLS_PER_TURN);
-    expect(readdirSync(path.join(dir, "tool-calls"))).toHaveLength(MAX_TOOL_CALLS_PER_TURN);
+    expect(readdirSync(path.join(dir, "tool-calls"))).toHaveLength(MAX_TOOL_CALLS_PER_TURN + 1);
     expect(readToolCalls(dir)[0]?.order).toBe(1);
     expect(readToolCalls(dir).at(-1)?.order).toBe(MAX_TOOL_CALLS_PER_TURN);
   });

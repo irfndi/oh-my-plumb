@@ -90,11 +90,6 @@ export const resolveCredentials = (root: string): Credentials => {
   return current;
 };
 
-export const credentials = (): Credentials => {
-  current ??= pick(fromProcessEnv(), "the environment");
-  return current;
-};
-
 export const hasApiKey = (root: string): boolean => resolveCredentials(root).kind !== "none";
 
 /** The one file oh-my-plumb may write a key to; see AGENTS.md. */

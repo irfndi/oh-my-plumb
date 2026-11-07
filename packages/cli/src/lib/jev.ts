@@ -15,8 +15,14 @@ import {
   JEV_USD_PER_INPUT_TOKEN,
   TYPESAFE_MODEL_ID,
 } from "./constants.js";
-import { credentials, KEY_REJECTED_HINT, NO_KEY_HINT, type Credentials } from "./credentials.js";
+import {
+  type Credentials,
+  KEY_REJECTED_HINT,
+  NO_KEY_HINT,
+  resolveCredentials,
+} from "./credentials.js";
 import { isKeyRejected, keyRejectionSentence, noteAuthFailure, noteKeyWorked } from "./keyState.js";
+import { findRepoRoot } from "./paths.js";
 import type { ToolCallEntry } from "./session.js";
 
 export type ModelRule = Rule & { check: { type: "model" } };
@@ -204,7 +210,7 @@ export const checkWithModel = async (
   retries = 0,
 ): Promise<ModelCheckResult> => {
   if (rules.length === 0) return { verdicts: [], usage: {}, latencyMs: 0 };
-  const creds = credentials();
+  const creds = resolveCredentials(findRepoRoot(process.cwd()));
   if (creds.kind === "none") throw new PlumbError("NO_API_KEY", NO_KEY_HINT);
   // A refused key is latched: dialling it again on every edit buys the same 401 and the agent's time.
   if (isKeyRejected(creds.key))

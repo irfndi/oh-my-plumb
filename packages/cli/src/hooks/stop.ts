@@ -44,6 +44,7 @@ import {
   readPrompt,
   readToolCalls,
   stopCheckCount,
+  toolLogIsComplete,
   turnDir,
 } from "../lib/session.js";
 import { lastUserPrompt } from "../lib/transcript.js";
@@ -226,6 +227,7 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
       }),
       runTurnToolCallCheck({
         log,
+        logComplete: toolLogIsComplete(dir),
         files,
         task,
         rules: judged,

@@ -181,6 +181,7 @@ export const renderToolInput = (call: ToolCall): string => {
 export type TurnToolCallCheckRequest = {
   /** The turn's tool-call log, in call order. */
   log: readonly ToolCallEntry[];
+  logComplete?: boolean;
   /** Repo-relative files the turn changed: what a precondition's `changes` globs read. */
   files?: readonly string[];
   task?: string;
@@ -203,7 +204,11 @@ export const selectTurnToolCallRules = (rules: readonly Rule[], state: Precondit
 export const runTurnToolCallCheck = async (
   request: TurnToolCallCheckRequest,
 ): Promise<CheckOutcome> => {
-  const state = { files: request.files ?? [], log: request.log };
+  const state = {
+    files: request.files ?? [],
+    log: request.log,
+    ...(request.logComplete === undefined ? {} : { logComplete: request.logComplete }),
+  };
   const candidates =
     request.log.length === 0 && state.files.length === 0
       ? []
@@ -255,6 +260,7 @@ export const runToolCallCheck = async (request: ToolCallCheckRequest): Promise<C
   const { settled, judgeable } = settlePreconditions(candidates, {
     files: request.turn?.files ?? [],
     log: request.turn?.log ?? [],
+    ...(request.turn?.logComplete === undefined ? {} : { logComplete: request.turn.logComplete }),
   });
   const modelRules = judgeable.filter(isModelRule);
   if (modelRules.length === 0) {

@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type * as ChildProcessModule from "node:child_process";
@@ -199,6 +206,40 @@ describe("pi extension pre-call", () => {
       { cwd: bare, sessionManager: { getSessionId: () => "s2" }, ui: { notify: () => {} } },
     );
     expect(existsSync(path.join(bare, ".oh-my-plumb", "events.jsonl"))).toBe(false);
+  }, 30_000);
+
+  it("files each prompt of one session under its own turn directory", async () => {
+    const { default: ohMyPlumb } = await import(extension);
+    const handlers = new Map<string, (event: unknown, ctx: unknown) => Promise<unknown>>();
+    ohMyPlumb({
+      on: (name: string, handler: (event: unknown, ctx: unknown) => Promise<unknown>) => {
+        handlers.set(name, handler);
+      },
+      sendUserMessage: () => {},
+    });
+    const root = repoWithToolCallRule();
+    const home = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-turn-home-"));
+    const savedHome = process.env.OH_MY_PLUMB_HOME_DIR;
+    process.env.OH_MY_PLUMB_HOME_DIR = home;
+    const sessions = (): string[] =>
+      readdirSync(path.join(home, ".oh-my-plumb", "sessions", "s1")).sort();
+    try {
+      const ctx = { cwd: root, sessionManager: { getBranch: () => [], getSessionId: () => "s1" } };
+      const ran = async (id: string): Promise<void> => {
+        const call = { toolName: "bash", input: { command: "ls" }, toolCallId: id };
+        await handlers.get("tool_call")?.(call, ctx);
+        await handlers.get("tool_result")?.(call, ctx);
+      };
+      await ran("t1");
+      await ran("t2");
+      expect(sessions()).toEqual(["run-0"]);
+      await handlers.get("session_stop")?.({ stop_hook_active: false }, ctx);
+      await ran("t3");
+      expect(sessions()).toEqual(["run-0", "run-1"]);
+    } finally {
+      if (savedHome === undefined) delete process.env.OH_MY_PLUMB_HOME_DIR;
+      else process.env.OH_MY_PLUMB_HOME_DIR = savedHome;
+    }
   }, 30_000);
 
   it("returns pi's block when the hook denies the call, and only warns when it flags", async () => {

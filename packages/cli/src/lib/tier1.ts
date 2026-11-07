@@ -1,5 +1,6 @@
 import type { Rule, Thresholds, Verdict } from "oh-my-plumb-schema";
 import { judgesDiff } from "./checkRunner.js";
+import { boundedPattern } from "./pattern.js";
 import { ruleAppliesTo } from "./scope.js";
 
 /**
@@ -25,12 +26,9 @@ const addedLinesOf = (diff: string): string[] => {
   return out;
 };
 
-const toRegExp = (pattern: string): RegExp | undefined => {
-  try {
-    return new RegExp(pattern);
-  } catch {
-    return undefined;
-  }
+const toRegExp = (pattern: string): ((text: string) => boolean) | undefined => {
+  const bounded = boundedPattern(pattern);
+  return bounded.kind === "match" ? bounded.test : undefined;
 };
 
 /**
@@ -57,15 +55,15 @@ export const fastCheck = (
       skipped.push(rule);
       continue;
     }
-    const re = toRegExp(pattern);
-    if (re === undefined) {
+    const matches = toRegExp(pattern);
+    if (matches === undefined) {
       skipped.push(rule);
       continue;
     }
     const inScope = fileDiffs.filter((f) => ruleAppliesTo(rule, f.file));
     const matched = inScope.flatMap((f) =>
       addedLinesOf(f.text)
-        .filter((line) => re.test(line))
+        .filter(matches)
         .map((line) => `${f.file}: ${line.trim().slice(0, 120)}`),
     );
     if (matched.length === 0) continue;
