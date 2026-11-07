@@ -149,6 +149,7 @@ describe("the schema refuses a precondition it cannot honour", () => {
           id: "r",
           text: "t",
           source: { path: "AGENTS.md" },
+          target: "toolCall",
           when: "turn",
           check: { type: "model", question: { type: "boolean", instructions: "?" }, ...over },
         },
@@ -216,5 +217,28 @@ describe("the schema refuses a precondition it cannot honour", () => {
         },
       }).success,
     ).toBe(true);
+  });
+
+  it("refuses a precondition on a diff target, where no log is ever handed to it", () => {
+    const out = rubricSchema.safeParse({
+      version: 1,
+      compiledAt: "x",
+      sources: [{ path: "AGENTS.md" }],
+      rules: [
+        {
+          id: "r",
+          text: "t",
+          source: { path: "AGENTS.md" },
+          when: "turn",
+          check: {
+            type: "model",
+            question: { type: "boolean", instructions: "?" },
+            precondition: { ran: { arg: ["command"], pattern: "pnpm test" } },
+          },
+        },
+      ],
+    });
+    expect(out.success).toBe(false);
+    expect(JSON.stringify(out.error?.issues)).toContain("read off the turn's tool-call log");
   });
 });

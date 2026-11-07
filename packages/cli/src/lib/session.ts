@@ -207,6 +207,7 @@ export const callSummary = (input: unknown): string => {
 };
 
 const toolCallsDir = (dir: string): string => path.join(dir, "tool-calls");
+const TOOL_LOG_CAPPED = "capped";
 
 /**
  * The argument values a precondition reads: a short string kept as it is,
@@ -249,7 +250,10 @@ export const recordToolCall = (dir: string, name: string, input: unknown): void 
     };
     for (let attempt = 0; attempt < 32; attempt += 1) {
       const order = countWithPrefix(calls, "call.") + 1;
-      if (order > MAX_TOOL_CALLS_PER_TURN) return;
+      if (order > MAX_TOOL_CALLS_PER_TURN) {
+        createOnce(path.join(calls, TOOL_LOG_CAPPED), "");
+        return;
+      }
       if (
         createOnce(
           path.join(calls, `call.${String(order).padStart(6, "0")}`),
@@ -283,6 +287,14 @@ export const readToolCalls = (dir: string): ToolCallEntry[] => {
     }
   }
   return entries.sort((a, b) => a.order - b.order).slice(0, MAX_TOOL_CALLS_PER_TURN);
+};
+
+export const toolLogIsComplete = (dir: string): boolean => {
+  try {
+    return !readdirSync(toolCallsDir(dir)).includes(TOOL_LOG_CAPPED);
+  } catch {
+    return true;
+  }
 };
 
 const blockPrefix = (key: string): string => `${shortHash(key)}.`;

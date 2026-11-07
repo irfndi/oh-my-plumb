@@ -9,6 +9,7 @@ import {
   type PreconditionState,
 } from "../src/lib/precondition.js";
 import type { ToolCallEntry } from "../src/lib/session.js";
+import { MAX_TOOL_CALLS_PER_TURN } from "../src/lib/constants.js";
 
 /**
  * Randomised coverage of the one property that matters: a precondition is a
@@ -284,6 +285,52 @@ describe("the log a precondition reads is the log that was written", () => {
       expect(log.map((e) => e.args?.[0]?.text)).toEqual(["bun run check", "git status"]);
       const rule = ruleWith({ ran: { arg: ["command"], pattern: "\\bbun run check\\b" } });
       expect(settlePrecondition(rule, { files: [], log })?.band).toBe("clear");
+    } finally {
+      if (saved === undefined) delete process.env.OH_MY_PLUMB_HOME_DIR;
+      else process.env.OH_MY_PLUMB_HOME_DIR = saved;
+    }
+  });
+});
+
+describe("a truncated log is not evidence", () => {
+  const ranRule = (): Rule => ruleWith({ ran: { arg: ["command"], pattern: "pnpm test" } });
+
+  it("settles clear when the whole log is there and holds the call", () => {
+    const log: ToolCallEntry[] = [
+      {
+        order: 1,
+        name: "Bash",
+        summary: "pnpm test",
+        args: [{ name: "command", text: "pnpm test" }],
+      },
+    ];
+    expect(settlePrecondition(ranRule(), { files: [], log, logComplete: true })?.band).toBe(
+      "clear",
+    );
+  });
+
+  it("hands over to the judge when the log hit its cap", () => {
+    const state = { files: [], log: [], logComplete: false };
+    expect(settlePrecondition(ranRule(), state)).toBeUndefined();
+  });
+
+  it("still settles on a `changes` glob, which the cap never touches", () => {
+    const watching = ruleWith({ changes: ["src/**"], ran: { pattern: "pnpm test" } });
+    const state = { files: ["docs/readme.md"], log: [], logComplete: false };
+    expect(settlePrecondition(watching, state)?.precondition).toBe("unmet");
+  });
+
+  it("reports a capped log as incomplete, and an uncapped one as complete", async () => {
+    const { recordToolCall, turnDir, toolLogIsComplete } = await import("../src/lib/session.js");
+    const home = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-cap-home-"));
+    const saved = process.env.OH_MY_PLUMB_HOME_DIR;
+    process.env.OH_MY_PLUMB_HOME_DIR = home;
+    try {
+      const dir = turnDir("s", "cap");
+      expect(toolLogIsComplete(dir)).toBe(true);
+      for (let i = 0; i <= MAX_TOOL_CALLS_PER_TURN; i += 1)
+        recordToolCall(dir, "Bash", { command: `step ${i}` });
+      expect(toolLogIsComplete(dir)).toBe(false);
     } finally {
       if (saved === undefined) delete process.env.OH_MY_PLUMB_HOME_DIR;
       else process.env.OH_MY_PLUMB_HOME_DIR = saved;

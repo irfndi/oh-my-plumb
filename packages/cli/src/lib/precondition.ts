@@ -1,4 +1,5 @@
 import type { Precondition, Rule, Verdict } from "oh-my-plumb-schema";
+import { boundedPattern } from "./pattern.js";
 import { ruleAppliesTo, ruleAppliesToTool } from "./scope.js";
 import type { ToolCallEntry } from "./session.js";
 
@@ -18,6 +19,7 @@ export type PreconditionState = {
   files: readonly string[];
   /** The turn's tool-call log. */
   log: readonly ToolCallEntry[];
+  logComplete?: boolean;
 };
 
 const preconditionOf = (rule: Rule): Precondition | undefined =>
@@ -41,8 +43,9 @@ const argumentTexts = (entry: ToolCallEntry, arg: readonly string[] | undefined)
     .map((a) => a.text);
 
 const callRan = (log: readonly ToolCallEntry[], ran: NonNullable<Precondition["ran"]>) => {
-  const re = new RegExp(ran.pattern);
-  return log.some((entry) => argumentTexts(entry, ran.arg).some((text) => re.test(text)));
+  const pattern = boundedPattern(ran.pattern);
+  if (pattern.kind === "refuse") return true;
+  return log.some((entry) => argumentTexts(entry, ran.arg).some((text) => pattern.test(text)));
 };
 
 /**
@@ -61,7 +64,7 @@ export const settlePrecondition = (rule: Rule, state: PreconditionState): Verdic
   if (precondition === undefined) return undefined;
   if (precondition.changes !== undefined && !anyChangeMatches(precondition.changes, state.files))
     return { ruleId: rule.id, probability: 0, band: "clear", precondition: "unmet" };
-  if (precondition.ran !== undefined) {
+  if (precondition.ran !== undefined && state.logComplete !== false) {
     return callRan(state.log, precondition.ran)
       ? { ruleId: rule.id, probability: 0, band: "clear" }
       : {

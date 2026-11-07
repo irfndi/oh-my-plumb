@@ -279,6 +279,14 @@ export const ruleSchema = z
         message: `rule "${rule.id}" reads a precondition off the turn's log, so it needs "when": "turn"`,
       });
     }
+    // A diff rule is handed no turn state, so "never ran" would be its only answer.
+    if (precondition !== undefined && rule.target !== "toolCall") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["target"],
+        message: `rule "${rule.id}" has a precondition, which is read off the turn's tool-call log; give it "target": "toolCall"`,
+      });
+    }
   });
 export type Rule = z.infer<typeof ruleSchema>;
 export type RuleInput = z.input<typeof ruleSchema>;
