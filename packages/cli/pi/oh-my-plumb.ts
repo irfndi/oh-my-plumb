@@ -244,6 +244,8 @@ export default function ohMyPlumb(pi, options) {
     if (options?.shimFor !== undefined && packageInstalled(options.shimFor, process.cwd())) return;
   } catch {}
   const originals = new Map();
+  let runCount = 0;
+  const turnId = (ctx) => promptIdOf(ctx) ?? `run-${runCount}`;
 
   pi.on("tool_call", async (event, ctx) => {
     try {
@@ -263,7 +265,7 @@ export default function ohMyPlumb(pi, options) {
           tool: event.toolName,
           input: event.input,
           sessionId: ctx.sessionManager?.getSessionId?.() ?? "pi",
-          promptId: promptIdOf(ctx),
+          promptId: turnId(ctx),
           cwd: ctx.cwd ?? process.cwd(),
           toolCallId: event.toolCallId,
         }),
@@ -292,7 +294,7 @@ export default function ohMyPlumb(pi, options) {
             original: before.original,
             after,
             sessionId,
-            promptId: promptIdOf(ctx),
+            promptId: turnId(ctx),
             cwd,
             toolCallId: event.toolCallId,
           }),
@@ -316,7 +318,7 @@ export default function ohMyPlumb(pi, options) {
           tool: event.toolName,
           input: event.input,
           sessionId,
-          promptId: promptIdOf(ctx),
+          promptId: turnId(ctx),
           cwd,
           toolCallId: event.toolCallId,
         }),
@@ -334,12 +336,13 @@ export default function ohMyPlumb(pi, options) {
   pi.on("agent_before_settle", async (event, ctx) => {
     try {
       if (event.outcome !== "completed") return;
+      runCount += 1;
       const sessionId = ctx.sessionManager?.getSessionId?.() ?? "pi";
       const out = await runHook(
         "stop",
         {
           session_id: sessionId,
-          prompt_id: promptIdOf(ctx),
+          prompt_id: turnId(ctx),
           cwd: ctx.cwd ?? process.cwd(),
           hook_event_name: "Stop",
           stop_hook_active: false,
@@ -363,11 +366,12 @@ export default function ohMyPlumb(pi, options) {
   });
   pi.on("session_stop", async (event, ctx) => {
     try {
+      runCount += 1;
       const out = await runHook(
         "stop",
         {
           session_id: event.session_id ?? ctx.sessionManager?.getSessionId?.() ?? "omp",
-          prompt_id: promptIdOf(ctx),
+          prompt_id: turnId(ctx),
           cwd: ctx.cwd ?? process.cwd(),
           hook_event_name: "Stop",
           stop_hook_active: event.stop_hook_active === true,
