@@ -280,10 +280,17 @@ export const runGuard = (
     const timer = setTimeout(() => {
       try {
         child.kill("SIGKILL");
-      } catch {}
+      } catch {
+        // Already gone: a dead guard is a skip, like a slow one.
+      }
       done(undefined);
     }, timeoutMs);
     child.stdout.on("data", (c: Buffer) => chunks.push(c));
+    // A guard that exits without reading its stdin (a crash, an early `exit`)
+    // raises EPIPE here, and an unhandled stream error is a thrown exception
+    // that would take the hook, and the agent's session, with it. The answer is
+    // still read on close, so this waits for it rather than settling.
+    child.stdin.on("error", () => {});
     child.on("error", () => done(undefined));
     child.on("close", () => {
       const out = parseGuardOutput(Buffer.concat(chunks).toString("utf8"));
