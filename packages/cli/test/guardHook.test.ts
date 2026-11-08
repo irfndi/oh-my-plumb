@@ -130,6 +130,18 @@ describe("a skill guard through postToolUse, end to end", () => {
     expect(out.kind).toBe("silent");
   });
 
+  it("survives a guard that exits before reading its stdin", async () => {
+    // An unread stdin gives EPIPE, and an unhandled stream error is a thrown
+    // exception: a guard that never reads its input would take the hook with it.
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-guard-stdin-"));
+    const guard = path.join(root, "exits.mjs");
+    writeFileSync(guard, "#!/bin/sh\nexit 0\n");
+    chmodSync(guard, 0o755);
+    // Past a pipe buffer, so the write reaches a reader that has already gone.
+    const hit = await runGuard("r", "r", [guard], "a.ts", "x".repeat(200_000), 2_000, root);
+    expect(hit).toBeUndefined();
+  });
+
   it("skips a guard that crashes with no output, without a throw", async () => {
     const out = await write("guard-crash", repoWithGuard(crashingGuard), "export interface X {}\n");
     expect(out.kind).toBe("silent");
