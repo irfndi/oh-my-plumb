@@ -865,11 +865,12 @@ previous prompt's calls as this turn's".
 **Invalid state reached.** `(turn directory carrying another turn's budget)`.
 
 **Fixed for pi and omp.** The extension now files a run under
-`promptIdOf(ctx) ?? \`run-${runCount}\``, counted once per settled run, so two
-prompts of one session can no longer share a directory. `piExtension.test.ts`"files each prompt of one session under its own turn directory" fails without
-it. OpenCode's first request of a session still sends`prompt_id: undefined`
-(`oh-my-plumb-v2.js`assigns`s.turnId` only at the end of that request), so the
-same shape remains there.
+`promptIdOf(ctx) ?? run-N`, counted once per settled run, so two
+prompts of one session can no longer share a directory.
+`piExtension.test.ts` — "files each prompt of one session under its own turn
+directory" — fails without it. OpenCode's first request of a session still sends
+`prompt_id: undefined`, because `oh-my-plumb-v2.js` assigns `s.turnId` only at
+the end of that request, so the same shape remains there.
 
 ---
 
@@ -971,6 +972,43 @@ that fail.
 | **C · No regex runs unbounded**               | F4                    | **fixed**           | `lib/pattern.ts` refuses the nested-quantifier shape and caps the input at 4 000 characters; `precondition.ts` and `tier1.ts` run through it                | `pattern.test.ts`: the 245-second pattern is refused, real spellings still run                                                 |
 | **D · One credential resolver**               | F5 (fixed), F6 (open) | **half fixed**      | `credentials()` is deleted, so `checkWithModel` runs on `resolveCredentials`; F6 is untouched, `loadRubric` still collapses both scopes into `rules: []`    | `credentials.test.ts` (M7's second reproduction is now the only behaviour)                                                     |
 | **E · A skill loads by its path**             | F7                    | open                | Match the log entry against the `SKILL.md` path rather than the folder name as free text                                                                    | `skillScope.test.ts`: a command containing the skill's name does not enable it                                                 |
+
+---
+
+## Merged and released
+
+`2c8089d` (squash of [PR #81](https://github.com/irfndi/oh-my-plumb/pull/81))
+carries F1–F5 on `master`. cli 0.3.7 and schema 0.3.5 published from `997d917`,
+whose tree is byte-identical to the merge commit's, so the released artifact is
+the reviewed one. F6 and F7 stay open on purpose: F6 needs a decision about what
+`disable --project` means, F7 is a matcher change nobody has asked for yet.
+
+### The slow gate, diagnosed
+
+`npxInstall.test.ts` went red while the release was being cut, three full-suite
+runs in a row. The first reading — "load made it flaky, raise the timeout" — was
+half right and stopped one step short of the cause.
+
+`init` under npx copies its runtime out of the npx cache so hooks survive the
+cache being cleared (`copyOutOfNpx`). The test does that twice on purpose: once
+to install, once to repair a trimmed copy. Measured here, one copy is
+**12 394 files and 92.7 MB** through `cpSync(…, { dereference: true })`, about
+8.6 s idle. Two of those, and a spawn budget of 60 s, is a test that passes on a
+quiet machine and times out on a busy one.
+
+The fixture was the larger half of it. It linked **every** package in the
+workspace's `node_modules` into the fake npx cache — typescript, vite-plus,
+oxlint, `@voidzero-dev` — because it read the directory instead of the package's
+`dependencies`. An npm install never puts a devDependency beside the package, so
+the fixture was not the layout its own comment claimed, and it copied **317 MB**
+instead of 92.7 MB. Reading `dependencies` fixed that.
+
+What is left is real and unfixed on purpose: `init` spends ~9 s copying a
+dependency closure that includes `ink`, `react` and `ink-spinner`, which only the
+interactive CLI uses and no hook ever loads. Pruning that is a change to the
+"the copy must stand alone" invariant, which is the one thing keeping hooks alive
+after an npx cache clear, so it belongs in its own change with its own test, not
+in a release bump.
 
 ---
 

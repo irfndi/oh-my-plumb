@@ -61,16 +61,19 @@ const fakeNpxCache = (): { cache: string; bin: string } => {
       }
     }
   };
-  for (const dep of readdirSync(path.join(cliRoot, "node_modules"))) {
-    if (dep.startsWith(".")) continue;
-    const names = dep.startsWith("@")
-      ? readdirSync(path.join(cliRoot, "node_modules", dep)).map((scoped) => `${dep}/${scoped}`)
-      : [dep];
-    for (const name of names) {
-      const real = realpathSync(path.join(cliRoot, "node_modules", name));
-      linked.set(name, real);
-      walk(real);
-    }
+  // Production dependencies only, then what they need: an npm install never
+  // puts a devDependency beside the package, and linking the whole workspace
+  // tree here copies 317 MB of typescript and vite-plus into every runtime.
+  const dependencies =
+    (
+      JSON.parse(readFileSync(path.join(cliRoot, "package.json"), "utf8")) as {
+        dependencies?: Record<string, string>;
+      }
+    ).dependencies ?? {};
+  for (const name of Object.keys(dependencies)) {
+    const real = realpathSync(path.join(cliRoot, "node_modules", name));
+    linked.set(name, real);
+    walk(real);
   }
   for (const [name, real] of linked) {
     const target = path.join(nodeModules, name);
@@ -119,11 +122,14 @@ describe("init run by npx (needs `pnpm build` first)", () => {
     };
 
     const { cache, bin } = fakeNpxCache();
+    // The runtime copy is the whole production closure, dereferenced: tens of
+    // seconds on a busy machine, and this test asserts the copy works, not that
+    // it is quick.
     const init = spawnSync("node", [bin, "init", "claude", "pi", "--project"], {
       cwd: root,
       env,
       encoding: "utf8",
-      timeout: 60_000,
+      timeout: 180_000,
     });
     expect(init.stderr).toBe("");
     expect(init.status).toBe(0);
@@ -139,7 +145,7 @@ describe("init run by npx (needs `pnpm build` first)", () => {
       cwd: root,
       env,
       encoding: "utf8",
-      timeout: 60_000,
+      timeout: 180_000,
     });
     expect(repair.status).toBe(0);
     expect(existsSync(path.join(copiedPkg, "dist", "bin.js"))).toBe(true);
@@ -197,5 +203,5 @@ describe("init run by npx (needs `pnpm build` first)", () => {
     expect(hook.status).toBe(0);
     expect(hook.stdout).toContain('"decision":"block"');
     expect(readEvents(root).filter((event) => event.kind === "check")).toHaveLength(1);
-  }, 90_000);
+  }, 420_000);
 });

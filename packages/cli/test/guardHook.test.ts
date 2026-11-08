@@ -5,15 +5,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { handlePostToolUse } from "../src/hooks/postToolUse.js";
 import { GUARD_TIMEOUT_MS, runGuard } from "../src/lib/guards.js";
 
-const decidingGuard = `#!/usr/bin/env node
-let text = "";
-for await (const chunk of process.stdin) text += chunk;
-const hits = text.split("\\n").filter((line) => /^\\s*(export\\s+)?interface\\s/.test(line));
-console.log(
-  hits.length === 0
-    ? JSON.stringify({ isError: false })
-    : JSON.stringify({ isError: true, content: "use type, not interface" }),
-);
+// A guard has GUARD_TIMEOUT_MS to answer, and a fresh `node` can take longer than
+// that to start on a loaded machine, so these answer in sh. Only the hanging guard
+// needs a real runtime, and it is SIGKILLed at the deadline either way.
+const decidingGuard = `#!/bin/sh
+if grep -qE '^[[:space:]]*(export[[:space:]]+)?interface[[:space:]]'; then
+  printf '{"isError":true,"content":"use type, not interface"}'
+else
+  printf '{"isError":false}'
+fi
 `;
 
 const hangingGuard = `#!/usr/bin/env node
@@ -22,19 +22,18 @@ setTimeout(() => {}, 60_000);
 // ts-no-test-timers exception: the hang must happen in the spawned child, which fake
 // timers cannot reach; the child is SIGKILLed at GUARD_TIMEOUT_MS, so the test waits ~2 s.
 
-const garbageGuard = `#!/usr/bin/env node
-console.log("this is not json");
+const garbageGuard = `#!/bin/sh
+printf 'this is not json'
 `;
 
-const crashingGuard = `#!/usr/bin/env node
-process.exit(1);
+const crashingGuard = `#!/bin/sh
+exit 1
 `;
 
 // Leaves a marker in its working directory, so a pass proves the guard ran, and ran in the repo.
-const recordingGuard = `#!/usr/bin/env node
-import { writeFileSync } from "node:fs";
-writeFileSync("guard-ran", process.env.FILE_PATH ?? "");
-console.log(JSON.stringify({ isError: false }));
+const recordingGuard = `#!/bin/sh
+printf '%s' "$FILE_PATH" > guard-ran
+printf '{"isError":false}'
 `;
 
 /** A temp repo whose rubric points one guard at `script`, as a skill or as a relative command. */
@@ -57,7 +56,7 @@ const repoWithGuard = (script: string, via: "skill" | "command" = "skill"): stri
             type: "guard",
             ...(via === "skill"
               ? { skill: "interface-guard" }
-              : { command: ["node", "./skills/interface-guard/guard.mjs"] }),
+              : { command: ["./skills/interface-guard/guard.mjs"] }),
             scope: "{*.ts,*.tsx}",
             text: "Use type, not interface.",
           },
