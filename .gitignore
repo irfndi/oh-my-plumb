@@ -8,3 +8,5 @@ dist/
 packages/cli/skills/
 .oh-my-plumb/rules.yaml
 .oh-my-plumb/compile-skill.md
+# A guard fixture's marker, written wherever the guard ran: never a source file.
+packages/cli/guard-ran
