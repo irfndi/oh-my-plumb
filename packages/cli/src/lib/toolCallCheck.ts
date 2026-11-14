@@ -8,12 +8,12 @@ import {
 import { runToolCallCheck, selectToolCallRules, type CheckOutcome } from "./checkRunner.js";
 import { EDIT_CHECK_TIMEOUT_MS } from "./constants.js";
 import { hasApiKey, rejectedKeyNotice } from "./credentials.js";
-import { appendEvent } from "./events.js";
+import { appendCheck, appendEvent } from "./events.js";
 import { loadRubric } from "./loadRubric.js";
 import { debug } from "./output.js";
 import { findRepoRoot } from "./paths.js";
-import { flagNotice, toolCallReason } from "./reason.js";
-import { readPrompt, readToolCalls, turnDir } from "./session.js";
+import { callLabel, flagNotice, toolCallReason } from "./reason.js";
+import { claimFlagNotices, readPrompt, readToolCalls, sessionDir, turnDir } from "./session.js";
 import { filterToLoadedSkills } from "./skillScope.js";
 import { lastUserPrompt } from "./transcript.js";
 
@@ -94,23 +94,29 @@ export const handleToolCall = async (input: ToolCallInput): Promise<HookOutput> 
   // No per-turn cap: the call has not run, so letting it through after a few denials would run it.
   const acting = pairs("act");
 
-  appendEvent(root, {
-    kind: "check",
-    at,
-    phase: "edit",
-    sessionId: input.session_id,
-    promptId: turnIdOf(input),
-    files: [call.tool],
-    rules: outcome.modelRules.length,
-    latencyMs: Math.round(performance.now() - started),
-    modelLatencyMs: outcome.modelLatencyMs,
-    usage: outcome.usage,
-    verdicts: outcome.verdicts,
-    blocked: acting.length > 0,
-  });
+  const subject = callLabel({ tool: call.tool, input: call.input });
 
-  const flagged = pairs("flag");
-  const systemMessage = flagged.length > 0 ? flagNotice("edit", flagged, [call.tool]) : undefined;
+  appendCheck(
+    root,
+    {
+      kind: "check",
+      at,
+      phase: "edit",
+      sessionId: input.session_id,
+      promptId: turnIdOf(input),
+      files: [call.tool],
+      call: subject,
+      latencyMs: Math.round(performance.now() - started),
+      modelLatencyMs: outcome.modelLatencyMs,
+      usage: outcome.usage,
+      verdicts: outcome.verdicts,
+      blocked: acting.length > 0,
+    },
+    loaded.thresholds,
+  );
+
+  const flagged = claimFlagNotices(sessionDir(input.session_id), pairs("flag"));
+  const systemMessage = flagged.length > 0 ? flagNotice(flagged, [subject]) : undefined;
   if (acting.length > 0) {
     return {
       kind: "block",

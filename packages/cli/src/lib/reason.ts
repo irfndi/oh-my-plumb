@@ -1,4 +1,5 @@
 import type { Rule, Verdict } from "oh-my-plumb-schema";
+import { shortArgument } from "./session.js";
 
 const where = (rule: Rule): string =>
   rule.source.line === undefined
@@ -56,13 +57,29 @@ export const toolCallReason = (
   return `oh-my-plumb: The call to ${tool} appears to break ${count} from this repository's instructions.\n${lines.map((l) => `- ${l}`).join("\n")}\nRedo the call the way the rule asks, then continue with the task.`;
 };
 
+const MAX_SUBJECTS = 3;
+
+const MAX_CALL_CHARS = 80;
+
+export const callLabel = (call: { tool: string; input?: unknown }): string => {
+  const argument = call.input === undefined ? undefined : shortArgument(call.input);
+  if (argument === undefined) return call.tool;
+  const shown =
+    argument.length > MAX_CALL_CHARS ? `${argument.slice(0, MAX_CALL_CHARS - 3)}...` : argument;
+  return `${call.tool} "${shown}"`;
+};
+
 export const flagNotice = (
-  phase: "edit" | "turn",
   flagged: readonly { rule: Rule; verdict: Verdict }[],
-  files: readonly string[],
+  subjects: readonly string[],
 ): string => {
+  const shown = subjects.slice(0, MAX_SUBJECTS);
+  const rest = subjects.length - shown.length;
+  const on = rest === 0 ? shown.join(", ") : `${shown.join(", ")} and ${rest} more`;
   const list = flagged
-    .map(({ rule, verdict }) => `${rule.id} ${verdict.probability.toFixed(2)}`)
+    .map(({ rule, verdict }) => `${rule.id} ${verdict.probability.toFixed(2)} (${where(rule)})`)
     .join(", ");
-  return `oh-my-plumb: uncertain about ${list} on ${files.join(", ")} (${phase}). Not sent to the agent. Details in .oh-my-plumb/events.jsonl.`;
+  const what =
+    flagged.length === 1 ? `${list} on ${on}` : `${flagged.length} rules on ${on}: ${list}`;
+  return `oh-my-plumb: ${what}. Not sent to the agent. A rule in the middle is noted once a session; every verdict is in .oh-my-plumb/events.jsonl.`;
 };

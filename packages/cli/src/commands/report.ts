@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { parseArgs } from "node:util";
-import type { PlumbEvent, Rule } from "oh-my-plumb-schema";
+import type { PlumbEvent, Rule, Verdict } from "oh-my-plumb-schema";
 import { detectStack } from "../lib/detect.js";
 import { readEvents } from "../lib/events.js";
 import { guardRoutes, routeGaps } from "../lib/guards.js";
@@ -16,20 +16,23 @@ import { InitView } from "../ui/views/InitView.js";
 
 const statsFrom = (events: readonly PlumbEvent[]): Map<string, RuleStats> => {
   const stats = new Map<string, RuleStats>();
+  const count = (ruleId: string, band: Verdict["band"] | undefined): void => {
+    const s = stats.get(ruleId) ?? { checks: 0, fired: 0, flagged: 0 };
+    s.checks += 1;
+    if (band === "act") s.fired += 1;
+    if (band === "flag") s.flagged += 1;
+    stats.set(ruleId, s);
+  };
   for (const event of events) {
     if (event.kind !== "check") continue;
-    for (const v of event.verdicts) {
-      const s = stats.get(v.ruleId) ?? { checks: 0, fired: 0, flagged: 0 };
-      s.checks += 1;
-      if (v.band === "act") s.fired += 1;
-      if (v.band === "flag") s.flagged += 1;
-      stats.set(v.ruleId, s);
-    }
+    for (const v of event.verdicts) count(v.ruleId, v.band);
+    for (const ruleId of event.asked ?? []) count(ruleId, undefined);
   }
   return stats;
 };
 
 const MIN_CHECKS_TO_CALL_DEAD = 20;
+const MIN_FLAGS_TO_CALL_MIDDLE = 5;
 
 export const collectReport = (root: string): ReportData | undefined => {
   const loaded = loadRubric(root);
@@ -52,6 +55,17 @@ export const collectReport = (root: string): ReportData | undefined => {
       s.flagged === 0
     );
   });
+  // Never acted and never cleared: it enforces nothing, and its note is the only sign it exists.
+  const middle = loaded.rules.flatMap((rule) => {
+    const s = stats.get(rule.id);
+    return rule.status === "active" &&
+      rule.check.type === "model" &&
+      s !== undefined &&
+      s.fired === 0 &&
+      s.flagged >= MIN_FLAGS_TO_CALL_MIDDLE
+      ? [{ id: rule.id, flagged: s.flagged, checks: s.checks }]
+      : [];
+  });
   const mcpServers = detectStack(root).mcpServers;
   const missingRoutes = guardRoutes(loaded.rules, root)
     .map((route) => ({ trigger: route.trigger, gaps: routeGaps(root, route, mcpServers) }))
@@ -62,6 +76,7 @@ export const collectReport = (root: string): ReportData | undefined => {
     events,
     stats,
     dead,
+    middle,
     problems: loaded.problems,
     missingRoutes,
     // Project trust gates pi's project extension; global installs need no decision.
@@ -92,6 +107,7 @@ export const runReport = async (argv: string[]): Promise<number> => {
         rules: data.rules,
         stats: Object.fromEntries(data.stats),
         dead: data.dead.map((r) => r.id),
+        middle: data.middle,
         events: data.events.length,
       }),
     );

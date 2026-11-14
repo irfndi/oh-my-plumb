@@ -23,7 +23,7 @@ import {
 } from "../lib/constants.js";
 import { editsCoverFile } from "../lib/coverage.js";
 import { boundState, remainingMs, unifiedDiff } from "../lib/diff.js";
-import { appendEvent } from "../lib/events.js";
+import { appendCheck, appendEvent } from "../lib/events.js";
 import { blobIdsAt, diffTrees, snapshotTree, splitDiff, type FileDiff } from "../lib/git.js";
 import { hasApiKey, rejectedKeyNotice } from "../lib/credentials.js";
 import { loadRubric } from "../lib/loadRubric.js";
@@ -33,6 +33,7 @@ import { readRegularFile, readRegularText } from "../lib/regularFile.js";
 import { flagNotice, repairReason, turnToolCallReason } from "../lib/reason.js";
 import { filterToLoadedSkills } from "../lib/skillScope.js";
 import {
+  claimFlagNotices,
   clearTurn,
   hasTurnState,
   incrementStopChecks,
@@ -43,6 +44,7 @@ import {
   readFileStarts,
   readPrompt,
   readToolCalls,
+  sessionDir,
   stopCheckCount,
   toolLogIsComplete,
   turnDir,
@@ -273,22 +275,26 @@ export const handleStop = async (raw: unknown): Promise<HookOutput> => {
   const acting = pairs("act");
   const flagged = pairs("flag");
 
-  appendEvent(root, {
-    kind: "check",
-    at,
-    phase: "turn",
-    sessionId: input.session_id,
-    promptId: turnIdOf(input),
-    files: subjects,
-    rules: outcome.modelRules.length,
-    latencyMs: Math.round(performance.now() - started),
-    modelLatencyMs: outcome.modelLatencyMs,
-    usage: outcome.usage,
-    verdicts: outcome.verdicts,
-    blocked: acting.length > 0,
-  });
+  appendCheck(
+    root,
+    {
+      kind: "check",
+      at,
+      phase: "turn",
+      sessionId: input.session_id,
+      promptId: turnIdOf(input),
+      files: subjects,
+      latencyMs: Math.round(performance.now() - started),
+      modelLatencyMs: outcome.modelLatencyMs,
+      usage: outcome.usage,
+      verdicts: outcome.verdicts,
+      blocked: acting.length > 0,
+    },
+    loaded.thresholds,
+  );
 
-  const systemMessage = flagged.length > 0 ? flagNotice("turn", flagged, subjects) : undefined;
+  const noticed = claimFlagNotices(sessionDir(input.session_id), flagged);
+  const systemMessage = noticed.length > 0 ? flagNotice(noticed, subjects) : undefined;
   if (acting.length > 0) {
     const onDiff = acting.filter(({ rule }) => rule.target === "diff");
     const onCalls = acting.filter(({ rule }) => rule.target === "toolCall");

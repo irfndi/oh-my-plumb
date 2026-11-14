@@ -103,6 +103,7 @@ describe("views", () => {
           events: [],
           stats: new Map(),
           dead: [],
+          middle: [],
           problems: [],
           missingRoutes: [],
           piTrust: null,
@@ -120,6 +121,27 @@ describe("views", () => {
     expect(frame).toContain("ask-first");
   });
 
+  it("report names the rules that only ever land in the middle", () => {
+    const { lastFrame } = render(
+      <ReportView
+        data={{
+          root: "/r",
+          rules,
+          events: [],
+          stats: new Map([["raw-error-to-user", { checks: 120, fired: 0, flagged: 7 }]]),
+          dead: [],
+          middle: [{ id: "raw-error-to-user", flagged: 7, checks: 120 }],
+          problems: [],
+          missingRoutes: [],
+          piTrust: null,
+        }}
+      />,
+    );
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("raw-error-to-user (7 of 120 checks)");
+    expect(frame).toContain("oh-my-plumb tune");
+  });
+
   it("report calls out a tier 2 route whose guard is missing", () => {
     const { lastFrame } = render(
       <ReportView
@@ -129,6 +151,7 @@ describe("views", () => {
           events: [],
           stats: new Map(),
           dead: [],
+          middle: [],
           problems: [],
           missingRoutes: [{ trigger: "drizzle/**", gaps: ["scripts/v.mjs does not exist"] }],
           piTrust: null,
@@ -173,6 +196,7 @@ describe("views", () => {
           ],
           stats: new Map(),
           dead: [],
+          middle: [],
           problems: [],
           missingRoutes: [],
           piTrust: null,
@@ -201,6 +225,7 @@ describe("views", () => {
           ],
           stats: new Map(),
           dead: [],
+          middle: [],
           problems: [],
           missingRoutes: [],
           piTrust: null,
@@ -218,6 +243,7 @@ describe("views", () => {
       events: [],
       stats: new Map(),
       dead: [],
+      middle: [],
       problems: [],
       missingRoutes: [],
     };

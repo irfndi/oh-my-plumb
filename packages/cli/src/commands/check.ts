@@ -10,7 +10,7 @@ import { splitDiff, workingTreeDiff } from "../lib/git.js";
 import { loadRubric } from "../lib/loadRubric.js";
 import { findRepoRoot } from "../lib/paths.js";
 import { readRegularText } from "../lib/regularFile.js";
-import { toolCallReason } from "../lib/reason.js";
+import { callLabel, toolCallReason } from "../lib/reason.js";
 import { say } from "../lib/ui.js";
 import { Header } from "../ui/components/Header.js";
 import { showLive } from "../ui/render.js";
@@ -81,6 +81,7 @@ export const runCheckCommand = async (argv: string[]): Promise<number> => {
     const sections: CheckSection[] = [];
     let spendUsd = 0;
     if (call !== undefined) {
+      const label = callLabel(call);
       for (const p of ["edit", "turn"] as const) {
         if (phase !== "all" && phase !== p) continue;
         progress(`checking the call to ${call.tool}`);
@@ -96,7 +97,7 @@ export const runCheckCommand = async (argv: string[]): Promise<number> => {
         spendUsd += out.usage.costUsd ?? 0;
         sections.push({
           phase: p,
-          files: [call.tool],
+          files: [label],
           modelRules: out.modelRules.length,
           calls: out.calls,
           latencyMs: out.modelLatencyMs,

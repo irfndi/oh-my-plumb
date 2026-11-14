@@ -1,6 +1,7 @@
 import { closeSync, mkdirSync, readFileSync, readSync, renameSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 import { eventSchema, toolNameSchema, type PlumbEvent } from "oh-my-plumb-schema";
+import type { Thresholds, Verdict } from "oh-my-plumb-schema";
 import { EVENTS_LOG_MAX_BYTES, MAX_UNKNOWN_PAYLOADS_PER_TURN } from "./constants.js";
 import { findRepoRoot, ohMyPlumbDir, eventsPath } from "./paths.js";
 import { openRegular, writeRegularFile } from "./regularFile.js";
@@ -32,6 +33,38 @@ export const appendEvent = (root: string, event: PlumbEvent): void => {
   } catch {
     // nothing to do: logging is optional
   }
+};
+
+/** Clear verdicts this close to the flag band stay in the log: they show a rule drifting toward action. */
+const NEAR_MISS_MARGIN = 0.2;
+
+/** A check as the log keeps it: a rule that clearly passed becomes its id, and report still counts it. */
+export const verdictsForLog = (
+  verdicts: readonly Verdict[],
+  thresholds: Thresholds,
+): { verdicts: Verdict[]; asked: string[] } => {
+  const floor = Math.max(0, thresholds.flag - NEAR_MISS_MARGIN);
+  const kept: Verdict[] = [];
+  const asked: string[] = [];
+  for (const verdict of verdicts) {
+    const carries =
+      verdict.band !== "clear" ||
+      verdict.answer !== undefined ||
+      verdict.precondition !== undefined ||
+      verdict.probability >= floor;
+    if (carries) kept.push(verdict);
+    else asked.push(verdict.ruleId);
+  }
+  return { verdicts: kept, asked };
+};
+
+export const appendCheck = (
+  root: string,
+  check: Extract<PlumbEvent, { kind: "check" }>,
+  thresholds: Thresholds,
+): void => {
+  const { verdicts, asked } = verdictsForLog(check.verdicts, thresholds);
+  appendEvent(root, { ...check, verdicts, ...(asked.length === 0 ? {} : { asked }) });
 };
 
 /**

@@ -121,13 +121,36 @@ describe("blocking a recorded call before it runs", () => {
     expect(out.kind).toBe("notice");
     if (out.kind !== "notice") return;
     expect(out.systemMessage).toContain("no-blind-shell");
+    expect(out.systemMessage).toContain('on Bash "rm -rf /"');
+    expect(out.systemMessage).toContain("AGENTS.md");
     expect(checksIn(root)[0]?.blocked).toBe(false);
+    // The log names the call too, so the note's promise to be found there holds.
+    expect(checksIn(root)[0]?.call).toBe('Bash "rm -rf /"');
   });
 
-  it("a clear verdict passes the call silently", async () => {
+  it("says a rule once a session: repeats are judged and logged, never announced", async () => {
+    violation(0.6);
+    const root = repoWith();
+    const first = await handlePreToolUse({ ...payload(root), session_id: "quiet" });
+    expect(first.kind).toBe("notice");
+    for (let attempt = 2; attempt <= 4; attempt += 1) {
+      expect(await handlePreToolUse({ ...payload(root), session_id: "quiet" })).toEqual({
+        kind: "silent",
+      });
+    }
+    expect(checksIn(root)).toHaveLength(4);
+    const next = await handlePreToolUse({ ...payload(root), session_id: "later" });
+    expect(next.kind).toBe("notice");
+  });
+
+  it("a clear verdict passes the call silently, and the log keeps only its count", async () => {
     violation(0.1);
-    const out = await handlePreToolUse(payload(repoWith()));
+    const root = repoWith();
+    const out = await handlePreToolUse(payload(root));
     expect(out).toEqual({ kind: "silent" });
+    const check = checksIn(root)[0];
+    expect(check?.verdicts).toEqual([]);
+    expect(check?.asked).toEqual(["no-blind-shell"]);
   });
 
   it("judges a call once: the pre-hook decides, the post-hook only logs it", async () => {

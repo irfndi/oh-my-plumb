@@ -16,11 +16,15 @@ export type ReportData = {
   events: PlumbEvent[];
   stats: Map<string, RuleStats>;
   dead: Rule[];
+  /** Rules that only ever land between the bands, so they never act and never clear. */
+  middle: MiddleRule[];
   problems: string[];
   missingRoutes: { trigger: string; gaps: string[] }[];
   /** pi's verdict on this project, or null when no project-level pi extension is installed. */
   piTrust: PiTrustState | null;
 };
+
+export type MiddleRule = { id: string; flagged: number; checks: number };
 
 type Check = Extract<PlumbEvent, { kind: "check" }>;
 type Failure = Extract<PlumbEvent, { kind: "error" }>;
@@ -145,6 +149,19 @@ export function ReportView({ data }: { data: ReportData }) {
             <Text color={palette.ash}>
               {quiet.length} {quiet.length === 1 ? "rule has" : "rules have"} answered no on every
               check so far, which is what a clear answer looks like.
+            </Text>
+          </Box>
+        ) : null}
+        {data.middle.length > 0 ? (
+          <Box marginTop={1}>
+            <Text color={palette.amber}>
+              {data.middle.length}{" "}
+              {data.middle.length === 1 ? "rule only lands" : "rules only land"} in the middle, so{" "}
+              {data.middle.length === 1 ? "it never acts" : "they never act"}:{" "}
+              {data.middle.map((r) => `${r.id} (${r.flagged} of ${r.checks} checks)`).join(", ")}.
+              You see the first note in a session and no more. That is usually a rule worded too
+              broadly, or asked in terms the judge cannot see. Rewrite it with oh-my-plumb tune, or
+              set its status to disabled in the rubric.
             </Text>
           </Box>
         ) : null}
