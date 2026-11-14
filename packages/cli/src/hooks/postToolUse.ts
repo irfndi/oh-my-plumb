@@ -25,13 +25,14 @@ import {
 import { EDIT_CHECK_TIMEOUT_MS, MAX_BLOCKS_PER_RULE_PER_TURN } from "../lib/constants.js";
 import { hasApiKey, rejectedKeyNotice } from "../lib/credentials.js";
 import { boundState, editsFromPostToolUse, type EditHunk } from "../lib/diff.js";
-import { appendEvent, appendUnknownPayload } from "../lib/events.js";
+import { appendCheck, appendEvent, appendUnknownPayload } from "../lib/events.js";
 import { loadRubric } from "../lib/loadRubric.js";
 import { debug } from "../lib/output.js";
 import { findRepoRoot, isExcludedPath, relativeToRoot } from "../lib/paths.js";
 import { flagNotice, repairReason } from "../lib/reason.js";
 import {
   blockCount,
+  claimFlagNotices,
   incrementBlock,
   readPrompt,
   readToolCalls,
@@ -39,6 +40,7 @@ import {
   recordChecked,
   recordFileStart,
   recordToolCall,
+  sessionDir,
   turnDir,
 } from "../lib/session.js";
 import { filterToLoadedSkills } from "../lib/skillScope.js";
@@ -173,20 +175,23 @@ const handleEdit = async (input: PostToolUseInput): Promise<HookOutput> => {
   if (tier2Hits.length > 0) {
     const actedOn = [...new Set(tier2Hits.map((h) => h.relative))];
     for (const { relative } of tier2Hits) recordBlockedFile(turn, relative);
-    appendEvent(root, {
-      kind: "check",
-      at,
-      phase: "edit",
-      sessionId: input.session_id,
-      promptId: turnIdOf(input),
-      files: actedOn,
-      rules: tier2Hits.length,
-      latencyMs: Math.round(performance.now() - started),
-      modelLatencyMs: 0,
-      usage: {},
-      verdicts: tier2Hits.map((h) => ({ ruleId: h.hit.ruleId, probability: 1, band: "act" })),
-      blocked: true,
-    });
+    appendCheck(
+      root,
+      {
+        kind: "check",
+        at,
+        phase: "edit",
+        sessionId: input.session_id,
+        promptId: turnIdOf(input),
+        files: actedOn,
+        latencyMs: Math.round(performance.now() - started),
+        modelLatencyMs: 0,
+        usage: {},
+        verdicts: tier2Hits.map((h) => ({ ruleId: h.hit.ruleId, probability: 1, band: "act" })),
+        blocked: true,
+      },
+      loaded.thresholds,
+    );
     return {
       kind: "block",
       reason: tier2Hits.map((h) => h.hit.reason).join("\n"),
@@ -286,23 +291,27 @@ const handleEdit = async (input: PostToolUseInput): Promise<HookOutput> => {
     acting.push(...actingHere);
     flagged.push(...pairs("flag"), ...actPairs.filter((p) => !actingHere.includes(p)));
 
-    appendEvent(root, {
-      kind: "check",
-      at,
-      phase: "edit",
-      sessionId: input.session_id,
-      promptId: turnIdOf(input),
-      files: [relative],
-      rules: outcome.modelRules.length,
-      latencyMs: Math.round(performance.now() - started),
-      modelLatencyMs: outcome.modelLatencyMs,
-      usage: outcome.usage,
-      verdicts: outcome.verdicts,
-      blocked: actingHere.length > 0,
-    });
+    appendCheck(
+      root,
+      {
+        kind: "check",
+        at,
+        phase: "edit",
+        sessionId: input.session_id,
+        promptId: turnIdOf(input),
+        files: [relative],
+        latencyMs: Math.round(performance.now() - started),
+        modelLatencyMs: outcome.modelLatencyMs,
+        usage: outcome.usage,
+        verdicts: outcome.verdicts,
+        blocked: actingHere.length > 0,
+      },
+      loaded.thresholds,
+    );
   }
 
-  const systemMessage = flagged.length > 0 ? flagNotice("edit", flagged, files) : undefined;
+  const noticed = claimFlagNotices(sessionDir(input.session_id), flagged);
+  const systemMessage = noticed.length > 0 ? flagNotice(noticed, files) : undefined;
   if (acting.length > 0) {
     return {
       kind: "block",

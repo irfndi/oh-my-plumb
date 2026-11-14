@@ -39,13 +39,17 @@ export const eventSchema = z.discriminatedUnion("kind", [
     sessionId: z.string().optional(),
     promptId: z.string().optional(),
     files: z.array(z.string()),
-    rules: z.number().int(),
+    /** The call this check judged, as `tool "argument"`; absent on a check that read a diff. */
+    call: z.string().optional(),
+    rules: z.number().int().optional(),
     /** Older logs counted regex rules here; oh-my-plumb no longer runs any. */
     lintRules: z.number().int().optional(),
     latencyMs: z.number(),
     modelLatencyMs: z.number().optional(),
     usage: usageSchema.optional(),
     verdicts: z.array(verdictSchema),
+    /** Rules that answered well clear, kept as ids only: the count is what report reads. */
+    asked: z.array(z.string()).optional(),
     blocked: z.boolean(),
   }),
   z.object({

@@ -139,6 +139,12 @@ number of files carrying its prefix.
 | `prompt`                    | the user's prompt                       | `writePrompt`              | `readPrompt`                     |
 | `index`                     | scratch git index for snapshots         | `snapshotTree` (git)       | `snapshotTree`                   |
 
+One directory sits above the turn: `sessions/<session>/flags/<sha of the rule id>`
+records that this session has already shown a note for that rule.
+It is session-scoped on purpose, so `clearTurn` leaves it: a rule caught in the
+middle band is said once, not on every call. The claim is a create, so parallel
+hooks settle on one notice (`claimFlagNotice`, `claimFlagNotices`).
+
 Invariants:
 
 1. Every write is a create, never an update: `createOnce` returns `false` on an
@@ -632,6 +638,11 @@ Invariants:
 2. Trimming keeps the newest window, so `report` and `tune` see recent checks.
 3. A payload's _input and output_ never reach the log; only `kind`, `at`,
    `sessionId` and the tool's name (`appendUnknownPayload`).
+4. A `check` line keeps a verdict whole only when it carries meaning: act or
+   flag band, an `answer` or `precondition`, or a probability within
+   `NEAR_MISS_MARGIN` of the flag line. Every other rule is an id in `asked`,
+   which is what `report` counts. `verdictsForLog` owns the split; a line over
+   a rubric of boolean rules is mostly `asked` and a few bytes of context.
 
 Reachable invalid state: none found. `trimEvents` reads a tail window and then
 drops the first (possibly partial) line, which is correct only if at least one

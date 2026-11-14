@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import type { Verdict } from "oh-my-plumb-schema";
 import {
   MAX_TASK_CHARS,
   SESSION_STATE_MAX_AGE_MS,
@@ -29,6 +30,9 @@ export const NO_SESSION_ID = "_no-session";
 
 export const turnDir = (sessionId: string, promptId: string | undefined): string =>
   path.join(sessionsDir(), safe(sessionId), safe(promptId ?? NO_PROMPT_TURN));
+
+/** Above the turn dirs, so what a session learned in one turn holds in the next. */
+export const sessionDir = (sessionId: string): string => path.join(sessionsDir(), safe(sessionId));
 
 const fileStartSchema = z.object({ path: z.string(), original: z.string().nullable() });
 export type FileStart = z.infer<typeof fileStartSchema>;
@@ -230,6 +234,17 @@ const argumentValues = (input: unknown): { name: string; text: string }[] => {
   return found;
 };
 
+const NAMING_KEYS = ["command", "query", "url", "file_path", "path"];
+
+export const shortArgument = (input: unknown): string | undefined => {
+  const values = argumentValues(input);
+  for (const key of NAMING_KEYS) {
+    const found = values.find((value) => value.name === key);
+    if (found !== undefined) return found.text;
+  }
+  return values[0]?.text;
+};
+
 /** One call joins the turn's log, numbered in call order and capped at the turn's bound. First-write-wins files, like the rest of the turn state. */
 export const recordToolCall = (dir: string, name: string, input: unknown): void => {
   try {
@@ -318,6 +333,17 @@ export const unknownPayloadCount = (dir: string): number =>
 
 export const incrementUnknownPayloads = (dir: string): number =>
   increment(path.join(dir, "unknown"), unknownPayloadPrefix);
+
+export const claimFlagNotice = (dir: string, ruleId: string): boolean =>
+  createOnce(path.join(dir, "flags", shortHash(ruleId)), ruleId);
+
+type Flagged = { rule: { id: string }; verdict: { band: Verdict["band"] } };
+
+/** Each rule once a session, except a high score the block cap held back, which always shows. */
+export const claimFlagNotices = <T extends Flagged>(dir: string, flagged: readonly T[]): T[] =>
+  flagged.filter(({ rule, verdict }) =>
+    verdict.band === "flag" ? claimFlagNotice(dir, rule.id) : true,
+  );
 
 /** The prompt that started the turn, for hosts that send it instead of a transcript. */
 export const writePrompt = (dir: string, prompt: string): void => {

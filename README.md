@@ -142,7 +142,8 @@ Every file is judged as if it had just been written. You get a table by rule and
 
 - Each rule runs at one of two moments: `edit` after each edit, `turn` once at the end against the whole diff. "Did this add more than was asked" has no answer after edit 1 of 12.
 - Each rule can carry a `scope` of globs, so an API route and a stylesheet get different questions.
-- Verdicts are banded. 0.8 and above: the agent is told to repair. 0.5 to 0.8: you see a note, the agent does not. Below 0.5: nothing.
+- Verdicts are banded. 0.8 and above: the agent is told to repair. 0.5 to 0.8: you see a note, the agent does not, and a rule is noted once a session so it cannot fill your feed. Below 0.5: nothing.
+- `.oh-my-plumb/events.jsonl` keeps a verdict whole only when it carries something: act or flag band, a chosen answer, a rule whose precondition was not met, or a score near the line. A clear check shrinks to the rule's name, so the log reads as what happened and `report` still counts every check.
 - A badly worded rule scores 0.4 on everything and never fires. `calibrate` finds those against twenty real hunks from your history and switches them off. `tune` has the agent rewrite them.
 - An MCP server can send rules when it starts. To compile them too, list the server in the rubric: `"mcpInstructions": ["postgres"]`. The next compile reads what the server sends and turns it into rules about that server's tools. Nothing is read unless you list the server.
 

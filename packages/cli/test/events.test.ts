@@ -12,10 +12,52 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 import { appendEvent, appendUnknownPayload, readEvents, trimEvents } from "../src/lib/events.js";
+import { verdictsForLog } from "../src/lib/events.js";
+import { DEFAULT_THRESHOLDS } from "oh-my-plumb-schema";
 import { EVENTS_LOG_MAX_BYTES } from "../src/lib/constants.js";
 import { eventsPath, findRepoRoot } from "../src/lib/paths.js";
 
 const event = { kind: "skip", at: "now", phase: "edit", reason: "test" } as const;
+
+describe("what a check keeps", () => {
+  const clear = (ruleId: string, probability: number) =>
+    ({ ruleId, probability, band: "clear" }) as const;
+
+  it("keeps what carries meaning whole, and the rest as the rule that clearly passed", () => {
+    const verdicts = [
+      clear("quiet", 0.02),
+      clear("near-miss", 0.42),
+      { ruleId: "loud", probability: 0.62, band: "flag" as const },
+      { ruleId: "broken", probability: 0.95, band: "act" as const },
+    ];
+    const kept = verdictsForLog(verdicts, DEFAULT_THRESHOLDS);
+    expect(kept.verdicts.map((v) => v.ruleId)).toEqual(["near-miss", "loud", "broken"]);
+    expect(kept.asked).toEqual(["quiet"]);
+  });
+
+  it("keeps a clear verdict that still answered a choice or score question", () => {
+    const kept = verdictsForLog(
+      [{ ruleId: "shaped", probability: 0.1, band: "clear", answer: "class-static" }],
+      DEFAULT_THRESHOLDS,
+    );
+    expect(kept.verdicts).toHaveLength(1);
+    expect(kept.asked).toEqual([]);
+  });
+
+  it("keeps the verdict of a rule whose precondition was not met", () => {
+    const kept = verdictsForLog(
+      [{ ruleId: "unasked", probability: 0, band: "clear", precondition: "unmet" }],
+      DEFAULT_THRESHOLDS,
+    );
+    expect(kept.verdicts).toHaveLength(1);
+  });
+
+  it("anchors to the flag line: a higher one leaves more of the middle out", () => {
+    const verdicts = [clear("drifting", 0.45)];
+    expect(verdictsForLog(verdicts, { act: 0.9, flag: 0.6 }).verdicts).toHaveLength(1);
+    expect(verdictsForLog(verdicts, { act: 0.9, flag: 0.8 }).asked).toEqual(["drifting"]);
+  });
+});
 
 describe("the event log", () => {
   it("appends and reads back", () => {

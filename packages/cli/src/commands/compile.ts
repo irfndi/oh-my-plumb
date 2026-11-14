@@ -28,6 +28,7 @@ const tuneStats = (
       checks.set(v.ruleId, (checks.get(v.ruleId) ?? 0) + 1);
       if (v.band === "act") fired.set(v.ruleId, (fired.get(v.ruleId) ?? 0) + 1);
     }
+    for (const ruleId of event.asked ?? []) checks.set(ruleId, (checks.get(ruleId) ?? 0) + 1);
   }
   const stats = read.rubric.rules
     .filter((r) => r.check.type === "model")
