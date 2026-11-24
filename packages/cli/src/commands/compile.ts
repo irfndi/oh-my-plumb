@@ -100,11 +100,21 @@ export const runCompile = async (argv: string[], tune: boolean): Promise<number>
         };
     prompt = compilePrompt(placeCompileSkill(root), [target], stats);
   } else {
-    if (plan.targets.length === 0) {
-      await showStatic(Callout({ tone: "ok", title: "Rubric is up to date. Nothing to compile." }));
+    // --global compiles the machine-wide rubric only: the project target
+    // planCompile found is the one the guard above just refused.
+    const targets = values.global ? plan.targets.filter((t) => t.which === "global") : plan.targets;
+    if (targets.length === 0) {
+      await showStatic(
+        Callout({
+          tone: "ok",
+          title: values.global
+            ? "Global rubric is up to date. Nothing to compile."
+            : "Rubric is up to date. Nothing to compile.",
+        }),
+      );
       return 0;
     }
-    prompt = compilePrompt(placeCompileSkill(root), plan.targets);
+    prompt = compilePrompt(placeCompileSkill(root), targets);
   }
 
   if (values.print) {

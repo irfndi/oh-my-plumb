@@ -15,6 +15,9 @@ import { homeDir } from "./paths.js";
 
 export const PI_PLUGIN_MARKER = "oh-my-plumb-pi-extension";
 
+/** The manifest sections an omp plugin entry can live in. */
+const DEPENDENCY_KEYS = ["dependencies", "devDependencies", "optionalDependencies"] as const;
+
 /**
  * The extension as shipped in the package. The installed file only points at
  * it, so an upgrade needs no reinstall. Mirrors opencodePlugin.ts.
@@ -33,67 +36,67 @@ const readJson = <T>(file: string, schema: z.ZodType<T>): T | undefined => {
   }
 };
 
-/** Drops oh-my-plumb from a host-owned JSON file's list, leaving every other key alone. */
-const removeFromList = (
-  file: string,
-  pick: (raw: Record<string, unknown>) => unknown[],
-  keep: (entry: unknown) => boolean,
-): boolean => {
-  let raw: Record<string, unknown>;
+/** The file as a JSON object, or nothing: a host file that is not an object is left alone. */
+const readObject = (file: string): Record<string, unknown> | undefined => {
   try {
     const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
-    raw = { ...parsed };
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? { ...parsed }
+      : undefined;
   } catch {
-    return false;
+    return undefined;
   }
-  const list = pick(raw);
-  const kept = list.filter(keep);
-  if (kept.length === list.length) return false;
-  try {
-    writeFileSync(file, `${JSON.stringify({ ...raw, [listKey(raw, list)]: kept }, null, 2)}\n`);
-  } catch {
-    return false;
-  }
-  return true;
 };
 
-/** The key `removeFromList` writes back: the one whose value is the list it was given. */
-const listKey = (raw: Record<string, unknown>, list: unknown[]): string =>
-  Object.keys(raw).find((key) => raw[key] === list) ?? "packages";
-
-const notOurs = (entry: unknown): boolean => {
-  const spec = typeof entry === "string" ? entry : (entry as { source?: unknown }).source;
-  return typeof spec !== "string" || !spec.startsWith("npm:oh-my-plumb");
+const writeObject = (file: string, raw: Record<string, unknown>): boolean => {
+  try {
+    writeFileSync(file, `${JSON.stringify(raw, null, 2)}\n`);
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 /**
  * The pi `packages` entry, or the omp plugin dependency, that is actually loading
  * the extension: a package install writes no shim file, so leaving it is leaving
- * the extension loaded. Mirrors `packageInstall`.
+ * the extension loaded. Only the requested scope is read, so `--project` cannot
+ * uninstall the machine-wide install.
  */
-export const uninstallPackageInstall = (host: "pi" | "omp", root: string): boolean => {
-  const found = packageInstall(host, root);
+export const uninstallPackageInstall = (
+  host: "pi" | "omp",
+  root: string,
+  project: boolean,
+): boolean => {
+  const found = packageInstall(host, root, project ? "project" : "global");
   if (found === undefined) return false;
   switch (host) {
-    case "pi":
-      return removeFromList(
-        found.from,
-        (raw) => (piSettingsSchema.parse(raw).packages ?? []) as unknown[],
-        notOurs,
-      );
-    case "omp":
-      return removeFromList(
-        found.from,
-        (raw) =>
-          Object.entries(ompManifestSchema.parse(raw)).flatMap(([key, value]) =>
-            key.endsWith("ependencies") && typeof value === "object" && value !== null
-              ? [value as Record<string, unknown>]
-              : [],
-          ),
-        (entry) =>
-          typeof entry !== "object" || entry === null || !("oh-my-plumb" in (entry as object)),
-      );
+    case "pi": {
+      const raw = readObject(found.from);
+      if (raw === undefined) return false;
+      const packages = piSettingsSchema.parse(raw).packages ?? [];
+      // Every entry that is oh-my-plumb, and nothing that merely starts like it.
+      const kept = packages.filter((entry) => piListsPackage({ packages: [entry] }) === undefined);
+      if (kept.length === packages.length) return false;
+      return writeObject(found.from, { ...raw, packages: kept });
+    }
+    case "omp": {
+      const raw = readObject(found.from);
+      if (raw === undefined) return false;
+      let removed = false;
+      for (const key of DEPENDENCY_KEYS) {
+        const section = raw[key];
+        if (typeof section !== "object" || section === null) continue;
+        const entries = { ...(section as Record<string, unknown>) };
+        if (!("oh-my-plumb" in entries)) continue;
+        delete entries["oh-my-plumb"];
+        removed = true;
+        // An emptied section goes with its last entry; the rest of the manifest is untouched.
+        if (Object.keys(entries).length === 0) delete raw[key];
+        else raw[key] = entries;
+      }
+      return removed && writeObject(found.from, raw);
+    }
     default:
       return assertNever(host);
   }
@@ -157,24 +160,33 @@ const ompPlugin = (pluginsDir: string): PackageInstall | undefined => {
   };
 };
 
+/** Which install a lookup may see: the machine-wide one, this project's, or whichever is there. */
+export type InstallScope = "global" | "project" | "any";
+
 /** Keep the file pairs in step with `packageInstalled` in pi/oh-my-plumb.ts; the matcher itself is shared. */
-export const packageInstall = (host: "pi" | "omp", root: string): PackageInstall | undefined => {
+export const packageInstall = (
+  host: "pi" | "omp",
+  root: string,
+  scope: InstallScope = "any",
+): PackageInstall | undefined => {
+  const pi = (dir: string): PackageInstall | undefined =>
+    piPackage(path.join(dir, "settings.json"), path.join(dir, "npm", "node_modules"));
+  const omp = (dir: string): PackageInstall | undefined => ompPlugin(dir);
   switch (host) {
-    case "pi": {
-      const agent = path.join(homeDir(), ".pi", "agent");
-      return (
-        piPackage(path.join(agent, "settings.json"), path.join(agent, "npm", "node_modules")) ??
-        piPackage(
-          path.join(root, ".pi", "settings.json"),
-          path.join(root, ".pi", "npm", "node_modules"),
-        )
-      );
+    case "pi":
+      return scope === "project"
+        ? pi(path.join(root, ".pi"))
+        : scope === "global"
+          ? pi(path.join(homeDir(), ".pi", "agent"))
+          : (pi(path.join(homeDir(), ".pi", "agent")) ?? pi(path.join(root, ".pi")));
+    case "omp": {
+      const plugins = (dir: string) => path.join(dir, ".omp", "plugins");
+      return scope === "project"
+        ? omp(plugins(root))
+        : scope === "global"
+          ? omp(plugins(homeDir()))
+          : (omp(plugins(homeDir())) ?? omp(plugins(root)));
     }
-    case "omp":
-      return (
-        ompPlugin(path.join(homeDir(), ".omp", "plugins")) ??
-        ompPlugin(path.join(root, ".omp", "plugins"))
-      );
     default:
       return assertNever(host);
   }

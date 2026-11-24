@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -284,5 +285,153 @@ describe("#88 uninstall finds a package install, not only a shim file", () => {
       theme: "dark",
     });
     expect(uninstallHost("pi", process.cwd(), false)).toEqual({ count: 0, mechanisms: [] });
+  });
+});
+
+// The findings on PR #91. Each one is a case the first pass got wrong: the
+// uninstall reports success for a write that removes nothing, a "_project_"
+// flag crosses scopes, and a prefix match deletes a package nobody asked about.
+describe("review findings on the uninstall and merge path", () => {
+  const cli = path.resolve(import.meta.dirname, "..", "dist", "bin.js");
+  const cliHome = (): string => {
+    const dir = home();
+    return dir;
+  };
+  const run = (args: string[], cwd: string, env: string) =>
+    spawnSync("node", [cli, ...args], {
+      cwd,
+      encoding: "utf8",
+      env: { ...process.env, OH_MY_PLUMB_HOME_DIR: env, TYPESAFE_AI_API_KEY: "" },
+      timeout: 30_000,
+    });
+
+  it("removes the omp dependency, not a `packages` key that was never there", () => {
+    const h = cliHome();
+    const root = repo();
+    const plugins = path.join(h, ".omp", "plugins");
+    mkdirSync(path.join(plugins, "node_modules", "oh-my-plumb"), { recursive: true });
+    writeFileSync(
+      path.join(plugins, "package.json"),
+      JSON.stringify({ name: "plugins", dependencies: { "oh-my-plumb": "^0.3.9", left: "1" } }),
+    );
+    writeFileSync(
+      path.join(plugins, "node_modules", "oh-my-plumb", "package.json"),
+      JSON.stringify({ version: "0.3.9" }),
+    );
+    const r = run(["uninstall", "omp"], root, h);
+    expect(r.status).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(plugins, "package.json"), "utf8"))).toEqual({
+      name: "plugins",
+      dependencies: { left: "1" },
+    });
+  });
+
+  it("keeps --project off the machine-wide install, and the machine-wide flag off the project", () => {
+    const h = cliHome();
+    const root = repo();
+    const globalSettings = path.join(h, ".pi", "agent", "settings.json");
+    const projectSettings = path.join(root, ".pi", "settings.json");
+    for (const dir of [
+      path.join(h, ".pi", "agent", "npm", "node_modules", "oh-my-plumb"),
+      path.join(root, ".pi", "npm", "node_modules", "oh-my-plumb"),
+    ]) {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, "package.json"), JSON.stringify({ version: "0.3.9" }));
+    }
+    const both = JSON.stringify({ packages: ["npm:oh-my-plumb"] });
+    writeFileSync(globalSettings, both);
+    writeFileSync(projectSettings, both);
+
+    expect(run(["uninstall", "--project", "pi"], root, h).status).toBe(0);
+    expect(readFileSync(globalSettings, "utf8")).toBe(both);
+    expect(JSON.parse(readFileSync(projectSettings, "utf8")).packages).toEqual([]);
+
+    writeFileSync(projectSettings, both);
+    expect(run(["uninstall", "pi"], root, h).status).toBe(0);
+    expect(JSON.parse(readFileSync(globalSettings, "utf8")).packages).toEqual([]);
+    expect(readFileSync(projectSettings, "utf8")).toBe(both);
+  });
+
+  it("removes only the exact package spec, in either entry shape", () => {
+    const h = cliHome();
+    const root = repo();
+    const settings = path.join(h, ".pi", "agent", "settings.json");
+    mkdirSync(path.join(h, ".pi", "agent", "npm", "node_modules", "oh-my-plumb"), {
+      recursive: true,
+    });
+    writeFileSync(
+      path.join(h, ".pi", "agent", "npm", "node_modules", "oh-my-plumb", "package.json"),
+      JSON.stringify({ version: "0.3.9" }),
+    );
+    const neighbors = ["npm:oh-my-plumb-extra", "npm:oh-my-plumbish", "npm:other"];
+    writeFileSync(settings, JSON.stringify({ packages: ["npm:oh-my-plumb", ...neighbors] }));
+    expect(run(["uninstall", "pi"], root, h).status).toBe(0);
+    expect(JSON.parse(readFileSync(settings, "utf8")).packages).toEqual(neighbors);
+
+    writeFileSync(
+      settings,
+      JSON.stringify({
+        packages: [{ source: "npm:oh-my-plumb@0.3.9" }, { source: neighbors[0] }, neighbors[2]],
+      }),
+    );
+    expect(run(["uninstall", "pi"], root, h).status).toBe(0);
+    expect(JSON.parse(readFileSync(settings, "utf8")).packages).toEqual([
+      { source: neighbors[0] },
+      neighbors[2],
+    ]);
+  });
+
+  it("compiles only the global rubric when --global is what made it legal", () => {
+    const h = cliHome();
+    const root = mkdtempSync(path.join(tmpdir(), "oh-my-plumb-outside-"));
+    writeFileSync(path.join(root, "AGENTS.md"), "- never use npx\n");
+    const refused = run(["compile"], root, h);
+    expect(refused.status).toBe(1);
+    expect(refused.stdout + refused.stderr).toContain("not a repository");
+    // --global must not smuggle the project target past the guard it exists for.
+    const allowed = run(["compile", "--global", "--print"], root, h);
+    expect(allowed.status).toBe(0);
+    expect(allowed.stdout).not.toContain("Project rubric:");
+    expect(allowed.stdout).not.toContain(path.join(root, "AGENTS.md"));
+  });
+
+  it("keeps a compile-needed event in a report that has no rules yet", () => {
+    home();
+    const root = repo();
+    writeFileSync(
+      path.join(root, ".oh-my-plumb", "events.jsonl"),
+      `${JSON.stringify({ kind: "compile-needed", at: "t", reason: "project: missing", sources: ["AGENTS.md"] })}\n`,
+    );
+    const json = reportJson(collectReport(root), root);
+    expect(json.rules).toEqual([]);
+    expect(json.compileNeeded).toBe(1);
+  });
+
+  it("keeps rules apart when a status or a pattern would change the verdict", () => {
+    const question = { type: "boolean" as const, instructions: "Did it?" };
+    const base = {
+      text: "x",
+      source: { path: "AGENTS.md", line: 1 },
+      target: "diff" as const,
+      when: "edit" as const,
+    };
+    const active = rule("active-copy", {
+      ...base,
+      check: { type: "model", question, pattern: "foo" },
+    });
+    const plain = rule("plain-copy", { ...base, check: { type: "model", question } });
+    const off = rule("off-copy", {
+      ...base,
+      status: "disabled",
+      check: { type: "model", question },
+    });
+    expect(mergeRules(rubric([active, plain]), undefined)).toHaveLength(2);
+    expect(mergeRules(rubric([plain, off]), undefined)).toHaveLength(2);
+    expect(
+      mergeRules(
+        rubric([plain, rule("same", { ...base, check: { type: "model", question } })]),
+        undefined,
+      ),
+    ).toHaveLength(1);
   });
 });

@@ -46,8 +46,11 @@ const misfiledRubric = (root: string, repository: boolean): string | undefined =
 
 export const collectReport = (root: string, repository = true): ReportData | undefined => {
   const loaded = loadRubric(root);
-  if (loaded.rules.length === 0) return undefined;
+  // A rubric with no rules is still a log worth reading: a session that asked for
+  // a compile wrote one event and no rules, and dropping that hides the request
+  // that this report exists to surface.
   const events = readEvents(root);
+  if (loaded.rules.length === 0 && events.length === 0) return undefined;
   const stats = statsFrom(events);
   // Dead means it never answers: no fire, no flag, and a calibration that
   // never cleared confidently either. A rule at 0.02 on every check is not

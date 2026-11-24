@@ -237,7 +237,7 @@ export const uninstallHost = (host: Host, root: string, project: boolean): Remov
       // A package install writes no shim, and leaving its entry keeps the extension loaded,
       // so both are removed: whichever one is there is the one loading the extension.
       const shim = uninstallPiExtension(target);
-      const packaged = uninstallPackageInstall(host, root);
+      const packaged = uninstallPackageInstall(host, root, project);
       return removal((shim ? 1 : 0) + (packaged ? 1 : 0), [
         ...(shim ? (["shim"] as const) : []),
         ...(packaged ? (["package"] as const) : []),

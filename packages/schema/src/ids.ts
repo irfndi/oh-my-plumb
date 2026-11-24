@@ -30,17 +30,14 @@ export const createBlockKey = (ruleId: string, relativePath: string): string =>
   `${ruleId}@${relativePath}`;
 
 /**
- * What makes two rules the same question. Text is not part of it: two files can
- * word one requirement differently and still ask the judge the same thing, and
- * asking it twice bills twice for one answer.
+ * What makes two rules one question. Text is not part of it: two files can word
+ * one requirement differently and still ask the judge the same thing, and asking
+ * it twice bills twice for one answer.
+ *
+ * Everything that decides the verdict is part of it, so two rules only collapse
+ * when they would answer alike — a patterned copy skips the judge where the
+ * pattern does not match, and a disabled copy enforces nothing, so neither can
+ * stand in for the other.
  */
 export const createQuestionKey = (rule: Rule): string =>
-  JSON.stringify([
-    rule.target,
-    rule.when ?? null,
-    rule.check.type,
-    rule.check.type === "model" ? rule.check.question : rule.check,
-    // A precondition decides whether the rule is judged at all: two copies that
-    // ask one question but gate it differently are two rules.
-    rule.check.type === "model" ? (rule.check.precondition ?? null) : null,
-  ]);
+  JSON.stringify([rule.target, rule.when ?? null, rule.status, rule.check]);
