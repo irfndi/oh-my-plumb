@@ -237,6 +237,15 @@ export const ruleSchema = z
     check: checkSchema,
     status: ruleStatusSchema.default("active"),
     calibration: calibrationSchema.optional(),
+    /**
+     * Ids of rules this one repeats word for word, from another file or another
+     * copy of the same file. The copy is dropped before any check is billed, and
+     * report still names every source line that produced the rule.
+     */
+    aliases: z
+      .array(z.string().regex(RULE_ID_PATTERN, "rule ids are kebab-case"))
+      .min(1)
+      .optional(),
   })
   .superRefine((rule, ctx) => {
     if (rule.check.type === "model" && rule.when === undefined) {
@@ -343,6 +352,16 @@ export const rubricSchema = z
         });
       }
       seen.add(rule.id);
+      for (const alias of rule.aliases ?? []) {
+        if (seen.has(alias)) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["rules", index, "aliases"],
+            message: `alias "${alias}" is also a rule id`,
+          });
+        }
+        seen.add(alias);
+      }
     });
   });
 export type Rubric = z.infer<typeof rubricSchema>;

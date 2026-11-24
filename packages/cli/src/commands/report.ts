@@ -6,7 +6,7 @@ import { readEvents } from "../lib/events.js";
 import { guardRoutes, routeGaps } from "../lib/guards.js";
 import { loadRubric } from "../lib/loadRubric.js";
 import { installTarget } from "../lib/hosts.js";
-import { findRepoRoot } from "../lib/paths.js";
+import { resolveRepoRoot, rubricPath } from "../lib/paths.js";
 import { readPiTrust } from "../lib/piTrust.js";
 import { say } from "../lib/ui.js";
 import type { RuleStats } from "../ui/components/RuleTable.js";
@@ -34,7 +34,17 @@ const statsFrom = (events: readonly PlumbEvent[]): Map<string, RuleStats> => {
 const MIN_CHECKS_TO_CALL_DEAD = 20;
 const MIN_FLAGS_TO_CALL_MIDDLE = 5;
 
-export const collectReport = (root: string): ReportData | undefined => {
+/**
+ * A rubric in the project slot of a directory that is nobody's repository: a
+ * compile run from a scratch folder adopts every instruction file below home,
+ * and no real repository ever loads it.
+ */
+const misfiledRubric = (root: string, repository: boolean): string | undefined => {
+  const file = rubricPath(root);
+  return !repository && existsSync(file) ? file : undefined;
+};
+
+export const collectReport = (root: string, repository = true): ReportData | undefined => {
   const loaded = loadRubric(root);
   if (loaded.rules.length === 0) return undefined;
   const events = readEvents(root);
@@ -79,10 +89,59 @@ export const collectReport = (root: string): ReportData | undefined => {
     middle,
     problems: loaded.problems,
     missingRoutes,
+    misfiledRubric: misfiledRubric(root, repository),
+    foreignToolRules: loaded.foreignToolRules,
     // Project trust gates pi's project extension; global installs need no decision.
     piTrust: existsSync(installTarget("pi", root, true)) ? readPiTrust(root) : null,
   };
 };
+
+/** The one shape `report --json` prints, rubric or no rubric: a script that reads it never branches on which. */
+export type ReportJson = {
+  root: string;
+  rules: Rule[];
+  stats: Record<string, RuleStats>;
+  dead: string[];
+  middle: ReportData["middle"];
+  /** Every event the log holds, oldest first. A count is `events.length`, never this key. */
+  events: PlumbEvent[];
+  /** Sessions that asked for a rubric and never got one compiled. */
+  compileNeeded: number;
+  /**
+   * A rubric sitting in the project slot of a directory that is not a repository.
+   * Null, not absent: a key that vanishes is the shape bug #89 was.
+   */
+  misfiledRubric: string | null;
+  foreignToolRules: number;
+  problems: string[];
+};
+
+export const reportJson = (data: ReportData | undefined, root: string): ReportJson =>
+  data === undefined
+    ? {
+        root,
+        rules: [],
+        stats: {},
+        dead: [],
+        middle: [],
+        events: [],
+        compileNeeded: 0,
+        misfiledRubric: null,
+        foreignToolRules: 0,
+        problems: [],
+      }
+    : {
+        root: data.root,
+        rules: data.rules,
+        stats: Object.fromEntries(data.stats),
+        dead: data.dead.map((r) => r.id),
+        middle: data.middle,
+        events: data.events,
+        compileNeeded: data.events.filter((e) => e.kind === "compile-needed").length,
+        misfiledRubric: data.misfiledRubric ?? null,
+        foreignToolRules: data.foreignToolRules,
+        problems: data.problems,
+      };
 
 /** Rules, calibration, and what has fired so far in this repository. */
 export const runReport = async (argv: string[]): Promise<number> => {
@@ -90,28 +149,16 @@ export const runReport = async (argv: string[]): Promise<number> => {
     args: argv,
     options: { json: { type: "boolean", default: false } },
   });
-  const root = findRepoRoot(process.cwd());
-  const data = collectReport(root);
+  const found = resolveRepoRoot(process.cwd());
+  const root = found.root;
+  const data = collectReport(root, found.repository);
+  if (values.json) {
+    say(JSON.stringify(reportJson(data, root)));
+    return data === undefined ? 1 : 0;
+  }
   if (data === undefined) {
-    if (values.json) {
-      say(JSON.stringify({ root, rules: [], events: [] }));
-      return 1;
-    }
     await showStatic(InitView({ data: { kind: "no-sources", root } }));
     return 1;
-  }
-  if (values.json) {
-    say(
-      JSON.stringify({
-        root: data.root,
-        rules: data.rules,
-        stats: Object.fromEntries(data.stats),
-        dead: data.dead.map((r) => r.id),
-        middle: data.middle,
-        events: data.events.length,
-      }),
-    );
-    return 0;
   }
   await showStatic(ReportView({ data }));
   return 0;

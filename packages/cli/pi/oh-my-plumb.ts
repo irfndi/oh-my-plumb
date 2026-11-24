@@ -9,13 +9,6 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  ompListsPlugin,
-  ompManifestSchema,
-  packageVersionSchema,
-  piListsPackage,
-  piSettingsSchema,
-} from "oh-my-plumb-schema";
 
 const HOOK = fileURLToPath(new URL("../dist/oh-my-plumb-hook.js", import.meta.url));
 
@@ -195,32 +188,50 @@ export const preToolCallResult = (out) => {
   return undefined;
 };
 
-const readJson = (schema, file) => {
+// No import outside node:*, so the host can load this file from wherever it was
+// installed. The two matchers below must answer exactly as `packageInstall` in
+// src/lib/piPlugin.ts does; hosts.test.ts runs both against the same trees.
+const readJson = (file) => {
   try {
-    return schema.parse(JSON.parse(readFileSync(file, "utf8")));
+    const parsed = JSON.parse(readFileSync(file, "utf8"));
+    return typeof parsed === "object" && parsed !== null ? parsed : undefined;
   } catch {
     return undefined;
   }
 };
 
-const piInstalled = (settings, nodeModules) => {
-  const listed = piListsPackage(readJson(piSettingsSchema, settings));
-  return (
-    listed !== undefined &&
-    readJson(packageVersionSchema, path.join(nodeModules, "oh-my-plumb", "package.json")) !==
-      undefined
-  );
+const versionAt = (nodeModules) =>
+  readJson(path.join(nodeModules, "oh-my-plumb", "package.json"))?.version;
+
+/** A pi `packages` entry is a spec string or an object carrying one. */
+const piListsPackage = (settings) => {
+  const packages = settings?.packages;
+  if (!Array.isArray(packages)) return undefined;
+  for (const raw of packages) {
+    const spec = typeof raw === "string" ? raw : raw?.source;
+    if (typeof spec === "string" && /^npm:oh-my-plumb(@.+)?$/.test(spec)) return spec;
+  }
+  return undefined;
 };
 
+const ompListsPlugin = (manifest) => {
+  for (const section of [
+    manifest?.dependencies,
+    manifest?.devDependencies,
+    manifest?.optionalDependencies,
+  ]) {
+    const range = section?.["oh-my-plumb"];
+    if (typeof range === "string") return range;
+  }
+  return undefined;
+};
+
+const piInstalled = (settings, nodeModules) =>
+  piListsPackage(readJson(settings)) !== undefined && versionAt(nodeModules) !== undefined;
+
 const ompInstalled = (pluginsDir) => {
-  const range = ompListsPlugin(readJson(ompManifestSchema, path.join(pluginsDir, "package.json")));
-  return (
-    range !== undefined &&
-    readJson(
-      packageVersionSchema,
-      path.join(pluginsDir, "node_modules", "oh-my-plumb", "package.json"),
-    ) !== undefined
-  );
+  const range = ompListsPlugin(readJson(path.join(pluginsDir, "package.json")));
+  return range !== undefined && versionAt(path.join(pluginsDir, "node_modules")) !== undefined;
 };
 
 /** Keep the file pairs in step with `packageInstall` in src/lib/piPlugin.ts; the matcher itself is shared. */

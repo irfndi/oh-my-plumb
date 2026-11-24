@@ -7,6 +7,7 @@ import { palette } from "../theme.js";
 const TITLES: Record<PlumbErrorCode, string> = {
   NO_API_KEY: "No API key, so nothing can be checked",
   NO_INSTRUCTION_FILES: "No instruction files here, so there is nothing to compile",
+  NOT_A_REPOSITORY: "This directory is not a repository",
   RUBRIC_INVALID: "The rubric could not be read",
   RUBRIC_MISSING: "No rubric yet",
   SETTINGS_INVALID: "The settings file could not be changed",

@@ -53,6 +53,7 @@
     "@types/node": "^20.19.0",
     "@types/picomatch": "4.0.3",
     "@types/react": "19.3.0",
+    "fast-check": "^4.11.0",
     "ink-testing-library": "4.0.0",
     "typescript": "7.0.2",
     "vite": "catalog:",

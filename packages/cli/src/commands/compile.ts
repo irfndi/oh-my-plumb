@@ -5,7 +5,7 @@ import { compilePrompt, type TuneStats } from "../lib/compilePrompt.js";
 import { readEvents } from "../lib/events.js";
 import { findLintConfigs } from "../lib/lintConfig.js";
 import { placeCompileSkill } from "../lib/packageRoot.js";
-import { findRepoRoot, globalRubricPath, homeDir, rubricPath } from "../lib/paths.js";
+import { resolveRepoRoot, globalRubricPath, homeDir, rubricPath } from "../lib/paths.js";
 import { readRubric } from "../lib/rubricFile.js";
 import { checkStaleness, discoverGlobalSources, discoverProjectSources } from "../lib/sources.js";
 import { say } from "../lib/ui.js";
@@ -51,7 +51,15 @@ export const runCompile = async (argv: string[], tune: boolean): Promise<number>
       global: { type: "boolean", default: false },
     },
   });
-  const root = findRepoRoot(process.cwd());
+  const found = resolveRepoRoot(process.cwd());
+  // A compile outside a repository writes a home-wide rubric into the project
+  // slot: every directory below ~ then reads it as its own, and no repository does.
+  if (!found.repository && !values.global)
+    throw new PlumbError(
+      "NOT_A_REPOSITORY",
+      `${found.root} is not a repository (no .git), so a rubric compiled here would apply to every folder below it and to no repository. Run this inside the repository the rules belong to, or pass --global for a machine-wide rubric.`,
+    );
+  const root = found.root;
   const plan = await planCompile(root, "always");
   if (plan.invalid.length > 0) {
     await showStatic(

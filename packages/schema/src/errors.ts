@@ -1,6 +1,7 @@
 export type PlumbErrorCode =
   | "NO_API_KEY"
   | "NO_INSTRUCTION_FILES"
+  | "NOT_A_REPOSITORY"
   | "RUBRIC_INVALID"
   | "RUBRIC_MISSING"
   | "SETTINGS_INVALID"

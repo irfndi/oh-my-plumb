@@ -18,8 +18,86 @@ export const PI_PLUGIN_MARKER = "oh-my-plumb-pi-extension";
 /**
  * The extension as shipped in the package. The installed file only points at
  * it, so an upgrade needs no reinstall. Mirrors opencodePlugin.ts.
+ *
+ * The extension imports no bare specifier but `zod`, because a host loads it
+ * into a module graph of its own: the same file resolves `oh-my-plumb-schema`
+ * from the host's plugin tree and not from a global install (issue #78).
  */
 export const piExtensionSourcePath = (): string => path.join(installRoot(), "pi", "oh-my-plumb.ts");
+
+const readJson = <T>(file: string, schema: z.ZodType<T>): T | undefined => {
+  try {
+    return schema.parse(JSON.parse(readFileSync(file, "utf8")));
+  } catch {
+    return undefined;
+  }
+};
+
+/** Drops oh-my-plumb from a host-owned JSON file's list, leaving every other key alone. */
+const removeFromList = (
+  file: string,
+  pick: (raw: Record<string, unknown>) => unknown[],
+  keep: (entry: unknown) => boolean,
+): boolean => {
+  let raw: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
+    raw = { ...parsed };
+  } catch {
+    return false;
+  }
+  const list = pick(raw);
+  const kept = list.filter(keep);
+  if (kept.length === list.length) return false;
+  try {
+    writeFileSync(file, `${JSON.stringify({ ...raw, [listKey(raw, list)]: kept }, null, 2)}\n`);
+  } catch {
+    return false;
+  }
+  return true;
+};
+
+/** The key `removeFromList` writes back: the one whose value is the list it was given. */
+const listKey = (raw: Record<string, unknown>, list: unknown[]): string =>
+  Object.keys(raw).find((key) => raw[key] === list) ?? "packages";
+
+const notOurs = (entry: unknown): boolean => {
+  const spec = typeof entry === "string" ? entry : (entry as { source?: unknown }).source;
+  return typeof spec !== "string" || !spec.startsWith("npm:oh-my-plumb");
+};
+
+/**
+ * The pi `packages` entry, or the omp plugin dependency, that is actually loading
+ * the extension: a package install writes no shim file, so leaving it is leaving
+ * the extension loaded. Mirrors `packageInstall`.
+ */
+export const uninstallPackageInstall = (host: "pi" | "omp", root: string): boolean => {
+  const found = packageInstall(host, root);
+  if (found === undefined) return false;
+  switch (host) {
+    case "pi":
+      return removeFromList(
+        found.from,
+        (raw) => (piSettingsSchema.parse(raw).packages ?? []) as unknown[],
+        notOurs,
+      );
+    case "omp":
+      return removeFromList(
+        found.from,
+        (raw) =>
+          Object.entries(ompManifestSchema.parse(raw)).flatMap(([key, value]) =>
+            key.endsWith("ependencies") && typeof value === "object" && value !== null
+              ? [value as Record<string, unknown>]
+              : [],
+          ),
+        (entry) =>
+          typeof entry !== "object" || entry === null || !("oh-my-plumb" in (entry as object)),
+      );
+    default:
+      return assertNever(host);
+  }
+};
 
 export const installPiExtension = (target: string, host: "pi" | "omp"): void => {
   mkdirSync(path.dirname(target), { recursive: true });
@@ -45,14 +123,6 @@ export const uninstallPiExtension = (target: string): boolean => {
   if (!text.includes(PI_PLUGIN_MARKER)) return false;
   rmSync(target);
   return true;
-};
-
-const readJson = <T>(file: string, schema: z.ZodType<T>): T | undefined => {
-  try {
-    return schema.parse(JSON.parse(readFileSync(file, "utf8")));
-  } catch {
-    return undefined;
-  }
 };
 
 export type PackageInstall = {

@@ -5,6 +5,7 @@ import { PlumbError, assertNever, HOSTS, hostSchema, type Host } from "oh-my-plu
 import {
   installPiExtension,
   packageInstall,
+  uninstallPackageInstall,
   uninstallPiExtension,
   type PackageInstall,
 } from "./piPlugin.js";
@@ -209,17 +210,39 @@ export const installHost = (host: Host, root: string, project: boolean): Install
   }
 };
 
-export const uninstallHost = (host: Host, root: string, project: boolean): number => {
+/** Where an entry was: a file oh-my-plumb wrote, or a list the host owns. */
+export type Removal = {
+  count: number;
+  /** Named only for what was actually removed, so a report never claims more than it did. */
+  mechanisms: ("shim" | "package" | "hooks" | "plugin")[];
+};
+
+const removal = (count: number, mechanisms: Removal["mechanisms"]): Removal => ({
+  count,
+  mechanisms: count === 0 ? [] : mechanisms,
+});
+
+export const uninstallHost = (host: Host, root: string, project: boolean): Removal => {
   const target = installTarget(host, root, project);
   switch (host) {
     case "claude":
-    case "codex":
-      return uninstallHooks(target);
-    case "opencode":
-      return uninstallOpencodePlugin(target) ? 1 : 0;
+    case "codex": {
+      return removal(uninstallHooks(target), ["hooks"]);
+    }
+    case "opencode": {
+      return removal(uninstallOpencodePlugin(target) ? 1 : 0, ["plugin"]);
+    }
     case "pi":
-    case "omp":
-      return uninstallPiExtension(target) ? 1 : 0;
+    case "omp": {
+      // A package install writes no shim, and leaving its entry keeps the extension loaded,
+      // so both are removed: whichever one is there is the one loading the extension.
+      const shim = uninstallPiExtension(target);
+      const packaged = uninstallPackageInstall(host, root);
+      return removal((shim ? 1 : 0) + (packaged ? 1 : 0), [
+        ...(shim ? (["shim"] as const) : []),
+        ...(packaged ? (["package"] as const) : []),
+      ]);
+    }
     default:
       return assertNever(host);
   }

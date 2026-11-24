@@ -106,6 +106,8 @@ describe("views", () => {
           middle: [],
           problems: [],
           missingRoutes: [],
+          misfiledRubric: undefined,
+          foreignToolRules: 0,
           piTrust: null,
         }}
       />,
@@ -133,6 +135,8 @@ describe("views", () => {
           middle: [{ id: "raw-error-to-user", flagged: 7, checks: 120 }],
           problems: [],
           missingRoutes: [],
+          misfiledRubric: undefined,
+          foreignToolRules: 0,
           piTrust: null,
         }}
       />,
@@ -154,6 +158,8 @@ describe("views", () => {
           middle: [],
           problems: [],
           missingRoutes: [{ trigger: "drizzle/**", gaps: ["scripts/v.mjs does not exist"] }],
+          misfiledRubric: undefined,
+          foreignToolRules: 0,
           piTrust: null,
         }}
       />,
@@ -199,6 +205,8 @@ describe("views", () => {
           middle: [],
           problems: [],
           missingRoutes: [],
+          misfiledRubric: undefined,
+          foreignToolRules: 0,
           piTrust: null,
         }}
       />,
@@ -228,6 +236,8 @@ describe("views", () => {
           middle: [],
           problems: [],
           missingRoutes: [],
+          misfiledRubric: undefined,
+          foreignToolRules: 0,
           piTrust: null,
         }}
       />,
@@ -246,6 +256,8 @@ describe("views", () => {
       middle: [],
       problems: [],
       missingRoutes: [],
+      misfiledRubric: undefined,
+      foreignToolRules: 0,
     };
     const frame = (piTrust: PiTrustState | null): string => {
       const { lastFrame } = render(<ReportView data={{ ...base, piTrust }} />);

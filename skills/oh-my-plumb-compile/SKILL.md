@@ -252,6 +252,7 @@ Write the file the hook named (`.oh-my-plumb/rubric.json` for the project, `~/.o
 Rules of the file:
 
 - `id` is a short kebab-case name that says what the rule catches. Ids must be unique within the file.
+- One requirement is one rule. If two files word the same instruction, write it once, from the file that owns it, and leave the other alone: the checker collapses identical questions on its own and bills one answer. A copy under a second path is a second rule only when it asks a different question.
 - `target` defaults to `diff`. Only a tool-call rule sets `target` to `toolCall`, and then `scope` names tools (`["Bash"]`) instead of file globs.
 - Leave `sha` out of `sources`; the CLI computes it in the next step.
 - Every rule's `source.path` must appear in `sources`.

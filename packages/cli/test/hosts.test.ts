@@ -62,8 +62,8 @@ describe("hosts", () => {
         "UserPromptSubmit",
       ]);
       expect(json.hooks.PostToolUse[0].matcher).toBe("Edit|Write|MultiEdit|apply_patch");
-      expect(uninstallHost(host, root, false)).toBe(4);
-      expect(uninstallHost(host, root, false)).toBe(0);
+      expect(uninstallHost(host, root, false).count).toBe(4);
+      expect(uninstallHost(host, root, false).count).toBe(0);
     }
     expect(installTarget("codex", root, true)).toBe(path.join(root, ".codex", "hooks.json"));
   });
@@ -75,7 +75,7 @@ describe("hosts", () => {
     const base = JSON.parse(readFileSync(installTarget("claude", root, false), "utf8"));
     expect(base.hooks.PostToolUse[0].matcher).toBe("Edit|Write|MultiEdit|apply_patch");
     expect(base.hooks.PreToolUse).toBeUndefined();
-    expect(uninstallHost("claude", root, false)).toBe(4);
+    expect(uninstallHost("claude", root, false).count).toBe(4);
 
     mkdirSync(path.join(root, ".oh-my-plumb"), { recursive: true });
     writeFileSync(
@@ -110,7 +110,7 @@ describe("hosts", () => {
     expect(codex.hooks.PreToolUse).toHaveLength(1);
     expect(codex.hooks.PreToolUse[0].matcher).toBe("shell");
     expect(codex.hooks.PreToolUse[0].hooks[0].command).toContain("pre-tool-use");
-    expect(uninstallHost("claude", root, false)).toBe(5);
+    expect(uninstallHost("claude", root, false).count).toBe(5);
   });
 
   it("delivers skill loads while the rubric carries a skill's rules", () => {
@@ -182,11 +182,11 @@ describe("hosts", () => {
     const text = readFileSync(target, "utf8");
     expect(text).toContain(OPENCODE_PLUGIN_MARKER);
     expect(text).toMatch(/export \{ default \} from "file:\/\/.*opencode\/oh-my-plumb\.mjs"/);
-    expect(uninstallHost("opencode", root, false)).toBe(1);
+    expect(uninstallHost("opencode", root, false).count).toBe(1);
     expect(existsSync(target)).toBe(false);
     mkdirSync(path.dirname(target), { recursive: true });
     writeFileSync(target, "export default async () => ({});\n");
-    expect(uninstallHost("opencode", root, false)).toBe(0);
+    expect(uninstallHost("opencode", root, false).count).toBe(0);
     expect(existsSync(target)).toBe(true);
   });
 
@@ -217,11 +217,11 @@ describe("hosts", () => {
     expect(text).toContain(PI_PLUGIN_MARKER);
     expect(text).toMatch(/import ohMyPlumb from "file:\/\/.*pi\/oh-my-plumb\.ts"/);
     expect(text).toContain('shimFor: "pi"');
-    expect(uninstallHost("pi", root, false)).toBe(1);
+    expect(uninstallHost("pi", root, false).count).toBe(1);
     expect(existsSync(target)).toBe(false);
     mkdirSync(path.dirname(target), { recursive: true });
     writeFileSync(target, "export default () => ({});\n");
-    expect(uninstallHost("pi", root, false)).toBe(0);
+    expect(uninstallHost("pi", root, false).count).toBe(0);
     expect(existsSync(target)).toBe(true);
   });
 
@@ -246,7 +246,7 @@ describe("hosts", () => {
     );
     expect(readFileSync(target, "utf8")).toContain('shimFor: "omp"');
     expect(readFileSync(target, "utf8")).toContain("oh-my-plumb uninstall omp");
-    expect(uninstallHost("omp", root, false)).toBe(1);
+    expect(uninstallHost("omp", root, false).count).toBe(1);
     expect(existsSync(target)).toBe(false);
   });
 
