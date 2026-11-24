@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
@@ -22,9 +30,9 @@ const DEPENDENCY_KEYS = ["dependencies", "devDependencies", "optionalDependencie
  * The extension as shipped in the package. The installed file only points at
  * it, so an upgrade needs no reinstall. Mirrors opencodePlugin.ts.
  *
- * The extension imports no bare specifier but `zod`, because a host loads it
- * into a module graph of its own: the same file resolves `oh-my-plumb-schema`
- * from the host's plugin tree and not from a global install (issue #78).
+ * The extension imports nothing but `node:*`, because a host loads it into a
+ * module graph of its own: the same file resolved `oh-my-plumb-schema` from the
+ * host's plugin tree and not from a global install (issue #78).
  */
 export const piExtensionSourcePath = (): string => path.join(installRoot(), "pi", "oh-my-plumb.ts");
 
@@ -48,11 +56,25 @@ const readObject = (file: string): Record<string, unknown> | undefined => {
   }
 };
 
+/**
+ * Write the whole file beside itself, then rename it over the original: a
+ * process that dies mid-write leaves the host's settings readable, not truncated.
+ * A symlinked settings file is refused, so uninstalling in one project cannot
+ * rewrite a settings file somewhere else.
+ */
 const writeObject = (file: string, raw: Record<string, unknown>): boolean => {
+  const temporary = `${file}.${process.pid}.tmp`;
   try {
-    writeFileSync(file, `${JSON.stringify(raw, null, 2)}\n`);
+    if (lstatSync(file).isSymbolicLink()) return false;
+  } catch {
+    return false;
+  }
+  try {
+    writeFileSync(temporary, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+    renameSync(temporary, file);
     return true;
   } catch {
+    rmSync(temporary, { force: true });
     return false;
   }
 };
@@ -115,6 +137,7 @@ export const installPiExtension = (target: string, host: "pi" | "omp"): void => 
   );
 };
 
+/** Best effort, like the rest of the file: a shim that cannot be removed must not stop the package removal after it. */
 export const uninstallPiExtension = (target: string): boolean => {
   if (!existsSync(target)) return false;
   let text: string;
@@ -124,8 +147,12 @@ export const uninstallPiExtension = (target: string): boolean => {
     return false;
   }
   if (!text.includes(PI_PLUGIN_MARKER)) return false;
-  rmSync(target);
-  return true;
+  try {
+    rmSync(target);
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 export type PackageInstall = {

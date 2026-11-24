@@ -154,9 +154,16 @@ describe("the event log's trim", () => {
     ];
     mkdirSync(path.dirname(eventsPath(root)), { recursive: true });
     writeFileSync(eventsPath(root), `${lines.join("\n")}\n${"x".repeat(80)}\n`);
-    trimEvents(root, 400);
+    // A cap below the fixture, so the trim path actually runs: at or above it,
+    // `trimEvents` returns at its size guard and this test proves nothing.
+    const before = statSync(eventsPath(root)).size;
+    trimEvents(root, Math.floor(before / 2));
+    expect(statSync(eventsPath(root)).size).toBeLessThan(before);
     const kept = readEvents(root);
     expect(kept.length).toBeGreaterThan(0);
+    // The torn tail and the invalid line are gone from the file, not just from a reader's view.
+    expect(readFileSync(eventsPath(root), "utf8")).not.toContain("no-such-kind");
+    expect(readFileSync(eventsPath(root), "utf8")).not.toContain("x".repeat(80));
     for (const event of kept) expect(eventSchema.safeParse(event).success).toBe(true);
     // A suffix, not a reordering: the newest valid events survive and the torn ones do not.
     expect(kept.at(-1)).toMatchObject({ reason: "case 3" });

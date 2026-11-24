@@ -1,5 +1,6 @@
 import { Box, Text } from "ink";
 import type { PlumbEvent, Rule } from "oh-my-plumb-schema";
+import type { Alias } from "../../lib/rubricFile.js";
 import { Buckets } from "../components/Buckets.js";
 import { Callout } from "../components/Callout.js";
 import { Columns } from "../components/Columns.js";
@@ -13,6 +14,8 @@ import { glyph, palette } from "../theme.js";
 export type ReportData = {
   root: string;
   rules: Rule[];
+  /** Rules that stand for a question several sources wrote, and the ids they used to have. */
+  collapsed: { id: string; aliases: Alias[] }[];
   events: PlumbEvent[];
   stats: Map<string, RuleStats>;
   dead: Rule[];
@@ -97,7 +100,6 @@ export function ReportView({ data }: { data: ReportData }) {
   );
   const deferred = data.rules.filter((r) => r.check.type === "deferred");
   const unenforceable = data.rules.filter((r) => r.check.type === "unenforceable");
-  const collapsed = data.rules.flatMap((r) => (r.aliases === undefined ? [] : [r]));
   const quiet = data.rules.filter((r) => {
     const s = data.stats.get(r.id);
     return (
@@ -179,14 +181,20 @@ export function ReportView({ data }: { data: ReportData }) {
             runnableOnly
           />
         </Box>
-        {collapsed.length > 0 ? (
+        {data.collapsed.length > 0 ? (
           <Box marginTop={1}>
             <Text color={palette.ash}>
-              {collapsed.length} {collapsed.length === 1 ? "rule repeats" : "rules repeat"} a
-              requirement another file also writes, so{" "}
-              {collapsed.length === 1 ? "it is" : "each is"} judged once:{" "}
-              {collapsed.map((r) => `${r.id} (+${r.aliases?.length ?? 0})`).join(", ")}. Both source
-              lines are in the rubric.
+              {data.collapsed.length}{" "}
+              {data.collapsed.length === 1 ? "rule repeats" : "rules repeat"} a requirement another
+              file also writes, so {data.collapsed.length === 1 ? "it is" : "each is"} judged once:{" "}
+              {data.collapsed
+                .map((r) => {
+                  const shown = r.aliases.slice(0, 3).map((a) => a.path);
+                  const rest = r.aliases.length - shown.length;
+                  return `${r.id} also at ${shown.join(", ")}${rest > 0 ? ` and ${rest} more` : ""}`;
+                })
+                .join("; ")}
+              .
             </Text>
           </Box>
         ) : null}

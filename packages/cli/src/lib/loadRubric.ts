@@ -1,4 +1,4 @@
-import { DEFAULT_THRESHOLDS, type Rubric, type Thresholds } from "oh-my-plumb-schema";
+import { DEFAULT_THRESHOLDS, type Rubric, type Rule, type Thresholds } from "oh-my-plumb-schema";
 import { globalRubricPath, resolveSourcePath, rubricPath } from "./paths.js";
 import { mergeRules, readRubric, type MergedRule } from "./rubricFile.js";
 import path from "node:path";
@@ -21,22 +21,18 @@ const under = (parent: string, child: string): boolean => {
 };
 
 /**
- * This repository, or the machine-wide rubric: a global rule was written for
- * every repository on purpose, so it stays. A project rule pointing at a path
- * outside its own root was compiled somewhere else — a worktree, a sibling
- * checkout — and has no business judging this one.
- */
-const sourceIsLocal = (rule: MergedRule, root: string): boolean =>
-  rule.origin === "global" || under(root, resolveSourcePath(root, rule.source.path));
-
-/**
  * A tool call has no path for a `scope` glob to read, so a rule authored in one
  * repository would judge every repository's shell calls. A diff rule is safe:
  * its scope always reads the file, and a foreign rule's globs match nothing
- * here anyway.
+ * here anyway. Global rules stay: they were written for every repository.
+ *
+ * This runs before the merge, not after: a foreign copy of a question must not
+ * be the copy that stands in for the local rule asking it.
  */
-export const confineToolCallRules = (rules: readonly MergedRule[], root: string): MergedRule[] =>
-  rules.filter((rule) => rule.target !== "toolCall" || sourceIsLocal(rule, root));
+export const confineToolCallRules = (rules: readonly Rule[], root: string): Rule[] =>
+  rules.filter(
+    (rule) => rule.target !== "toolCall" || under(root, resolveSourcePath(root, rule.source.path)),
+  );
 
 /** Project rubric plus the global one, project winning on a clash. Read here, where every hook already looks, so a flip lands on the next edit. */
 export const loadRubric = (root: string): LoadedRules => {
@@ -59,8 +55,11 @@ export const loadRubric = (root: string): LoadedRules => {
   const global = pick(globalRubricPath());
   const off: LoadedRules["off"] =
     project?.enabled === false ? "project" : global?.enabled === false ? "global" : undefined;
-  const merged = off === undefined ? mergeRules(project, global) : [];
-  const rules = off === undefined ? confineToolCallRules(merged, root) : [];
+  const localProject =
+    project === undefined
+      ? undefined
+      : { ...project, rules: confineToolCallRules(project.rules, root) };
+  const rules = off === undefined ? mergeRules(localProject, global) : [];
   return {
     project,
     global,
@@ -68,7 +67,7 @@ export const loadRubric = (root: string): LoadedRules => {
     thresholds: project?.thresholds ?? global?.thresholds ?? DEFAULT_THRESHOLDS,
     problems,
     off,
-    foreignToolRules: merged.length - rules.length,
+    foreignToolRules: (project?.rules.length ?? 0) - (localProject?.rules.length ?? 0),
   };
 };
 

@@ -85,7 +85,14 @@ export const fillSourceShas = (
   return { rubric: { ...rubric, sources, rules }, missing };
 };
 
-export type MergedRule = Rule & { origin: "project" | "global" };
+/** A rule that asked the same question and was folded into the one that survived. */
+export type Alias = { id: string; path: string; line?: number | undefined };
+
+export type MergedRule = Rule & {
+  origin: "project" | "global";
+  /** The copies this rule stands for: their ids, for history, and their sources, so report names every line. */
+  aliases?: Alias[] | undefined;
+};
 
 /**
  * One requirement written in several files, or copied into a worktree, compiles
@@ -111,7 +118,8 @@ export const mergeRules = (
     }
     // A project rule outranks a global one on everything else, and it does here too.
     const [survivor, loser] = kept.origin === "project" ? [kept, rule] : [rule, kept];
-    const aliases = [...(survivor.aliases ?? []), loser.id, ...(loser.aliases ?? [])];
+    const folded: Alias = { id: loser.id, path: loser.source.path, line: loser.source.line };
+    const aliases = [folded, ...(survivor.aliases ?? []), ...(loser.aliases ?? [])];
     byQuestion.set(key, {
       ...survivor,
       scope: mergeScope(survivor.scope, loser.scope),

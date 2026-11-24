@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
@@ -147,7 +155,9 @@ describe("#87 one question is one rule, however many files write it", () => {
     );
     expect(merged).toHaveLength(1);
     expect(merged[0]?.id).toBe("from-root");
-    expect(merged[0]?.aliases).toEqual(["from-worktree"]);
+    expect(merged[0]?.aliases).toEqual([
+      { id: "from-worktree", path: "worktree/AGENTS.md", line: 1 },
+    ]);
   });
 
   it("keeps rules that ask different questions apart", () => {
@@ -173,14 +183,16 @@ describe("#87 one question is one rule, however many files write it", () => {
     expect(merged[0]?.scope).toEqual(["apps/frontend/**", "apps/backend/**"]);
   });
 
-  it("refuses a rubric whose alias is also a rule id", () => {
-    const parsed = rubricSchema.safeParse({
-      version: 1,
-      compiledAt: "x",
-      sources: [{ path: "AGENTS.md" }],
-      rules: [{ ...rule("kept"), aliases: ["taken"] }, rule("taken")],
-    });
-    expect(parsed.success).toBe(false);
+  it("never lets a collapsed alias name a rule that still exists", () => {
+    // Aliases are derived at load, not stored, so the guard lives here: a copy
+    // that is still its own rule cannot also read as another rule's history.
+    const merged = mergeRules(
+      rubric([write("kept", "AGENTS.md"), write("taken", "AGENTS.md")]),
+      undefined,
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.id).toBe("kept");
+    for (const alias of merged[0]?.aliases ?? []) expect(alias.id).not.toBe(merged[0]?.id);
   });
 });
 
@@ -433,5 +445,125 @@ describe("review findings on the uninstall and merge path", () => {
         undefined,
       ),
     ).toHaveLength(1);
+  });
+});
+
+describe("host settings files are not ours to break", () => {
+  const cli = path.resolve(import.meta.dirname, "..", "dist", "bin.js");
+  const run = (args: string[], cwd: string, env: string) =>
+    spawnSync("node", [cli, ...args], {
+      cwd,
+      encoding: "utf8",
+      env: { ...process.env, OH_MY_PLUMB_HOME_DIR: env, TYPESAFE_AI_API_KEY: "" },
+      timeout: 30_000,
+    });
+
+  const piInstall = (h: string): void => {
+    const dir = path.join(h, ".pi", "agent", "npm", "node_modules", "oh-my-plumb");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, "package.json"), JSON.stringify({ version: "0.3.9" }));
+  };
+
+  it("refuses a symlinked settings file rather than rewriting what it points at", () => {
+    const h = home();
+    piInstall(h);
+    const root = repo();
+    const elsewhere = path.join(
+      mkdtempSync(path.join(tmpdir(), "oh-my-plumb-elsewhere-")),
+      "s.json",
+    );
+    writeFileSync(elsewhere, JSON.stringify({ packages: ["npm:oh-my-plumb"] }));
+    mkdirSync(path.join(root, ".pi"), { recursive: true });
+    symlinkSync(elsewhere, path.join(root, ".pi", "settings.json"));
+    const nodeModules = path.join(root, ".pi", "npm", "node_modules", "oh-my-plumb");
+    mkdirSync(nodeModules, { recursive: true });
+    writeFileSync(path.join(nodeModules, "package.json"), JSON.stringify({ version: "0.3.9" }));
+
+    expect(run(["uninstall", "--project", "pi"], root, h).status).toBe(0);
+    expect(readFileSync(elsewhere, "utf8")).toBe(JSON.stringify({ packages: ["npm:oh-my-plumb"] }));
+  });
+
+  it("writes through a rename, so a failed write leaves the file it found", () => {
+    const h = home();
+    piInstall(h);
+    const root = repo();
+    const settings = path.join(h, ".pi", "agent", "settings.json");
+    writeFileSync(settings, JSON.stringify({ packages: ["npm:oh-my-plumb"] }));
+    expect(run(["uninstall", "pi"], root, h).status).toBe(0);
+    expect(readdirSync(path.dirname(settings)).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+    expect(JSON.parse(readFileSync(settings, "utf8")).packages).toEqual([]);
+  });
+
+  it("still removes the package entry when the shim cannot be removed", () => {
+    const h = home();
+    piInstall(h);
+    const root = repo();
+    const settings = path.join(h, ".pi", "agent", "settings.json");
+    writeFileSync(settings, JSON.stringify({ packages: ["npm:oh-my-plumb"] }));
+    const extensions = path.join(h, ".pi", "agent", "extensions");
+    mkdirSync(extensions, { recursive: true });
+    writeFileSync(path.join(extensions, "oh-my-plumb.ts"), "// oh-my-plumb-pi-extension\n");
+    chmodSync(extensions, 0o500);
+    try {
+      const r = run(["uninstall", "pi"], root, h);
+      expect(r.status).toBe(0);
+      expect(JSON.parse(readFileSync(settings, "utf8")).packages).toEqual([]);
+    } finally {
+      chmodSync(extensions, 0o700);
+    }
+  });
+});
+
+describe("a collapsed rule keeps the history of the copies it stands for", () => {
+  it("adds an aliased rule's checks to the survivor's count", () => {
+    const root = repo();
+    const question = { type: "boolean" as const, instructions: "Long term?" };
+    const base = {
+      text: "Make architectural decisions for the long term.",
+      target: "diff" as const,
+      when: "edit" as const,
+    };
+    writeProject(root, [
+      rule("survivor", {
+        ...base,
+        source: { path: "AGENTS.md", line: 1 },
+        check: { type: "model", question },
+      }),
+      rule("folded", {
+        ...base,
+        source: { path: "worktree/AGENTS.md", line: 1 },
+        check: { type: "model", question },
+      }),
+    ]);
+    writeFileSync(
+      path.join(root, ".oh-my-plumb", "events.jsonl"),
+      [
+        {
+          kind: "check",
+          at: "t1",
+          phase: "edit",
+          files: ["a.ts"],
+          latencyMs: 1,
+          blocked: true,
+          verdicts: [{ ruleId: "folded", probability: 0.9, band: "act" }],
+        },
+        {
+          kind: "check",
+          at: "t2",
+          phase: "edit",
+          files: ["a.ts"],
+          latencyMs: 1,
+          blocked: false,
+          verdicts: [{ ruleId: "survivor", probability: 0.1, band: "clear" }],
+        },
+      ]
+        .map((e) => JSON.stringify(e))
+        .join("\n"),
+    );
+    const data = collectReport(root);
+    expect(data?.rules.map((r) => r.id)).toEqual(["survivor"]);
+    expect(data?.stats.get("survivor")).toEqual({ checks: 2, fired: 1, flagged: 0 });
+    expect(data?.collapsed[0]?.aliases.map((a) => a.id)).toEqual(["folded"]);
+    expect(data?.collapsed[0]?.aliases[0]?.path).toBe("worktree/AGENTS.md");
   });
 });
