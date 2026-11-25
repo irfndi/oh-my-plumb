@@ -20,7 +20,12 @@ import { sessionsDir } from "./paths.js";
  * with its prefix, each created with `wx`.
  */
 
-const safe = (part: string): string => part.replace(/[^A-Za-z0-9_-]/g, "_");
+const safe = (part: string): string => {
+  const cleaned = part.replace(/[^A-Za-z0-9_-]/g, "_");
+  // An empty part would collapse the path onto its parent, and a turn's `clear`
+  // would then take the sessions root with it.
+  return cleaned === "" ? "_" : cleaned;
+};
 const shortHash = (value: string): string =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
 

@@ -106,6 +106,9 @@ describe("views", () => {
           middle: [],
           problems: [],
           missingRoutes: [],
+          collapsed: [],
+          misfiledRubric: undefined,
+          foreignToolRules: 0,
           piTrust: null,
         }}
       />,
@@ -133,6 +136,9 @@ describe("views", () => {
           middle: [{ id: "raw-error-to-user", flagged: 7, checks: 120 }],
           problems: [],
           missingRoutes: [],
+          collapsed: [],
+          misfiledRubric: undefined,
+          foreignToolRules: 0,
           piTrust: null,
         }}
       />,
@@ -154,6 +160,9 @@ describe("views", () => {
           middle: [],
           problems: [],
           missingRoutes: [{ trigger: "drizzle/**", gaps: ["scripts/v.mjs does not exist"] }],
+          collapsed: [],
+          misfiledRubric: undefined,
+          foreignToolRules: 0,
           piTrust: null,
         }}
       />,
@@ -199,6 +208,9 @@ describe("views", () => {
           middle: [],
           problems: [],
           missingRoutes: [],
+          collapsed: [],
+          misfiledRubric: undefined,
+          foreignToolRules: 0,
           piTrust: null,
         }}
       />,
@@ -228,6 +240,9 @@ describe("views", () => {
           middle: [],
           problems: [],
           missingRoutes: [],
+          collapsed: [],
+          misfiledRubric: undefined,
+          foreignToolRules: 0,
           piTrust: null,
         }}
       />,
@@ -246,6 +261,9 @@ describe("views", () => {
       middle: [],
       problems: [],
       missingRoutes: [],
+      collapsed: [],
+      misfiledRubric: undefined,
+      foreignToolRules: 0,
     };
     const frame = (piTrust: PiTrustState | null): string => {
       const { lastFrame } = render(<ReportView data={{ ...base, piTrust }} />);

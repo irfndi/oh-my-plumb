@@ -5,11 +5,12 @@ import { compilePrompt, type TuneStats } from "../lib/compilePrompt.js";
 import { readEvents } from "../lib/events.js";
 import { findLintConfigs } from "../lib/lintConfig.js";
 import { placeCompileSkill } from "../lib/packageRoot.js";
-import { findRepoRoot, globalRubricPath, homeDir, rubricPath } from "../lib/paths.js";
+import { resolveRepoRoot, globalRubricPath, homeDir, rubricPath } from "../lib/paths.js";
 import { readRubric } from "../lib/rubricFile.js";
 import { checkStaleness, discoverGlobalSources, discoverProjectSources } from "../lib/sources.js";
 import { say } from "../lib/ui.js";
 import { Callout } from "../ui/components/Callout.js";
+import { CompileBlockedView } from "../ui/views/CompileBlockedView.js";
 import { Header } from "../ui/components/Header.js";
 import { showStatic } from "../ui/render.js";
 import { planCompile } from "../hooks/sessionStart.js";
@@ -51,16 +52,20 @@ export const runCompile = async (argv: string[], tune: boolean): Promise<number>
       global: { type: "boolean", default: false },
     },
   });
-  const root = findRepoRoot(process.cwd());
-  const plan = await planCompile(root, "always");
-  if (plan.invalid.length > 0) {
-    await showStatic(
-      Callout({
-        tone: "bad",
-        title: "Fix the rubric first",
-        children: plan.invalid.map((p) => p).join("\n"),
-      }),
+  const found = resolveRepoRoot(process.cwd());
+  // A compile outside a repository writes a home-wide rubric into the project
+  // slot: every directory below ~ then reads it as its own, and no repository does.
+  if (!found.repository && !values.global)
+    throw new PlumbError(
+      "NOT_A_REPOSITORY",
+      `${found.root} is not a repository (no .git), so a rubric compiled here would apply to every folder below it and to no repository. Run this inside the repository the rules belong to, or pass --global for a machine-wide rubric.`,
     );
+  const root = found.root;
+  const plan = await planCompile(root, "always");
+  // --global compiles one rubric, so another rubric's parse error is not its problem.
+  const blocking = plan.invalid.filter((p) => !values.global || p.which === "global");
+  if (blocking.length > 0) {
+    await showStatic(CompileBlockedView({ problems: blocking }));
     return 1;
   }
   if (plan.noSources)
@@ -92,11 +97,26 @@ export const runCompile = async (argv: string[], tune: boolean): Promise<number>
         };
     prompt = compilePrompt(placeCompileSkill(root), [target], stats);
   } else {
-    if (plan.targets.length === 0) {
-      await showStatic(Callout({ tone: "ok", title: "Rubric is up to date. Nothing to compile." }));
+    // --global compiles the machine-wide rubric only: the project target
+    // planCompile found is the one the guard above just refused.
+    const targets = values.global ? plan.targets.filter((t) => t.which === "global") : plan.targets;
+    if (targets.length === 0) {
+      // "Up to date" and "nothing to compile from" read the same in a table and mean
+      // opposite things, so a global run says which one it is.
+      const nothingToRead = values.global && discoverGlobalSources().length === 0;
+      await showStatic(
+        Callout({
+          tone: "ok",
+          title: nothingToRead
+            ? "No machine-wide instruction files, so there is no global rubric to compile"
+            : values.global
+              ? "Global rubric is up to date. Nothing to compile."
+              : "Rubric is up to date. Nothing to compile.",
+        }),
+      );
       return 0;
     }
-    prompt = compilePrompt(placeCompileSkill(root), plan.targets);
+    prompt = compilePrompt(placeCompileSkill(root), targets);
   }
 
   if (values.print) {

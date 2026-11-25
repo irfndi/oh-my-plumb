@@ -34,7 +34,8 @@ import { discoverMcpSources } from "../lib/mcpSources.js";
 
 export type CompilePlan = {
   targets: CompileTarget[];
-  invalid: string[];
+  /** A rubric that could not be read, with the scope it belongs to: one bad scope must not block the other. */
+  invalid: { which: "project" | "global"; message: string }[];
   /** The project's opted-in MCP instructions captured during this plan; staleness itself never fetches. */
   mcp: McpSourceCandidate[];
   noSources: boolean;
@@ -71,12 +72,15 @@ export const planCompile = async (
   capture: "always" | "when-due" = "when-due",
 ): Promise<CompilePlan> => {
   const targets: CompileTarget[] = [];
-  const invalid: string[] = [];
+  const invalid: CompilePlan["invalid"] = [];
 
   const files = discoverProjectSources(root);
   const projectRead = readRubric(rubricPath(root));
   if (projectRead.kind === "invalid") {
-    invalid.push(`${projectRead.path}: ${projectRead.issues.slice(0, 3).join("; ")}`);
+    invalid.push({
+      which: "project",
+      message: `${projectRead.path}: ${projectRead.issues.slice(0, 3).join("; ")}`,
+    });
   }
   const projectRubric = projectRead.kind === "ok" ? projectRead.rubric : undefined;
   const mcp = await mcpWhenDue(projectRubric, files, root, capture);
@@ -99,7 +103,10 @@ export const planCompile = async (
   const globalFiles = discoverGlobalSources();
   const globalRead = readRubric(globalRubricPath());
   if (globalRead.kind === "invalid") {
-    invalid.push(`${globalRead.path}: ${globalRead.issues.slice(0, 3).join("; ")}`);
+    invalid.push({
+      which: "global",
+      message: `${globalRead.path}: ${globalRead.issues.slice(0, 3).join("; ")}`,
+    });
   }
   const globalRubric = globalRead.kind === "ok" ? globalRead.rubric : undefined;
   const globalMcp = await mcpWhenDue(globalRubric, globalFiles, homeDir(), capture);
@@ -169,7 +176,7 @@ export const handleSessionStart = async (raw: unknown): Promise<HookOutput> => {
   const keyProblem = await keyNotice(root, input.session_id);
   if (keyProblem !== undefined) notices.push(keyProblem);
   for (const problem of plan.invalid) {
-    notices.push(`oh-my-plumb: rubric could not be read and is being ignored: ${problem}`);
+    notices.push(`oh-my-plumb: rubric could not be read and is being ignored: ${problem.message}`);
   }
   const update = updateNotice(runningVersion());
   if (update !== undefined) notices.push(update);

@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
+  createQuestionKey,
   rubricSchema,
   type CheckType,
   type Rubric,
@@ -84,9 +85,22 @@ export const fillSourceShas = (
   return { rubric: { ...rubric, sources, rules }, missing };
 };
 
-export type MergedRule = Rule & { origin: "project" | "global" };
+/** A rule that asked the same question and was folded into the one that survived. */
+export type Alias = { id: string; path: string; line?: number | undefined };
 
-/** Project rules win on an id clash. */
+export type MergedRule = Rule & {
+  origin: "project" | "global";
+  /** The copies this rule stands for: their ids, for history, and their sources, so report names every line. */
+  aliases?: Alias[] | undefined;
+};
+
+/**
+ * One requirement written in several files, or copied into a worktree, compiles
+ * to several rules with one question. Project rules win on an id clash, then
+ * identical questions collapse into the first one and the rest become its
+ * aliases, so the judge bills and answers once and `report` still names every
+ * source line that produced it.
+ */
 export const mergeRules = (
   project: Rubric | undefined,
   global: Rubric | undefined,
@@ -94,7 +108,32 @@ export const mergeRules = (
   const byId = new Map<string, MergedRule>();
   for (const rule of global?.rules ?? []) byId.set(rule.id, { ...rule, origin: "global" });
   for (const rule of project?.rules ?? []) byId.set(rule.id, { ...rule, origin: "project" });
-  return [...byId.values()];
+  const byQuestion = new Map<string, MergedRule>();
+  for (const rule of byId.values()) {
+    const key = createQuestionKey(rule);
+    const kept = byQuestion.get(key);
+    if (kept === undefined) {
+      byQuestion.set(key, rule);
+      continue;
+    }
+    // A project rule outranks a global one on everything else, and it does here too.
+    const [survivor, loser] = kept.origin === "project" ? [kept, rule] : [rule, kept];
+    const folded: Alias = { id: loser.id, path: loser.source.path, line: loser.source.line };
+    const aliases = [folded, ...(survivor.aliases ?? []), ...(loser.aliases ?? [])];
+    byQuestion.set(key, {
+      ...survivor,
+      scope: mergeScope(survivor.scope, loser.scope),
+      aliases,
+    });
+  }
+  return [...byQuestion.values()];
+};
+
+/** Two copies of one rule may each watch part of a file set: the survivor watches all of it. */
+const mergeScope = (a: Rule["scope"], b: Rule["scope"]): Rule["scope"] => {
+  if (a === undefined || b === undefined) return undefined;
+  const union = [...new Set([...a, ...b])];
+  return union.length === a.length && union.every((glob) => a.includes(glob)) ? a : union;
 };
 
 export type BucketCounts = Record<CheckType, number> & {

@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
@@ -15,11 +23,106 @@ import { homeDir } from "./paths.js";
 
 export const PI_PLUGIN_MARKER = "oh-my-plumb-pi-extension";
 
+/** The manifest sections an omp plugin entry can live in. */
+const DEPENDENCY_KEYS = ["dependencies", "devDependencies", "optionalDependencies"] as const;
+
 /**
  * The extension as shipped in the package. The installed file only points at
  * it, so an upgrade needs no reinstall. Mirrors opencodePlugin.ts.
+ *
+ * The extension imports nothing but `node:*`, because a host loads it into a
+ * module graph of its own: the same file resolved `oh-my-plumb-schema` from the
+ * host's plugin tree and not from a global install (issue #78).
  */
 export const piExtensionSourcePath = (): string => path.join(installRoot(), "pi", "oh-my-plumb.ts");
+
+const readJson = <T>(file: string, schema: z.ZodType<T>): T | undefined => {
+  try {
+    return schema.parse(JSON.parse(readFileSync(file, "utf8")));
+  } catch {
+    return undefined;
+  }
+};
+
+/** The file as a JSON object, or nothing: a host file that is not an object is left alone. */
+const readObject = (file: string): Record<string, unknown> | undefined => {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? { ...parsed }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Write the whole file beside itself, then rename it over the original: a
+ * process that dies mid-write leaves the host's settings readable, not truncated.
+ * A symlinked settings file is refused, so uninstalling in one project cannot
+ * rewrite a settings file somewhere else.
+ */
+const writeObject = (file: string, raw: Record<string, unknown>): boolean => {
+  const temporary = `${file}.${process.pid}.tmp`;
+  try {
+    if (lstatSync(file).isSymbolicLink()) return false;
+  } catch {
+    return false;
+  }
+  try {
+    writeFileSync(temporary, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+    renameSync(temporary, file);
+    return true;
+  } catch {
+    rmSync(temporary, { force: true });
+    return false;
+  }
+};
+
+/**
+ * The pi `packages` entry, or the omp plugin dependency, that is actually loading
+ * the extension: a package install writes no shim file, so leaving it is leaving
+ * the extension loaded. Only the requested scope is read, so `--project` cannot
+ * uninstall the machine-wide install.
+ */
+export const uninstallPackageInstall = (
+  host: "pi" | "omp",
+  root: string,
+  project: boolean,
+): boolean => {
+  const found = packageInstall(host, root, project ? "project" : "global");
+  if (found === undefined) return false;
+  switch (host) {
+    case "pi": {
+      const raw = readObject(found.from);
+      if (raw === undefined) return false;
+      const packages = piSettingsSchema.parse(raw).packages ?? [];
+      // Every entry that is oh-my-plumb, and nothing that merely starts like it.
+      const kept = packages.filter((entry) => piListsPackage({ packages: [entry] }) === undefined);
+      if (kept.length === packages.length) return false;
+      return writeObject(found.from, { ...raw, packages: kept });
+    }
+    case "omp": {
+      const raw = readObject(found.from);
+      if (raw === undefined) return false;
+      let removed = false;
+      for (const key of DEPENDENCY_KEYS) {
+        const section = raw[key];
+        if (typeof section !== "object" || section === null) continue;
+        const entries = { ...(section as Record<string, unknown>) };
+        if (!("oh-my-plumb" in entries)) continue;
+        delete entries["oh-my-plumb"];
+        removed = true;
+        // An emptied section goes with its last entry; the rest of the manifest is untouched.
+        if (Object.keys(entries).length === 0) delete raw[key];
+        else raw[key] = entries;
+      }
+      return removed && writeObject(found.from, raw);
+    }
+    default:
+      return assertNever(host);
+  }
+};
 
 export const installPiExtension = (target: string, host: "pi" | "omp"): void => {
   mkdirSync(path.dirname(target), { recursive: true });
@@ -34,6 +137,7 @@ export const installPiExtension = (target: string, host: "pi" | "omp"): void => 
   );
 };
 
+/** Best effort, like the rest of the file: a shim that cannot be removed must not stop the package removal after it. */
 export const uninstallPiExtension = (target: string): boolean => {
   if (!existsSync(target)) return false;
   let text: string;
@@ -43,15 +147,11 @@ export const uninstallPiExtension = (target: string): boolean => {
     return false;
   }
   if (!text.includes(PI_PLUGIN_MARKER)) return false;
-  rmSync(target);
-  return true;
-};
-
-const readJson = <T>(file: string, schema: z.ZodType<T>): T | undefined => {
   try {
-    return schema.parse(JSON.parse(readFileSync(file, "utf8")));
+    rmSync(target);
+    return true;
   } catch {
-    return undefined;
+    return false;
   }
 };
 
@@ -87,24 +187,33 @@ const ompPlugin = (pluginsDir: string): PackageInstall | undefined => {
   };
 };
 
+/** Which install a lookup may see: the machine-wide one, this project's, or whichever is there. */
+export type InstallScope = "global" | "project" | "any";
+
 /** Keep the file pairs in step with `packageInstalled` in pi/oh-my-plumb.ts; the matcher itself is shared. */
-export const packageInstall = (host: "pi" | "omp", root: string): PackageInstall | undefined => {
+export const packageInstall = (
+  host: "pi" | "omp",
+  root: string,
+  scope: InstallScope = "any",
+): PackageInstall | undefined => {
+  const pi = (dir: string): PackageInstall | undefined =>
+    piPackage(path.join(dir, "settings.json"), path.join(dir, "npm", "node_modules"));
+  const omp = (dir: string): PackageInstall | undefined => ompPlugin(dir);
   switch (host) {
-    case "pi": {
-      const agent = path.join(homeDir(), ".pi", "agent");
-      return (
-        piPackage(path.join(agent, "settings.json"), path.join(agent, "npm", "node_modules")) ??
-        piPackage(
-          path.join(root, ".pi", "settings.json"),
-          path.join(root, ".pi", "npm", "node_modules"),
-        )
-      );
+    case "pi":
+      return scope === "project"
+        ? pi(path.join(root, ".pi"))
+        : scope === "global"
+          ? pi(path.join(homeDir(), ".pi", "agent"))
+          : (pi(path.join(homeDir(), ".pi", "agent")) ?? pi(path.join(root, ".pi")));
+    case "omp": {
+      const plugins = (dir: string) => path.join(dir, ".omp", "plugins");
+      return scope === "project"
+        ? omp(plugins(root))
+        : scope === "global"
+          ? omp(plugins(homeDir()))
+          : (omp(plugins(homeDir())) ?? omp(plugins(root)));
     }
-    case "omp":
-      return (
-        ompPlugin(path.join(homeDir(), ".omp", "plugins")) ??
-        ompPlugin(path.join(root, ".omp", "plugins"))
-      );
     default:
       return assertNever(host);
   }

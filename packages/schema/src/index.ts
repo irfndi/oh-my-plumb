@@ -6,6 +6,7 @@ export {
   createSourceSha,
   createBlobId,
   createBlockKey,
+  createQuestionKey,
 } from "./ids.js";
 export {
   RUBRIC_VERSION,

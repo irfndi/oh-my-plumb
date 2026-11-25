@@ -23,13 +23,23 @@ const isDir = (p: string): boolean => {
 
 const ROOT_MARKERS = [".git", ".oh-my-plumb", "AGENTS.md", "CLAUDE.md"];
 
-/** The nearest ancestor that looks like a repository root, else the start directory. */
-export const findRepoRoot = (start: string): string => {
+export type RepoRoot = {
+  root: string;
+  /** `.git` was found. False means a marker or the start directory stood in: not a repository. */
+  repository: boolean;
+};
+
+/**
+ * The nearest ancestor that looks like a repository root, else the start
+ * directory. Says which it was, because a home-wide rubric read as a project's
+ * is how rules land in every directory below `~` and in no real repository.
+ */
+export const resolveRepoRoot = (start: string): RepoRoot => {
   let dir = path.resolve(start);
   if (!isDir(dir)) dir = path.dirname(dir);
   let fallback: string | undefined;
   for (;;) {
-    if (existsSync(path.join(dir, ".git"))) return dir;
+    if (existsSync(path.join(dir, ".git"))) return { root: dir, repository: true };
     if (fallback === undefined && ROOT_MARKERS.some((m) => existsSync(path.join(dir, m)))) {
       fallback = dir;
     }
@@ -37,8 +47,10 @@ export const findRepoRoot = (start: string): string => {
     if (parent === dir) break;
     dir = parent;
   }
-  return fallback ?? path.resolve(start);
+  return { root: fallback ?? path.resolve(start), repository: false };
 };
+
+export const findRepoRoot = (start: string): string => resolveRepoRoot(start).root;
 
 export const expandHome = (p: string): string =>
   p === "~" ? homeDir() : p.startsWith("~/") ? path.join(homeDir(), p.slice(2)) : p;

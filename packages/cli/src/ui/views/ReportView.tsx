@@ -1,5 +1,6 @@
 import { Box, Text } from "ink";
 import type { PlumbEvent, Rule } from "oh-my-plumb-schema";
+import type { Alias } from "../../lib/rubricFile.js";
 import { Buckets } from "../components/Buckets.js";
 import { Callout } from "../components/Callout.js";
 import { Columns } from "../components/Columns.js";
@@ -13,6 +14,8 @@ import { glyph, palette } from "../theme.js";
 export type ReportData = {
   root: string;
   rules: Rule[];
+  /** Rules that stand for a question several sources wrote, and the ids they used to have. */
+  collapsed: { id: string; aliases: Alias[] }[];
   events: PlumbEvent[];
   stats: Map<string, RuleStats>;
   dead: Rule[];
@@ -20,6 +23,10 @@ export type ReportData = {
   middle: MiddleRule[];
   problems: string[];
   missingRoutes: { trigger: string; gaps: string[] }[];
+  /** A rubric in the project slot of a directory that is not a repository, if one is there. */
+  misfiledRubric: string | undefined;
+  /** Tool-call rules dropped because they were compiled in another repository. */
+  foreignToolRules: number;
   /** pi's verdict on this project, or null when no project-level pi extension is installed. */
   piTrust: PiTrustState | null;
 };
@@ -28,6 +35,21 @@ export type MiddleRule = { id: string; flagged: number; checks: number };
 
 type Check = Extract<PlumbEvent, { kind: "check" }>;
 type Failure = Extract<PlumbEvent, { kind: "error" }>;
+type CompileNeeded = Extract<PlumbEvent, { kind: "compile-needed" }>;
+
+/** Sessions that asked for a rubric and got none: 40 identical prompts are one fact, and one nobody acted on. */
+function CompileNeededNotice({ prompts }: { prompts: readonly CompileNeeded[] }) {
+  const latest = prompts.at(-1)?.reason ?? "missing";
+  return (
+    <Box marginBottom={1}>
+      <Text color={palette.amber}>
+        {prompts.length} {prompts.length === 1 ? "session asked" : "sessions asked"} for a rubric
+        here and none was compiled, so nothing was checked in
+        {prompts.length === 1 ? " it" : " them"}. Newest reason: {latest}. Run oh-my-plumb compile.
+      </Text>
+    </Box>
+  );
+}
 
 type FailureGroup = { code: string; count: number; message: string; at: string };
 
@@ -50,6 +72,10 @@ const failureGroups = (failures: readonly Failure[]): FailureGroup[] => {
   return [...byCode.values()].sort((a, b) => b.count - a.count);
 };
 
+/** A source location, spelled the way a block message spells it: `AGENTS.md line 7`. */
+const where = (alias: Alias): string =>
+  alias.line === undefined ? alias.path : `${alias.path} line ${alias.line}`;
+
 const reasonOf = (rule: Rule): string =>
   rule.check.type === "deferred" || rule.check.type === "unenforceable" ? rule.check.reason : "";
 
@@ -58,6 +84,7 @@ export function ReportView({ data }: { data: ReportData }) {
   const groups = failureGroups(data.events.filter((e): e is Failure => e.kind === "error"));
   const errors = groups.reduce((sum, group) => sum + group.count, 0);
   const unknown = data.events.filter((e) => e.kind === "unknown_payload").length;
+  const compilePrompts = data.events.flatMap((e) => (e.kind === "compile-needed" ? [e] : []));
   const edit = checks.filter((c) => c.phase === "edit");
   const turn = checks.filter((c) => c.phase === "turn");
   const spend = (list: readonly Check[]) => list.reduce((s, c) => s + (c.usage?.costUsd ?? 0), 0);
@@ -115,6 +142,20 @@ export function ReportView({ data }: { data: ReportData }) {
         </Callout>
       ))}
 
+      {data.misfiledRubric === undefined ? null : (
+        <Callout
+          tone="warn"
+          title="This directory is not a repository, and a rubric compiled here belongs to every folder below it"
+        >
+          <Text color={palette.cloud}>{data.misfiledRubric}</Text>
+          <Text color={palette.mist}>
+            A compile run outside a repository adopts the instruction files of everything below
+            home, so no real repo loads these rules. Compile inside the repository they belong to,
+            or run oh-my-plumb compile --global for a machine-wide set.
+          </Text>
+        </Callout>
+      )}
+
       {data.missingRoutes.length > 0 ? (
         <Callout
           tone="warn"
@@ -144,6 +185,29 @@ export function ReportView({ data }: { data: ReportData }) {
             runnableOnly
           />
         </Box>
+        {data.collapsed.length > 0 ? (
+          <Box marginTop={1}>
+            <Text color={palette.ash}>
+              {data.collapsed.length}{" "}
+              {data.collapsed.length === 1 ? "rule repeats" : "rules repeat"} a requirement another
+              file also writes, so {data.collapsed.length === 1 ? "it is" : "each is"} judged once:{" "}
+              {data.collapsed
+                .map((r) => `${r.id} also at ${r.aliases.map(where).join(", ")}`)
+                .join("; ")}
+              .
+            </Text>
+          </Box>
+        ) : null}
+        {data.foreignToolRules > 0 ? (
+          <Box marginTop={1}>
+            <Text color={palette.ash}>
+              {data.foreignToolRules} tool-call {data.foreignToolRules === 1 ? "rule" : "rules"} in
+              the rubric {data.foreignToolRules === 1 ? "was" : "were"} compiled in another
+              repository, so {data.foreignToolRules === 1 ? "it is" : "they are"} not judging this
+              one. Run oh-my-plumb compile here to record this repository&apos;s own.
+            </Text>
+          </Box>
+        ) : null}
         {quiet.length > 0 ? (
           <Box marginTop={1}>
             <Text color={palette.ash}>
@@ -258,6 +322,7 @@ export function ReportView({ data }: { data: ReportData }) {
             : `${checks.length} in .oh-my-plumb/events.jsonl`
         }
       >
+        {compilePrompts.length > 0 ? <CompileNeededNotice prompts={compilePrompts} /> : null}
         {checks.length === 0 ? (
           <Text color={palette.ash}>
             Every check the hooks run lands here: what fired, how long it took, what it cost.
