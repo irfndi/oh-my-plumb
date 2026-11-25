@@ -72,6 +72,10 @@ const failureGroups = (failures: readonly Failure[]): FailureGroup[] => {
   return [...byCode.values()].sort((a, b) => b.count - a.count);
 };
 
+/** A source location, spelled the way a block message spells it: `AGENTS.md line 7`. */
+const where = (alias: Alias): string =>
+  alias.line === undefined ? alias.path : `${alias.path} line ${alias.line}`;
+
 const reasonOf = (rule: Rule): string =>
   rule.check.type === "deferred" || rule.check.type === "unenforceable" ? rule.check.reason : "";
 
@@ -188,11 +192,7 @@ export function ReportView({ data }: { data: ReportData }) {
               {data.collapsed.length === 1 ? "rule repeats" : "rules repeat"} a requirement another
               file also writes, so {data.collapsed.length === 1 ? "it is" : "each is"} judged once:{" "}
               {data.collapsed
-                .map((r) => {
-                  const shown = r.aliases.slice(0, 3).map((a) => a.path);
-                  const rest = r.aliases.length - shown.length;
-                  return `${r.id} also at ${shown.join(", ")}${rest > 0 ? ` and ${rest} more` : ""}`;
-                })
+                .map((r) => `${r.id} also at ${r.aliases.map(where).join(", ")}`)
                 .join("; ")}
               .
             </Text>

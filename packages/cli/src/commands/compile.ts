@@ -10,6 +10,7 @@ import { readRubric } from "../lib/rubricFile.js";
 import { checkStaleness, discoverGlobalSources, discoverProjectSources } from "../lib/sources.js";
 import { say } from "../lib/ui.js";
 import { Callout } from "../ui/components/Callout.js";
+import { CompileBlockedView } from "../ui/views/CompileBlockedView.js";
 import { Header } from "../ui/components/Header.js";
 import { showStatic } from "../ui/render.js";
 import { planCompile } from "../hooks/sessionStart.js";
@@ -61,14 +62,10 @@ export const runCompile = async (argv: string[], tune: boolean): Promise<number>
     );
   const root = found.root;
   const plan = await planCompile(root, "always");
-  if (plan.invalid.length > 0) {
-    await showStatic(
-      Callout({
-        tone: "bad",
-        title: "Fix the rubric first",
-        children: plan.invalid.map((p) => p).join("\n"),
-      }),
-    );
+  // --global compiles one rubric, so another rubric's parse error is not its problem.
+  const blocking = plan.invalid.filter((p) => !values.global || p.which === "global");
+  if (blocking.length > 0) {
+    await showStatic(CompileBlockedView({ problems: blocking }));
     return 1;
   }
   if (plan.noSources)
@@ -104,12 +101,17 @@ export const runCompile = async (argv: string[], tune: boolean): Promise<number>
     // planCompile found is the one the guard above just refused.
     const targets = values.global ? plan.targets.filter((t) => t.which === "global") : plan.targets;
     if (targets.length === 0) {
+      // "Up to date" and "nothing to compile from" read the same in a table and mean
+      // opposite things, so a global run says which one it is.
+      const nothingToRead = values.global && discoverGlobalSources().length === 0;
       await showStatic(
         Callout({
           tone: "ok",
-          title: values.global
-            ? "Global rubric is up to date. Nothing to compile."
-            : "Rubric is up to date. Nothing to compile.",
+          title: nothingToRead
+            ? "No machine-wide instruction files, so there is no global rubric to compile"
+            : values.global
+              ? "Global rubric is up to date. Nothing to compile."
+              : "Rubric is up to date. Nothing to compile.",
         }),
       );
       return 0;

@@ -567,3 +567,36 @@ describe("a collapsed rule keeps the history of the copies it stands for", () =>
     expect(data?.collapsed[0]?.aliases[0]?.path).toBe("worktree/AGENTS.md");
   });
 });
+
+describe("one rubric's problem never blocks the other", () => {
+  const cli = path.resolve(import.meta.dirname, "..", "dist", "bin.js");
+  const run = (args: string[], cwd: string, env: string) =>
+    spawnSync("node", [cli, ...args], {
+      cwd,
+      encoding: "utf8",
+      env: { ...process.env, OH_MY_PLUMB_HOME_DIR: env, TYPESAFE_AI_API_KEY: "" },
+      timeout: 30_000,
+    });
+
+  it("compiles the global rubric even when the project's rubric will not parse", () => {
+    const h = home();
+    const root = repo();
+    writeFileSync(path.join(root, ".oh-my-plumb", "rubric.json"), "{ not json");
+    mkdirSync(path.join(h, ".claude"), { recursive: true });
+    writeFileSync(path.join(h, ".claude", "CLAUDE.md"), "- prefer rg over grep\n");
+    const r = run(["compile", "--global", "--print"], root, h);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("Global rubric:");
+    expect(r.stdout).not.toContain("Fix the rubric first");
+  });
+
+  it("still refuses a project compile whose own rubric will not parse", () => {
+    const h = home();
+    const root = repo();
+    writeFileSync(path.join(root, "AGENTS.md"), "- never use npx\n");
+    writeFileSync(path.join(root, ".oh-my-plumb", "rubric.json"), "{ not json");
+    const r = run(["compile", "--print"], root, h);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toContain("Fix the rubric first");
+  });
+});
